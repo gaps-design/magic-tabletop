@@ -5,22 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Magic Tabletop</title>
 
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/home.css">
 </head>
 <body>
 
+  <div class="overlay"></div>
+
   <div class="container">
-    <h1>Magic Tabletop</h1>
 
-    <p>Sistema online para partidas via webcam</p>
+    <img src="assets/logo.jpg" class="logo">
 
-    <button id="createRoom">
+    <p class="subtitle">
+      Sistema online para partidas via webcam
+    </p>
+
+    <button id="createRoom" class="create-btn">
       Criar Sala
     </button>
+
+    <div class="rooms-list">
+
+      <div class="room-card">
+        <h3>Mesa PvP</h3>
+
+        <div class="room-info">
+          <span>👥 2 jogadores</span>
+          <span>👁 1 espectador</span>
+        </div>
+
+        <button>
+          Entrar
+        </button>
+      </div>
+
+    </div>
+
   </div>
 
   <script src="js/home.js"></script>
 
-  
 </body>
 </html>

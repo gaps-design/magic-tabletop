@@ -1,0 +1,153 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    width:100%;
+    min-height:100vh;
+
+    font-family:Arial, Helvetica, sans-serif;
+
+    background:url("../assets/banner.jpg");
+    background-size:cover;
+    background-position:center;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    overflow-x:hidden;
+
+    position:relative;
+}
+
+.overlay{
+    position:absolute;
+    inset:0;
+
+    background:rgba(0,0,0,0.72);
+    backdrop-filter:blur(3px);
+}
+
+.container{
+    position:relative;
+    z-index:2;
+
+    width:100%;
+    max-width:1200px;
+
+    padding:40px 20px;
+
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+
+.logo{
+    width:260px;
+    margin-bottom:20px;
+
+    filter:drop-shadow(0 0 25px rgba(0,255,255,0.4));
+}
+
+.subtitle{
+    color:#d8d8d8;
+    font-size:18px;
+
+    margin-bottom:35px;
+
+    text-align:center;
+}
+
+.create-btn{
+    padding:16px 40px;
+
+    border:none;
+    border-radius:14px;
+
+    background:linear-gradient(45deg,#00d0ff,#0077ff);
+
+    color:white;
+    font-size:18px;
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:0.3s;
+}
+
+.create-btn:hover{
+    transform:scale(1.05);
+
+    box-shadow:0 0 20px rgba(0,170,255,0.6);
+}
+
+.rooms-list{
+    width:100%;
+
+    margin-top:50px;
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+
+    gap:20px;
+}
+
+.room-card{
+    background:rgba(15,15,25,0.85);
+
+    border:1px solid rgba(0,170,255,0.3);
+
+    border-radius:18px;
+
+    padding:25px;
+
+    backdrop-filter:blur(10px);
+
+    box-shadow:0 0 20px rgba(0,0,0,0.4);
+}
+
+.room-card h3{
+    color:#00d0ff;
+
+    margin-bottom:15px;
+
+    font-size:22px;
+}
+
+.room-info{
+    display:flex;
+    flex-direction:column;
+
+    gap:10px;
+
+    color:#dcdcdc;
+
+    margin-bottom:20px;
+}
+
+.room-card button{
+    width:100%;
+
+    padding:12px;
+
+    border:none;
+    border-radius:10px;
+
+    background:#00a2ff;
+
+    color:white;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:0.3s;
+}
+
+.room-card button:hover{
+    background:#0084d1;
+}
