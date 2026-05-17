@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sala Magic Tabletop</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div id="entryModal" class="entry-modal">
+        <div class="entry-box">
+            <h2>Entrar na sala</h2>
+            <p id="entryRoomText">Escolha como deseja entrar</p>
+
+            <div class="role-options">
+                <button id="playerRoleBtn" class="role-card active">
+                    🎮 Jogador
+                    <span>Participa da partida com câmera.</span>
+                </button>
+
+                <button id="spectatorRoleBtn" class="role-card">
+                    👀 Espectador
+                    <span>Apenas assiste à partida.</span>
+                </button>
+            </div>
+
+            <div id="playerFields" class="player-fields">
+                <label>
+                    Nome do jogador *
+                    <input id="playerNameInput" type="text" placeholder="Ex: Guilherme">
+                </label>
+
+                <label>
+                    Nome do deck *
+                    <input id="deckNameInput" type="text" placeholder="Ex: Dimir Control">
+                </label>
+
+                <label>
+                    Tribo/Guilda
+                    <input id="guildInput" type="text" placeholder="Ex: Dimir / Izzet / Elfos">
+                </label>
+            </div>
+
+            <button id="enterRoomBtn" class="enter-btn">Entrar na sala</button>
+            <p id="entryError" class="entry-error"></p>
+        </div>
+    </div>
+
+    <header class="topbar">
+        <div class="logo-area">
+            <span class="logo-icon">🛡️</span>
+            <strong>Mesa PvP</strong>
+        </div>
+
+        <div class="room-info">
+            <span id="roomText">Sala:</span>
+            <span class="status-dot"></span>
+            <span class="status-text">Conectado</span>
+        </div>
+
+        <div class="top-actions">
+            <button id="copyRoomBtn">🔗 Copiar link da sala</button>
+            <button id="usersCountBtn">👥 0</button>
+            <button>⚙️</button>
+        </div>
+    </header>
+
+    <section class="match-tools">
+        <div class="timer-box">
+            <strong>⏱️ Tempo da partida</strong>
+
+            <div id="timerDisplay" class="timer-display">
+                50:00
+            </div>
+
+            <div class="timer-controls">
+                <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
+                <button onclick="setTimer()">Ajustar</button>
+                <button onclick="startTimer()">Start</button>
+                <button onclick="pauseTimer()">Pause</button>
+                <button onclick="resetTimer()">Reset</button>
+            </div>
+        </div>
+    </section>
+
+    <main class="game-layout">
+
+        <aside class="player-panel player-one">
+            <h2 id="player1Name">Jogador 1</h2>
+
+            <div>
+                <span class="label">Vida</span>
+                <div id="player1Life" class="life life-blue">20</div>
+            </div>
+
+            <div class="life-buttons">
+                <button data-player="1" data-amount="-1">-</button>
+                <button data-player="1" data-amount="1">+</button>
+            </div>
+
+            <div class="manual-life-box">
+                <input id="manualLife1" type="number" placeholder="Ex: 3000">
+                <button onclick="setManualLife(1)">Aplicar</button>
+                <button onclick="resetLife(1)">Reset</button>
+            </div>
+
+            <div class="player-history-box">
+                <button onclick="togglePlayerHistory(1)" class="history-small-btn">
+                    📜 Histórico
+                </button>
+
+                <button onclick="clearLifeHistory()" class="history-clear-small">
+                    Limpar
+                </button>
+
+                <div id="lifeHistoryPanel1" class="player-life-history hidden">
+                    <div id="lifeHistoryList1"></div>
+                </div>
+            </div>
+
+            <div class="player-info">
+                <div>
+                    <span class="label">Deck</span>
+                    <strong id="player1Deck">Aguardando...</strong>
+                </div>
+
+                <div>
+                    <span class="label">Tribo/Guilda</span>
+                    <strong id="player1Guild" class="guild-blue">---</strong>
+                </div>
+            </div>
+
+            <div class="notes">
+                <span class="label">Anotações</span>
+                <textarea placeholder="Suas anotações..."></textarea>
+            </div>
+        </aside>
+
+        <section class="video-area">
+            <div class="camera-card">
+                <div class="camera-title">
+                    <span class="blue-dot"></span>
+                    <strong id="localCameraTitle">Minha câmera</strong>
+                </div>
+
+                <button class="rotate-btn">Inverter Mesa</button>
+                <video id="localVideo" autoplay playsinline muted></video>
+
+                <div class="camera-status">
+                    <span class="status-dot"></span>
+                    Câmera ativa
+                </div>
+            </div>
+
+            <div class="camera-card">
+                <div class="camera-title">
+                    <span class="green-dot"></span>
+                    <strong id="remoteCameraTitle">Outro jogador</strong>
+                </div>
+
+                <button class="rotate-btn">Inverter Mesa</button>
+                <video id="remoteVideo" autoplay playsinline></video>
+
+                <div class="camera-status">
+                    <span class="status-dot"></span>
+                    Câmera ativa
+                </div>
+            </div>
+        </section>
+
+        <aside class="player-panel player-two">
+            <h2 id="player2Name">Jogador 2</h2>
+
+            <div>
+                <span class="label">Vida</span>
+                <div id="player2Life" class="life life-green">20</div>
+            </div>
+
+            <div class="life-buttons">
+                <button data-player="2" data-amount="-1">-</button>
+                <button data-player="2" data-amount="1">+</button>
+            </div>
+
+            <div class="manual-life-box">
+                <input id="manualLife2" type="number" placeholder="Ex: 3000">
+                <button onclick="setManualLife(2)">Aplicar</button>
+                <button onclick="resetLife(2)">Reset</button>
+            </div>
+
+            <div class="player-history-box">
+                <button onclick="togglePlayerHistory(2)" class="history-small-btn">
+                    📜 Histórico
+                </button>
+
+                <button onclick="clearLifeHistory()" class="history-clear-small">
+                    Limpar
+                </button>
+
+                <div id="lifeHistoryPanel2" class="player-life-history hidden">
+                    <div id="lifeHistoryList2"></div>
+                </div>
+            </div>
+
+            <div class="player-info">
+                <div>
+                    <span class="label">Deck</span>
+                    <strong id="player2Deck">Aguardando...</strong>
+                </div>
+
+                <div>
+                    <span class="label">Tribo/Guilda</span>
+                    <strong id="player2Guild" class="guild-green">---</strong>
+                </div>
+            </div>
+
+            <div class="notes">
+                <span class="label">Anotações</span>
+                <textarea placeholder="Suas anotações..."></textarea>
+            </div>
+        </aside>
+
+    </main>
+
+    <div class="layout-buttons">
+        <button id="dualViewBtn">Dual View</button>
+        <button id="focusViewBtn">Focus Mode</button>
+    </div>
+
+    <footer class="bottom-bar">
+        <div class="device-controls">
+            <div class="control-item">
+                🎙️
+                <div>
+                    <strong>Microfone</strong>
+                    <span>Ativado</span>
+                </div>
+            </div>
+
+            <div class="control-item">
+                🎥
+                <div>
+                    <strong>Câmera</strong>
+                    <span>Ativada</span>
+                </div>
+            </div>
+        </div>
+
+        <select id="cameraSelect"></select>
+
+        <div class="main-controls">
+            <button id="fullscreenBtn">⛶ Tela cheia</button>
+            <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
+            <button>💬 Chat</button>
+        </div>
+
+        <button class="leave-btn" onclick="leaveRoom()">
+            📞 Sair da sala
+        </button>
+    </footer>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script src="js/sala.js"></script>
+
+</body>
+</html>
