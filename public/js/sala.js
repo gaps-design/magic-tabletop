@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const roomId = params.get("room");
+const cameraFor = params.get("cameraFor");
 
 const roomText = document.getElementById("roomText");
 const entryRoomText = document.getElementById("entryRoomText");
@@ -34,62 +35,113 @@ if (entryRoomText) {
     entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
 }
 
-playerRoleBtn.addEventListener("click", () => {
-    selectedRole = "player";
+/* =========================
+   MODO CÂMERA DO CELULAR
+========================= */
 
-    playerRoleBtn.classList.add("active");
-    spectatorRoleBtn.classList.remove("active");
+if (cameraFor) {
+    selectedRole = "camera";
 
-    playerFields.style.display = "flex";
-});
+    document.body.classList.add("camera-mode");
 
-spectatorRoleBtn.addEventListener("click", () => {
-    selectedRole = "spectator";
-
-    spectatorRoleBtn.classList.add("active");
-    playerRoleBtn.classList.remove("active");
-
-    playerFields.style.display = "none";
-});
-
-enterRoomBtn.addEventListener("click", async () => {
-    entryError.innerText = "";
-
-    const name = playerNameInput.value.trim();
-    const deck = deckNameInput.value.trim();
-    const guild = guildInput.value.trim();
-
-    if (selectedRole === "player") {
-        if (!name || !deck) {
-            entryError.innerText = "Preencha nome do jogador e nome do deck.";
-            return;
-        }
-    }
-
-    try {
-        await joinRoom(roomId, {
-            role: selectedRole,
-            name: name || "Espectador",
-            deck,
-            guild
-        });
-
+    if (entryModal) {
         entryModal.style.display = "none";
-
-    } catch (error) {
-        entryError.innerText = "Erro ao entrar na sala: " + error.message;
     }
-});
+
+    window.addEventListener("load", async () => {
+        try {
+            await joinRoom(roomId, {
+                role: "camera",
+                linkedPlayer: Number(cameraFor),
+                name: `Câmera Jogador ${cameraFor}`,
+                deck: "Câmera auxiliar",
+                guild: "---"
+            });
+        } catch (error) {
+            alert("Erro ao iniciar câmera do celular: " + error.message);
+        }
+    });
+}
+
+/* =========================
+   ENTRADA NA SALA
+========================= */
+
+if (playerRoleBtn) {
+    playerRoleBtn.addEventListener("click", () => {
+        selectedRole = "player";
+
+        playerRoleBtn.classList.add("active");
+        spectatorRoleBtn.classList.remove("active");
+
+        playerFields.style.display = "flex";
+    });
+}
+
+if (spectatorRoleBtn) {
+    spectatorRoleBtn.addEventListener("click", () => {
+        selectedRole = "spectator";
+
+        spectatorRoleBtn.classList.add("active");
+        playerRoleBtn.classList.remove("active");
+
+        playerFields.style.display = "none";
+    });
+}
+
+if (enterRoomBtn) {
+    enterRoomBtn.addEventListener("click", async () => {
+        entryError.innerText = "";
+
+        const name = playerNameInput.value.trim();
+        const deck = deckNameInput.value.trim();
+        const guild = guildInput.value.trim();
+
+        if (selectedRole === "player") {
+            if (!name || !deck) {
+                entryError.innerText = "Preencha nome do jogador e nome do deck.";
+                return;
+            }
+        }
+
+        try {
+            await joinRoom(roomId, {
+                role: selectedRole,
+                name: name || "Espectador",
+                deck,
+                guild
+            });
+
+            entryModal.style.display = "none";
+
+        } catch (error) {
+            entryError.innerText = "Erro ao entrar na sala: " + error.message;
+        }
+    });
+}
+
+/* =========================
+   SOCKET / STATUS DO USUÁRIO
+========================= */
 
 socket.on("assigned-role", (data) => {
     if (data.role === "spectator") {
         myPlayerNumber = null;
+        selectedRole = "spectator";
         alert("Você entrou como espectador.");
+        return;
+    }
+
+    if (data.role === "camera") {
+        myPlayerNumber = null;
+        selectedRole = "camera";
+        document.body.classList.add("camera-mode");
         return;
     }
 
     if (data.playerNumber) {
         myPlayerNumber = data.playerNumber;
+        selectedRole = "player";
         console.log("Você é o jogador:", myPlayerNumber);
     }
 });
@@ -100,7 +152,8 @@ socket.on("room-full", () => {
 
 socket.on("room-state", (state) => {
     if (usersCountBtn) {
-        usersCountBtn.innerText = `👥 ${state.players.length + state.spectators}`;
+        const cameraCount = state.cameraClients ? state.cameraClients.length : 0;
+        usersCountBtn.innerText = `👥 ${state.players.length + state.spectators + cameraCount}`;
     }
 
     const p1 = state.players.find(p => p.playerNumber === 1);
@@ -134,13 +187,17 @@ socket.on("room-state", (state) => {
     updateTimerDisplay(state.timer);
 });
 
+/* =========================
+   VIDA
+========================= */
+
 document.querySelectorAll(".life-buttons button").forEach(button => {
     button.addEventListener("click", () => {
         const playerNumber = Number(button.dataset.player);
         const amount = Number(button.dataset.amount);
 
-        if (selectedRole === "spectator") {
-            alert("Espectador não pode alterar vida.");
+        if (selectedRole === "spectator" || selectedRole === "camera") {
+            alert("Você não pode alterar vida nesse modo.");
             return;
         }
 
@@ -158,8 +215,8 @@ document.querySelectorAll(".life-buttons button").forEach(button => {
 });
 
 window.setManualLife = function(playerNumber) {
-    if (selectedRole === "spectator") {
-        alert("Espectador não pode alterar vida.");
+    if (selectedRole === "spectator" || selectedRole === "camera") {
+        alert("Você não pode alterar vida nesse modo.");
         return;
     }
 
@@ -188,8 +245,8 @@ window.setManualLife = function(playerNumber) {
 };
 
 window.resetLife = function(playerNumber) {
-    if (selectedRole === "spectator") {
-        alert("Espectador não pode resetar vida.");
+    if (selectedRole === "spectator" || selectedRole === "camera") {
+        alert("Você não pode resetar vida nesse modo.");
         return;
     }
 
@@ -203,6 +260,10 @@ window.resetLife = function(playerNumber) {
         playerNumber: myPlayerNumber
     });
 };
+
+/* =========================
+   BOTÕES GERAIS
+========================= */
 
 window.leaveRoom = function() {
     socket.emit("leave-room", { roomId });
@@ -222,6 +283,20 @@ if (copyRoomBtn) {
         alert("Link da sala copiado!");
     });
 }
+
+window.copyCameraLink = async function() {
+    if (!myPlayerNumber) {
+        alert("Entre como jogador primeiro para gerar o link da câmera.");
+        return;
+    }
+
+    const cameraUrl =
+        `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}`;
+
+    await navigator.clipboard.writeText(cameraUrl);
+
+    alert("Link da câmera copiado! Abra esse link no celular.");
+};
 
 document.querySelectorAll(".rotate-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -289,6 +364,8 @@ window.setTimer = function() {
     const input = document.getElementById("timerMinutesInput");
     const minutes = Number(input.value);
 
+    if (selectedRole === "camera") return;
+
     if (isNaN(minutes) || minutes <= 0) {
         alert("Digite um tempo válido em minutos.");
         return;
@@ -301,14 +378,17 @@ window.setTimer = function() {
 };
 
 window.startTimer = function() {
+    if (selectedRole === "camera") return;
     socket.emit("start-timer", { roomId });
 };
 
 window.pauseTimer = function() {
+    if (selectedRole === "camera") return;
     socket.emit("pause-timer", { roomId });
 };
 
 window.resetTimer = function() {
+    if (selectedRole === "camera") return;
     socket.emit("reset-timer", { roomId });
 };
 
@@ -363,5 +443,6 @@ function renderPlayerHistory(list, history) {
 }
 
 window.clearLifeHistory = function() {
+    if (selectedRole === "camera") return;
     socket.emit("clear-life-history", { roomId });
 };

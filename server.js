@@ -34,9 +34,56 @@ function sendRoomState(roomId) {
   io.to(roomId).emit("room-state", {
     players: room.players,
     spectators: room.spectators.length,
+    cameraClients: room.cameraClients || [],
     lifeHistory: room.lifeHistory || [],
     timer: publicTimer(room.timer)
   });
+}
+
+function ensureRoom(roomId) {
+  if (!rooms[roomId]) {
+    rooms[roomId] = {
+      players: [],
+      spectators: [],
+      cameraClients: [],
+      lifeHistory: [],
+      timer: createDefaultTimer()
+    };
+  }
+
+  return rooms[roomId];
+}
+
+function removeSocketFromRoom(roomId, socketId) {
+  const room = rooms[roomId];
+  if (!room) return false;
+
+  const wasPlayer = room.players.some(p => p.socketId === socketId);
+  const wasSpectator = room.spectators.includes(socketId);
+  const wasCamera = room.cameraClients.some(c => c.socketId === socketId);
+
+  room.players = room.players.filter(p => p.socketId !== socketId);
+  room.spectators = room.spectators.filter(id => id !== socketId);
+  room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
+
+  return wasPlayer || wasSpectator || wasCamera;
+}
+
+function cleanEmptyRoom(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  if (
+    room.players.length === 0 &&
+    room.spectators.length === 0 &&
+    room.cameraClients.length === 0
+  ) {
+    if (room.timer?.interval) {
+      clearInterval(room.timer.interval);
+    }
+
+    delete rooms[roomId];
+  }
 }
 
 io.on("connection", (socket) => {
@@ -48,27 +95,72 @@ io.on("connection", (socket) => {
     const name = data.name || data.user?.name || "Jogador";
     const deck = data.deck || data.user?.deck || "Deck não informado";
     const guild = data.guild || data.user?.guild || "---";
+    const linkedPlayer = Number(data.linkedPlayer || data.user?.linkedPlayer);
 
-    if (!rooms[roomId]) {
-      rooms[roomId] = {
-        players: [],
-        spectators: [],
-        lifeHistory: [],
-        timer: createDefaultTimer()
-      };
-    }
+    const room = ensureRoom(roomId);
 
-    const room = rooms[roomId];
+    socket.join(roomId);
 
     if (role === "spectator") {
       room.spectators.push(socket.id);
-      socket.join(roomId);
 
       socket.emit("assigned-role", {
         role: "spectator"
       });
 
+      socket.emit("existing-peers", {
+        peers: [
+          ...room.players.map(p => ({
+            socketId: p.socketId,
+            role: "player",
+            playerNumber: p.playerNumber
+          })),
+          ...room.cameraClients.map(c => ({
+            socketId: c.socketId,
+            role: "camera",
+            linkedPlayer: c.linkedPlayer
+          }))
+        ]
+      });
+
       sendRoomState(roomId);
+      console.log(`Espectador entrou na sala ${roomId}`);
+      return;
+    }
+
+    if (role === "camera") {
+      room.cameraClients.push({
+        socketId: socket.id,
+        linkedPlayer: linkedPlayer || null
+      });
+
+      socket.emit("assigned-role", {
+        role: "camera",
+        linkedPlayer: linkedPlayer || null
+      });
+
+      socket.emit("existing-peers", {
+        peers: [
+          ...room.players.map(p => ({
+            socketId: p.socketId,
+            role: "player",
+            playerNumber: p.playerNumber
+          })),
+          ...room.spectators.map(id => ({
+            socketId: id,
+            role: "spectator"
+          }))
+        ]
+      });
+
+      socket.to(roomId).emit("user-connected", {
+        socketId: socket.id,
+        role: "camera",
+        linkedPlayer: linkedPlayer || null
+      });
+
+      sendRoomState(roomId);
+      console.log(`Câmera auxiliar entrou na sala ${roomId}`);
       return;
     }
 
@@ -89,11 +181,35 @@ io.on("connection", (socket) => {
     };
 
     room.players.push(player);
-    socket.join(roomId);
-
-    socket.to(roomId).emit("user-connected", socket.id);
 
     socket.emit("assigned-role", {
+      role: "player",
+      playerNumber
+    });
+
+    socket.emit("existing-peers", {
+      peers: [
+        ...room.players
+          .filter(p => p.socketId !== socket.id)
+          .map(p => ({
+            socketId: p.socketId,
+            role: "player",
+            playerNumber: p.playerNumber
+          })),
+        ...room.cameraClients.map(c => ({
+          socketId: c.socketId,
+          role: "camera",
+          linkedPlayer: c.linkedPlayer
+        })),
+        ...room.spectators.map(id => ({
+          socketId: id,
+          role: "spectator"
+        }))
+      ]
+    });
+
+    socket.to(roomId).emit("user-connected", {
+      socketId: socket.id,
       role: "player",
       playerNumber
     });
@@ -130,7 +246,6 @@ io.on("connection", (socket) => {
 
     const player = room.players.find(p => p.playerNumber === playerNumber);
     if (!player) return;
-
     if (player.socketId !== socket.id) return;
 
     const oldLife = player.life;
@@ -154,7 +269,6 @@ io.on("connection", (socket) => {
 
     const player = room.players.find(p => p.playerNumber === playerNumber);
     if (!player) return;
-
     if (player.socketId !== socket.id) return;
 
     const newLife = Number(value);
@@ -181,7 +295,6 @@ io.on("connection", (socket) => {
 
     const player = room.players.find(p => p.playerNumber === playerNumber);
     if (!player) return;
-
     if (player.socketId !== socket.id) return;
 
     const oldLife = player.life;
@@ -281,50 +394,31 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    room.players = room.players.filter(p => p.socketId !== socket.id);
-    room.spectators = room.spectators.filter(id => id !== socket.id);
+    const removed = removeSocketFromRoom(roomId, socket.id);
 
     socket.leave(roomId);
     socket.emit("left-room");
 
-    socket.to(roomId).emit("user-disconnected", socket.id);
-
-    sendRoomState(roomId);
-
-    if (room.players.length === 0 && room.spectators.length === 0) {
-      if (room.timer?.interval) {
-        clearInterval(room.timer.interval);
-      }
-
-      delete rooms[roomId];
+    if (removed) {
+      socket.to(roomId).emit("user-disconnected", socket.id);
+      sendRoomState(roomId);
     }
+
+    cleanEmptyRoom(roomId);
   });
 
   socket.on("disconnect", () => {
     console.log("Usuário desconectado:", socket.id);
 
     for (const roomId in rooms) {
-      const room = rooms[roomId];
+      const removed = removeSocketFromRoom(roomId, socket.id);
 
-      const wasInRoom =
-        room.players.some(p => p.socketId === socket.id) ||
-        room.spectators.includes(socket.id);
-
-      room.players = room.players.filter(p => p.socketId !== socket.id);
-      room.spectators = room.spectators.filter(id => id !== socket.id);
-
-      if (wasInRoom) {
+      if (removed) {
         socket.to(roomId).emit("user-disconnected", socket.id);
         sendRoomState(roomId);
       }
 
-      if (room.players.length === 0 && room.spectators.length === 0) {
-        if (room.timer?.interval) {
-          clearInterval(room.timer.interval);
-        }
-
-        delete rooms[roomId];
-      }
+      cleanEmptyRoom(roomId);
     }
   });
 });

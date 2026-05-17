@@ -660,3 +660,50 @@ body.focus-mode .camera-card:first-child{
         grid-template-columns:1fr;
     }
 }
+
+body.camera-mode .topbar,
+body.camera-mode .match-tools,
+body.camera-mode .player-panel,
+body.camera-mode .layout-buttons,
+body.camera-mode .bottom-bar,
+body.camera-mode .camera-card:nth-child(2){
+    display:none !important;
+}
+
+body.camera-mode{
+    background:#000;
+    overflow:hidden;
+}
+
+body.camera-mode .game-layout{
+    display:block;
+    height:100vh;
+    padding:0;
+}
+
+body.camera-mode .video-area{
+    display:block;
+    height:100vh;
+}
+
+body.camera-mode .camera-card{
+    display:block;
+    height:100vh;
+    border:none;
+    border-radius:0;
+    padding:0;
+}
+
+body.camera-mode .camera-title,
+body.camera-mode .camera-status,
+body.camera-mode .rotate-btn{
+    display:none !important;
+}
+
+body.camera-mode video{
+    width:100vw;
+    height:100vh;
+    border:none;
+    border-radius:0;
+    object-fit:cover;
+}
