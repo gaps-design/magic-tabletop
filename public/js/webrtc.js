@@ -8,16 +8,24 @@ const microphoneSelect = document.getElementById("microphoneSelect");
 let localStream = null;
 let currentRoomId = null;
 let currentRole = null;
+let myPlayerNumberRTC = null;
+
 let selectedCameraId = localStorage.getItem("magicSelectedCamera") || "";
 let selectedMicrophoneId = localStorage.getItem("magicSelectedMicrophone") || "";
 
 const peerConnections = {};
+const peerInfo = {};
+const remoteStreams = {};
 
 const servers = {
     iceServers: [
         { urls: "stun:stun.l.google.com:19302" }
     ]
 };
+
+/* =========================
+   DISPOSITIVOS
+========================= */
 
 async function getDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -85,7 +93,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     try {
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
-        console.warn("Falha com dispositivo exato. Tentando padrão.", err);
+        console.warn("Falha com dispositivo exato. Tentando dispositivo padrão.", err);
 
         localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
@@ -124,6 +132,100 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     replaceTracksOnPeers();
 }
 
+/* =========================
+   ORGANIZAÇÃO DAS TELAS
+========================= */
+
+function savePeerInfo(socketId, data = {}) {
+    if (!socketId) return;
+
+    peerInfo[socketId] = {
+        ...(peerInfo[socketId] || {}),
+        ...data
+    };
+
+    routeAllStreams();
+}
+
+function setVideoStream(videoElement, stream, muted = false) {
+    if (!videoElement || !stream) return;
+
+    if (videoElement.srcObject !== stream) {
+        videoElement.srcObject = stream;
+    }
+
+    videoElement.muted = muted;
+    videoElement.playsInline = true;
+    videoElement.play().catch(() => {});
+}
+
+function routeStream(socketId, stream) {
+    if (!socketId || !stream) return;
+
+    if (currentRole === "camera") {
+        return;
+    }
+
+    const info = peerInfo[socketId] || {};
+
+    if (currentRole === "spectator") {
+        if (info.role === "camera") {
+            if (Number(info.linkedPlayer) === 1) {
+                setVideoStream(localVideo, stream, true);
+            }
+
+            if (Number(info.linkedPlayer) === 2) {
+                setVideoStream(remoteVideo, stream, false);
+            }
+
+            return;
+        }
+
+        if (info.role === "player") {
+            if (Number(info.playerNumber) === 1) {
+                setVideoStream(localVideo, stream, true);
+            }
+
+            if (Number(info.playerNumber) === 2) {
+                setVideoStream(remoteVideo, stream, false);
+            }
+
+            return;
+        }
+
+        setVideoStream(remoteVideo, stream, false);
+        return;
+    }
+
+    if (currentRole === "player") {
+        if (info.role === "camera") {
+            if (Number(info.linkedPlayer) === Number(myPlayerNumberRTC)) {
+                setVideoStream(localVideo, stream, true);
+                return;
+            }
+
+            setVideoStream(remoteVideo, stream, false);
+            return;
+        }
+
+        if (info.role === "player") {
+            if (Number(info.playerNumber) !== Number(myPlayerNumberRTC)) {
+                setVideoStream(remoteVideo, stream, false);
+            }
+
+            return;
+        }
+
+        setVideoStream(remoteVideo, stream, false);
+    }
+}
+
+function routeAllStreams() {
+    Object.entries(remoteStreams).forEach(([socketId, stream]) => {
+        routeStream(socketId, stream);
+    });
+}
+
 function replaceTracksOnPeers() {
     if (!localStream) return;
 
@@ -149,6 +251,10 @@ function replaceTracksOnPeers() {
     });
 }
 
+/* =========================
+   WEBRTC
+========================= */
+
 function createPeerConnection(targetId) {
     if (peerConnections[targetId]) {
         return peerConnections[targetId];
@@ -166,11 +272,8 @@ function createPeerConnection(targetId) {
     peer.ontrack = (event) => {
         const stream = event.streams[0];
 
-        if (remoteVideo) {
-            remoteVideo.srcObject = stream;
-            remoteVideo.playsInline = true;
-            remoteVideo.play().catch(() => {});
-        }
+        remoteStreams[targetId] = stream;
+        routeStream(targetId, stream);
     };
 
     peer.onicecandidate = (event) => {
@@ -190,13 +293,17 @@ function createPeerConnection(targetId) {
         ) {
             peer.close();
             delete peerConnections[targetId];
+            delete peerInfo[targetId];
+            delete remoteStreams[targetId];
         }
     };
 
     return peer;
 }
 
-async function createOffer(targetId) {
+async function createOffer(targetId, data = {}) {
+    savePeerInfo(targetId, data);
+
     const peer = createPeerConnection(targetId);
 
     const offer = await peer.createOffer();
@@ -224,9 +331,23 @@ async function joinRoom(roomId, user) {
     });
 }
 
+/* =========================
+   SOCKETS
+========================= */
+
+socket.on("assigned-role", (data) => {
+    currentRole = data.role;
+
+    if (data.playerNumber) {
+        myPlayerNumberRTC = Number(data.playerNumber);
+    }
+});
+
 socket.on("existing-peers", async ({ peers }) => {
     for (const peerData of peers) {
         if (!peerData.socketId) continue;
+
+        savePeerInfo(peerData.socketId, peerData);
 
         if (
             currentRole === "spectator" &&
@@ -235,13 +356,15 @@ socket.on("existing-peers", async ({ peers }) => {
             continue;
         }
 
-        await createOffer(peerData.socketId);
+        await createOffer(peerData.socketId, peerData);
     }
 });
 
 socket.on("user-connected", async (data) => {
     const targetId = data.socketId || data;
     if (!targetId) return;
+
+    savePeerInfo(targetId, data);
 
     if (
         currentRole === "spectator" &&
@@ -250,7 +373,7 @@ socket.on("user-connected", async (data) => {
         return;
     }
 
-    await createOffer(targetId);
+    await createOffer(targetId, data);
 });
 
 socket.on("offer", async ({ offer, sender }) => {
@@ -288,9 +411,16 @@ socket.on("ice-candidate", async ({ candidate, sender }) => {
 socket.on("user-disconnected", (socketId) => {
     if (peerConnections[socketId]) {
         peerConnections[socketId].close();
-        delete peerConnections[socketId];
     }
+
+    delete peerConnections[socketId];
+    delete peerInfo[socketId];
+    delete remoteStreams[socketId];
 });
+
+/* =========================
+   TROCA DE CÂMERA / MICROFONE
+========================= */
 
 if (cameraSelect) {
     cameraSelect.addEventListener("change", async () => {

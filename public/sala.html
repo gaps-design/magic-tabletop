@@ -49,15 +49,35 @@
 
     <header class="topbar">
         <div class="logo-area">
-            <span class="logo-icon">🛡️</span>
-            <strong>Mesa PvP</strong>
+            <div>
+                <div class="logo-title">
+                    <span class="logo-icon">🛡️</span>
+                    <strong>Mesa PvP</strong>
+                </div>
+
+                <div class="room-info under-logo">
+                    <span id="roomText">Sala:</span>
+                    <span class="status-dot"></span>
+                    <span class="status-text">Conectado</span>
+                </div>
+            </div>
         </div>
 
-        <div class="room-info">
-            <span id="roomText">Sala:</span>
-            <span class="status-dot"></span>
-            <span class="status-text">Conectado</span>
-        </div>
+        <section class="match-tools top-timer">
+            <div class="timer-box compact-timer">
+                <div id="timerDisplay" class="timer-display">50:00</div>
+
+                <button class="timer-toggle" onclick="toggleTimerControls()">⚙️</button>
+
+                <div id="timerControls" class="timer-controls hidden">
+                    <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
+                    <button onclick="setTimer()">Ajustar</button>
+                    <button onclick="startTimer()">Start</button>
+                    <button onclick="pauseTimer()">Pause</button>
+                    <button onclick="resetTimer()">Reset</button>
+                </div>
+            </div>
+        </section>
 
         <div class="top-actions">
             <button id="copyRoomBtn">🔗 Copiar link da sala</button>
@@ -65,22 +85,6 @@
             <button>⚙️</button>
         </div>
     </header>
-
-    <section class="match-tools">
-        <div class="timer-box">
-            <strong>⏱️ Tempo da partida</strong>
-
-            <div id="timerDisplay" class="timer-display">50:00</div>
-
-            <div class="timer-controls">
-                <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
-                <button onclick="setTimer()">Ajustar</button>
-                <button onclick="startTimer()">Start</button>
-                <button onclick="pauseTimer()">Pause</button>
-                <button onclick="resetTimer()">Reset</button>
-            </div>
-        </div>
-    </section>
 
     <main class="game-layout">
 
@@ -104,13 +108,8 @@
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(1)" class="history-small-btn">
-                    📜 Histórico
-                </button>
-
-                <button onclick="clearLifeHistory()" class="history-clear-small">
-                    Limpar
-                </button>
+                <button onclick="togglePlayerHistory(1)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
                 <div id="lifeHistoryPanel1" class="player-life-history hidden">
                     <div id="lifeHistoryList1"></div>
@@ -136,7 +135,7 @@
         </aside>
 
         <section class="video-area">
-            <div class="camera-card">
+            <div class="camera-card camera-player-1">
                 <div class="camera-title">
                     <span class="blue-dot"></span>
                     <strong id="localCameraTitle">Minha câmera</strong>
@@ -151,7 +150,7 @@
                 </div>
             </div>
 
-            <div class="camera-card">
+            <div class="camera-card camera-player-2">
                 <div class="camera-title">
                     <span class="green-dot"></span>
                     <strong id="remoteCameraTitle">Outro jogador</strong>
@@ -187,13 +186,8 @@
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(2)" class="history-small-btn">
-                    📜 Histórico
-                </button>
-
-                <button onclick="clearLifeHistory()" class="history-clear-small">
-                    Limpar
-                </button>
+                <button onclick="togglePlayerHistory(2)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
                 <div id="lifeHistoryPanel2" class="player-life-history hidden">
                     <div id="lifeHistoryList2"></div>
@@ -225,9 +219,11 @@
         <button id="focusViewBtn">Focus Mode</button>
     </div>
 
-    <footer class="bottom-bar">
+    <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">⌄</button>
+
+    <footer id="bottomBar" class="bottom-bar collapsed">
         <div class="device-controls">
-            <div class="control-item">
+            <div class="control-item status-control">
                 🎙️
                 <div>
                     <strong>Microfone</strong>
@@ -235,29 +231,51 @@
                 </div>
             </div>
 
-            <div class="control-item">
+            <div class="control-item status-control">
                 🎥
                 <div>
                     <strong>Câmera</strong>
                     <span>Ativada</span>
                 </div>
             </div>
-        </div>
 
-        <select id="cameraSelect"></select>
-        <select id="microphoneSelect"></select>
+            <div class="control-item select-control">
+                <select id="cameraSelect"></select>
+            </div>
+
+            <div class="control-item select-control">
+                <select id="microphoneSelect"></select>
+            </div>
+        </div>
 
         <div class="main-controls">
             <button id="fullscreenBtn">⛶ Tela cheia</button>
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
             <button onclick="copyCameraLink()">📷 Celular como câmera</button>
             <button>💬 Chat</button>
+            <button class="leave-btn" onclick="leaveRoom()">📞 Sair da sala</button>
         </div>
-
-        <button class="leave-btn" onclick="leaveRoom()">
-            📞 Sair da sala
-        </button>
     </footer>
+
+    <script>
+        function toggleBottomBar() {
+            const bottomBar = document.getElementById("bottomBar");
+            const bottomToggleBtn = document.getElementById("bottomToggleBtn");
+
+            bottomBar.classList.toggle("collapsed");
+
+            if (bottomBar.classList.contains("collapsed")) {
+                bottomToggleBtn.innerText = "⌃";
+            } else {
+                bottomToggleBtn.innerText = "⌄";
+            }
+        }
+
+        function toggleTimerControls() {
+            const timerControls = document.getElementById("timerControls");
+            timerControls.classList.toggle("hidden");
+        }
+    </script>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/webrtc.js"></script>

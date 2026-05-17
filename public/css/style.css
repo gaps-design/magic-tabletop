@@ -15,25 +15,48 @@ body{
 /* TOPO */
 
 .topbar{
-    height:70px;
+    height:78px;
     padding:0 24px;
-    display:flex;
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
     align-items:center;
-    justify-content:space-between;
     border-bottom:1px solid rgba(255,255,255,0.08);
     background:#06101d;
+    position:relative;
+    z-index:40;
 }
 
-.logo-area,
-.room-info,
-.top-actions{
+.logo-area{
     display:flex;
     align-items:center;
     gap:12px;
 }
 
+.logo-title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:17px;
+}
+
 .logo-icon{
     font-size:26px;
+}
+
+.room-info.under-logo{
+    margin-top:5px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    color:#cbd5e1;
+}
+
+.top-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:12px;
 }
 
 .status-dot,
@@ -56,7 +79,7 @@ body{
 
 .status-text{
     color:#22c55e;
-    font-size:14px;
+    font-size:13px;
 }
 
 button,
@@ -74,49 +97,67 @@ button:hover{
     background:#172844;
 }
 
-/* CRONÔMETRO */
+/* CRONÔMETRO TOPO */
 
-.match-tools{
-    width:100%;
-    height:125px;
-    padding:10px 24px;
+.match-tools.top-timer{
+    width:auto;
+    height:auto;
+    padding:0;
     display:flex;
-    gap:16px;
     align-items:center;
     justify-content:center;
 }
 
-.timer-box{
+.timer-box.compact-timer{
+    position:relative;
+    min-width:180px;
     background:rgba(15,25,40,0.92);
-    border:1px solid rgba(80,180,255,0.25);
+    border:1px solid rgba(80,180,255,0.28);
     border-radius:16px;
-    padding:12px 16px;
-    color:white;
-    box-shadow:0 0 18px rgba(0,0,0,0.25);
-    min-width:390px;
-}
-
-.timer-box strong{
-    font-size:14px;
+    padding:6px 44px 6px 16px;
+    box-shadow:0 0 16px rgba(0,0,0,0.25);
 }
 
 .timer-display{
     font-size:34px;
+    line-height:38px;
     font-weight:900;
     color:#45c8ff;
     text-align:center;
-    margin:6px 0;
+    text-shadow:0 0 12px rgba(69,200,255,0.55);
+}
+
+.timer-toggle{
+    position:absolute;
+    right:6px;
+    top:50%;
+    transform:translateY(-50%);
+    width:32px;
+    height:32px;
+    padding:0;
+    border-radius:10px;
+    font-size:14px;
 }
 
 .timer-controls{
+    position:absolute;
+    top:52px;
+    left:50%;
+    transform:translateX(-50%);
     display:flex;
     gap:8px;
-    flex-wrap:wrap;
+    flex-wrap:nowrap;
     justify-content:center;
+    background:#06101d;
+    border:1px solid rgba(80,180,255,0.28);
+    border-radius:14px;
+    padding:10px;
+    z-index:90;
+    box-shadow:0 12px 35px rgba(0,0,0,0.45);
 }
 
 .timer-controls input{
-    width:70px;
+    width:62px;
     padding:9px;
     border-radius:10px;
     border:none;
@@ -130,7 +171,10 @@ button:hover{
     background:linear-gradient(135deg,#1e90ff,#00c2ff);
     color:white;
     font-weight:800;
-    cursor:pointer;
+}
+
+.hidden{
+    display:none !important;
 }
 
 /* LAYOUT PRINCIPAL */
@@ -140,7 +184,7 @@ button:hover{
     grid-template-columns:190px minmax(0,1fr) 190px;
     gap:14px;
     padding:14px;
-    height:calc(100vh - 70px - 125px - 90px);
+    height:calc(100vh - 78px);
     min-height:0;
 }
 
@@ -231,7 +275,6 @@ button:hover{
     border-radius:10px;
     font-size:12px;
     font-weight:800;
-    cursor:pointer;
     color:white;
 }
 
@@ -270,10 +313,6 @@ button:hover{
 .empty-history{
     font-size:12px;
     opacity:0.65;
-}
-
-.hidden{
-    display:none;
 }
 
 .player-info{
@@ -354,8 +393,6 @@ video{
     gap:8px;
 }
 
-/* BOTÃO INVERTER */
-
 .rotate-btn{
     position:absolute;
     top:46px;
@@ -366,35 +403,34 @@ video{
     color:white;
     padding:8px 12px;
     border-radius:8px;
-    cursor:pointer;
     font-size:13px;
 }
 
-/* MODOS DE LAYOUT */
+/* BOTÕES DE LAYOUT */
 
 .layout-buttons{
     position:fixed;
-    bottom:104px;
+    bottom:18px;
     left:50%;
     transform:translateX(-50%);
     z-index:30;
     display:flex;
     justify-content:center;
     gap:12px;
-}
-
-.layout-buttons button{
-    background:#1e293b;
-    border:1px solid rgba(255,255,255,0.12);
-    color:white;
-    padding:10px 16px;
-    border-radius:12px;
-    cursor:pointer;
     transition:0.3s;
 }
 
-.layout-buttons button:hover{
-    background:#334155;
+.layout-buttons button{
+    background:rgba(30,41,59,0.75);
+    backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.12);
+    color:white;
+    padding:9px 14px;
+    border-radius:12px;
+}
+
+body:has(.bottom-bar:not(.collapsed)) .layout-buttons{
+    bottom:104px;
 }
 
 /* FOCUS MODE */
@@ -407,13 +443,30 @@ body.focus-mode .camera-card:first-child{
     display:none;
 }
 
-/* BARRA INFERIOR */
+/* BARRA INFERIOR RECOLHÍVEL */
+
+.bottom-toggle{
+    position:fixed;
+    bottom:12px;
+    right:24px;
+    z-index:70;
+    width:44px;
+    height:34px;
+    padding:0;
+    border-radius:14px;
+    background:#0f1d31;
+    border:1px solid rgba(80,180,255,0.35);
+    color:#45c8ff;
+    font-size:22px;
+    box-shadow:0 0 18px rgba(0,0,0,0.35);
+}
 
 .bottom-bar{
     height:90px;
     padding:0 24px;
     border-top:1px solid rgba(255,255,255,0.08);
-    background:#06101d;
+    background:rgba(6,16,29,0.96);
+    backdrop-filter:blur(10px);
     display:flex;
     align-items:center;
     justify-content:space-between;
@@ -422,7 +475,12 @@ body.focus-mode .camera-card:first-child{
     bottom:0;
     left:0;
     width:100%;
-    z-index:20;
+    z-index:60;
+    transition:transform 0.3s ease;
+}
+
+.bottom-bar.collapsed{
+    transform:translateY(100%);
 }
 
 .device-controls,
@@ -448,8 +506,15 @@ body.focus-mode .camera-card:first-child{
     margin-top:4px;
 }
 
-#cameraSelect{
-    min-width:260px;
+.select-control{
+    padding:0;
+    background:transparent;
+}
+
+#cameraSelect,
+#microphoneSelect{
+    min-width:270px;
+    max-width:340px;
 }
 
 .leave-btn{
@@ -505,7 +570,6 @@ body.focus-mode .camera-card:first-child{
     border-radius:14px;
     padding:18px 14px;
     color:white;
-    cursor:pointer;
     transition:0.3s;
     display:flex;
     flex-direction:column;
@@ -549,7 +613,6 @@ body.focus-mode .camera-card:first-child{
     padding:14px;
     border-radius:12px;
     outline:none;
-    transition:0.3s;
 }
 
 .player-fields input:focus{
@@ -566,8 +629,6 @@ body.focus-mode .camera-card:first-child{
     border-radius:14px;
     font-size:16px;
     font-weight:bold;
-    cursor:pointer;
-    transition:0.3s;
 }
 
 .enter-btn:hover{
@@ -592,25 +653,30 @@ body.focus-mode .camera-card:first-child{
 
     .topbar{
         height:auto;
-        flex-direction:column;
-        padding:16px;
+        grid-template-columns:1fr;
+        padding:14px;
         gap:12px;
     }
 
-    .match-tools{
-        height:auto;
-        padding:12px;
+    .top-actions{
+        justify-content:center;
+        flex-wrap:wrap;
     }
 
-    .timer-box{
-        min-width:0;
+    .timer-box.compact-timer{
         width:100%;
+        max-width:260px;
+    }
+
+    .timer-controls{
+        flex-wrap:wrap;
+        width:300px;
     }
 
     .game-layout{
         grid-template-columns:1fr;
         height:auto;
-        padding-bottom:150px;
+        padding-bottom:90px;
     }
 
     .video-area{
@@ -629,7 +695,6 @@ body.focus-mode .camera-card:first-child{
         height:auto;
         flex-direction:column;
         padding:16px;
-        position:relative;
     }
 
     .device-controls,
@@ -638,8 +703,10 @@ body.focus-mode .camera-card:first-child{
         justify-content:center;
     }
 
-    #cameraSelect{
+    #cameraSelect,
+    #microphoneSelect{
         width:100%;
+        min-width:260px;
     }
 
     .layout-buttons{
@@ -661,11 +728,14 @@ body.focus-mode .camera-card:first-child{
     }
 }
 
+/* MODO CÂMERA CELULAR */
+
 body.camera-mode .topbar,
 body.camera-mode .match-tools,
 body.camera-mode .player-panel,
 body.camera-mode .layout-buttons,
 body.camera-mode .bottom-bar,
+body.camera-mode .bottom-toggle,
 body.camera-mode .camera-card:nth-child(2){
     display:none !important;
 }
