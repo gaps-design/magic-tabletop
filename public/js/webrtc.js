@@ -82,12 +82,8 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     }
 
     const constraints = {
-        video: cameraId
-            ? { deviceId: { exact: cameraId } }
-            : true,
-        audio: microphoneId
-            ? { deviceId: { exact: microphoneId } }
-            : true
+        video: cameraId ? { deviceId: { exact: cameraId } } : true,
+        audio: microphoneId ? { deviceId: { exact: microphoneId } } : true
     };
 
     try {
@@ -133,7 +129,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
 }
 
 /* =========================
-   ORGANIZAÇÃO DAS TELAS
+   TELAS
 ========================= */
 
 function savePeerInfo(socketId, data = {}) {
@@ -161,10 +157,7 @@ function setVideoStream(videoElement, stream, muted = false) {
 
 function routeStream(socketId, stream) {
     if (!socketId || !stream) return;
-
-    if (currentRole === "camera") {
-        return;
-    }
+    if (currentRole === "camera") return;
 
     const info = peerInfo[socketId] || {};
 
@@ -292,6 +285,7 @@ function createPeerConnection(targetId) {
             peer.connectionState === "closed"
         ) {
             peer.close();
+
             delete peerConnections[targetId];
             delete peerInfo[targetId];
             delete remoteStreams[targetId];
@@ -366,14 +360,8 @@ socket.on("user-connected", async (data) => {
 
     savePeerInfo(targetId, data);
 
-    if (
-        currentRole === "spectator" &&
-        data.role === "spectator"
-    ) {
-        return;
-    }
-
-    await createOffer(targetId, data);
+    // Não cria offer aqui.
+    // Quem entrou agora recebe "existing-peers" e cria a offer.
 });
 
 socket.on("offer", async ({ offer, sender }) => {
