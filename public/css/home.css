@@ -20,17 +20,20 @@ function enterRoom(roomId) {
 
 createRoomButton.addEventListener("click", () => {
   const roomId = "mtg-" + Math.floor(1000 + Math.random() * 9000);
+
   window.location.href = `/sala.html?room=${roomId}`;
 });
 
 joinRoomBtn.addEventListener("click", () => {
   const roomId = normalizeRoomCode(roomCodeInput.value);
+
   enterRoom(roomId);
 });
 
 roomCodeInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     const roomId = normalizeRoomCode(roomCodeInput.value);
+
     enterRoom(roomId);
   }
 });
