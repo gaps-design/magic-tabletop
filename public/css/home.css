@@ -1,172 +1,36 @@
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
+const createRoomButton = document.getElementById("createRoom");
+const joinRoomBtn = document.getElementById("joinRoomBtn");
+const roomCodeInput = document.getElementById("roomCodeInput");
+
+function normalizeRoomCode(value) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
 }
 
-body{
-    width:100%;
-    min-height:100vh;
+function enterRoom(roomId) {
+  if (!roomId) {
+    alert("Digite o código da mesa.");
+    return;
+  }
 
-    font-family:Arial, Helvetica, sans-serif;
-
-    background:url("../assets/banner.jpg");
-    background-size:cover;
-    background-position:center;
-
-    display:flex;
-    justify-content:center;
-    align-items:center;
-
-    overflow-x:hidden;
-
-    position:relative;
+  window.location.href = `/sala.html?room=${roomId}`;
 }
 
-.overlay{
-    position:absolute;
-    inset:0;
+createRoomButton.addEventListener("click", () => {
+  const roomId = "mtg-" + Math.floor(1000 + Math.random() * 9000);
+  window.location.href = `/sala.html?room=${roomId}`;
+});
 
-    background:rgba(0,0,0,0.72);
-    backdrop-filter:blur(3px);
-}
+joinRoomBtn.addEventListener("click", () => {
+  const roomId = normalizeRoomCode(roomCodeInput.value);
+  enterRoom(roomId);
+});
 
-.container{
-    position:relative;
-    z-index:2;
-
-    width:100%;
-    max-width:1200px;
-
-    padding:40px 20px;
-
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-}
-
-.logo{
-    width:260px;
-    margin-bottom:20px;
-
-    filter:drop-shadow(0 0 25px rgba(0,255,255,0.4));
-}
-
-.subtitle{
-    color:#d8d8d8;
-    font-size:18px;
-
-    margin-bottom:35px;
-
-    text-align:center;
-}
-
-.create-btn{
-    padding:16px 40px;
-
-    border:none;
-    border-radius:14px;
-
-    background:linear-gradient(45deg,#00d0ff,#0077ff);
-
-    color:white;
-    font-size:18px;
-    font-weight:bold;
-
-    cursor:pointer;
-
-    transition:0.3s;
-}
-
-.create-btn:hover{
-    transform:scale(1.05);
-
-    box-shadow:0 0 20px rgba(0,170,255,0.6);
-}
-
-.rooms-list{
-    width:100%;
-
-    margin-top:50px;
-
-    display:grid;
-
-    grid-template-columns:repeat(auto-fit,minmax(260px,260px));
-
-    justify-content:center;
-
-    gap:20px;
-}
-
-.room-card{
-    background:rgba(15,15,25,0.82);
-
-    border:1px solid rgba(0,170,255,0.25);
-
-    border-radius:18px;
-
-    padding:18px;
-
-    backdrop-filter:blur(10px);
-
-    box-shadow:0 0 20px rgba(0,0,0,0.35);
-
-    transition:0.3s;
-}
-
-.room-card:hover{
-    transform:translateY(-4px);
-
-    border-color:#00d0ff;
-
-    box-shadow:
-    0 0 25px rgba(0,170,255,0.18);
-}
-
-.room-card h3{
-    color:#00d0ff;
-
-    margin-bottom:12px;
-
-    font-size:20px;
-}
-
-.room-info{
-    display:flex;
-    flex-direction:column;
-
-    gap:8px;
-
-    color:#dcdcdc;
-
-    margin-bottom:18px;
-
-    font-size:14px;
-}
-
-.room-card button{
-    width:100%;
-
-    padding:10px;
-
-    border:none;
-    border-radius:10px;
-
-    background:linear-gradient(45deg,#00b7ff,#0077ff);
-
-    color:white;
-
-    font-weight:bold;
-
-    cursor:pointer;
-
-    transition:0.3s;
-}
-
-.room-card button:hover{
-    transform:scale(1.03);
-
-    box-shadow:
-    0 0 18px rgba(0,170,255,0.35);
-}
-
+roomCodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    const roomId = normalizeRoomCode(roomCodeInput.value);
+    enterRoom(roomId);
+  }
+});

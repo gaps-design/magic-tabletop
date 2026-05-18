@@ -9,38 +9,173 @@
 </head>
 <body>
 
+  <div class="page-bg"></div>
   <div class="overlay"></div>
 
-  <div class="container">
+  <main class="home">
 
-    <img src="assets/logo.jpg" class="logo">
+    <header class="topbar">
+      <img src="assets/logo.jpg" class="logo" alt="Magic Tabletop">
 
-    <p class="subtitle">
-      Sistema online para partidas via webcam
-    </p>
+      <button class="login-btn">
+        👤 Entrar
+      </button>
+    </header>
 
-    <button id="createRoom" class="create-btn">
-      Criar Sala
-    </button>
+    <section class="hero">
+      <div class="hero-content">
+        <h1>Jogue Magic<br><span>à distância</span></h1>
 
-    <div class="rooms-list">
+        <p>
+          Mesas com câmera, vida, cronômetro e espectadores em tempo real.
+        </p>
 
-      <div class="room-card">
-        <h3>Mesa PvP</h3>
-
-        <div class="room-info">
-          <span>👥 2 jogadores</span>
-          <span>👁 1 espectador</span>
+        <div class="join-box">
+          <input id="roomCodeInput" type="text" placeholder="Digite o código da mesa">
+          <button id="joinRoomBtn">Entrar na sala ↪</button>
         </div>
 
-        <button>
-          Entrar
+        <div class="divider">
+          <span></span>
+          ou
+          <span></span>
+        </div>
+
+        <button id="createRoom" class="create-btn">
+          Criar nova sala +
         </button>
       </div>
 
-    </div>
+      <div class="feature-cards">
+        <div class="feature-card purple">
+          <div class="feature-icon">👥</div>
+          <h3>Jogador</h3>
+          <p>Entre na mesa como jogador e participe da partida.</p>
+        </div>
 
-  </div>
+        <div class="feature-card green">
+          <div class="feature-icon">📱</div>
+          <h3>Câmera</h3>
+          <p>Use seu celular como câmera para sua mesa.</p>
+        </div>
+
+        <div class="feature-card blue">
+          <div class="feature-icon">👁️</div>
+          <h3>Espectador</h3>
+          <p>Assista às partidas em tempo real.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tables-section">
+      <div class="section-title">
+        <h2>Mesas disponíveis</h2>
+        <button id="refreshRooms" class="refresh-btn">⟳ Atualizar</button>
+      </div>
+
+      <div class="rooms-list">
+
+        <div class="room-card">
+          <h3>MTG-1001</h3>
+
+          <div class="table-image">
+            <img src="assets/mesa.jpg" alt="Mesa 01">
+            <strong>01</strong>
+          </div>
+
+          <div class="room-info">
+            <div>
+              <span class="info-icon players">👥</span>
+              <strong>2/2</strong>
+              <small>Jogadores</small>
+            </div>
+
+            <div>
+              <span class="info-icon viewers">👁️</span>
+              <strong>3</strong>
+              <small>Espectadores</small>
+            </div>
+          </div>
+
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card">
+          <h3>MTG-1002</h3>
+
+          <div class="table-image">
+            <img src="assets/mesa.jpg" alt="Mesa 02">
+            <strong>02</strong>
+          </div>
+
+          <div class="room-info">
+            <div>
+              <span class="info-icon players">👥</span>
+              <strong>1/2</strong>
+              <small>Jogadores</small>
+            </div>
+
+            <div>
+              <span class="info-icon viewers">👁️</span>
+              <strong>5</strong>
+              <small>Espectadores</small>
+            </div>
+          </div>
+
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card">
+          <h3>MTG-1003</h3>
+
+          <div class="table-image">
+            <img src="assets/mesa.jpg" alt="Mesa 03">
+            <strong>03</strong>
+          </div>
+
+          <div class="room-info">
+            <div>
+              <span class="info-icon players">👥</span>
+              <strong>0/2</strong>
+              <small>Jogadores</small>
+            </div>
+
+            <div>
+              <span class="info-icon viewers">👁️</span>
+              <strong>1</strong>
+              <small>Espectadores</small>
+            </div>
+          </div>
+
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="info-bar">
+      <div>
+        <strong>👥 Máximo de 2 jogadores</strong>
+        <p>Cada mesa comporta até 2 jogadores.</p>
+      </div>
+
+      <div>
+        <strong>📹 Câmera do celular</strong>
+        <p>Use o celular para transmitir sua mesa.</p>
+      </div>
+
+      <div>
+        <strong>👁️ Espectadores</strong>
+        <p>Convide amigos para assistir às partidas.</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Magic Tabletop © 2026</p>
+      <span>Desenvolvido por <strong>gaps-design</strong></span>
+    </footer>
+
+  </main>
 
   <script src="js/home.js"></script>
 
