@@ -91,7 +91,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     try {
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
-        console.warn("Falha com dispositivo exato. Tentando dispositivo padrão.", err);
+        console.warn("Falha com dispositivo salvo. Tentando padrão.", err);
 
         localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
@@ -131,7 +131,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
 }
 
 /* =========================
-   TELAS
+   ROTAS DE VÍDEO
 ========================= */
 
 function savePeerInfo(socketId, data = {}) {
@@ -155,6 +155,14 @@ function setVideoStream(videoElement, stream, muted = false) {
     videoElement.muted = muted;
     videoElement.playsInline = true;
     videoElement.play().catch(() => {});
+}
+
+function clearVideoIfStream(videoElement, stream) {
+    if (!videoElement || !stream) return;
+
+    if (videoElement.srcObject === stream) {
+        videoElement.srcObject = null;
+    }
 }
 
 function routeStream(socketId, stream) {
@@ -188,7 +196,6 @@ function routeStream(socketId, stream) {
             return;
         }
 
-        setVideoStream(remoteVideo, stream, false);
         return;
     }
 
@@ -210,8 +217,6 @@ function routeStream(socketId, stream) {
 
             return;
         }
-
-        setVideoStream(remoteVideo, stream, false);
     }
 }
 
@@ -283,21 +288,38 @@ function createPeerConnection(targetId) {
         }
     };
 
-    peer.onconnectionstatechange = () => {
-        if (
-            peer.connectionState === "disconnected" ||
-            peer.connectionState === "failed" ||
-            peer.connectionState === "closed"
-        ) {
-            peer.close();
+    peer.onconnectionstatechange = async () => {
+        const state = peer.connectionState;
 
-            delete peerConnections[targetId];
-            delete peerInfo[targetId];
-            delete remoteStreams[targetId];
+        if (state === "failed") {
+            try {
+                await peer.restartIce();
+            } catch (err) {
+                console.warn("Falha ao reiniciar ICE:", err);
+            }
+        }
+
+        if (state === "disconnected" || state === "closed") {
+            cleanupPeer(targetId);
         }
     };
 
     return peer;
+}
+
+function cleanupPeer(socketId) {
+    const stream = remoteStreams[socketId];
+
+    if (peerConnections[socketId]) {
+        peerConnections[socketId].close();
+    }
+
+    clearVideoIfStream(localVideo, stream);
+    clearVideoIfStream(remoteVideo, stream);
+
+    delete peerConnections[socketId];
+    delete peerInfo[socketId];
+    delete remoteStreams[socketId];
 }
 
 async function createOffer(targetId, data = {}) {
@@ -355,18 +377,40 @@ socket.on("existing-peers", async ({ peers }) => {
             continue;
         }
 
+        if (
+            currentRole === "player" &&
+            peerData.role === "spectator"
+        ) {
+            continue;
+        }
+
+        if (
+            currentRole === "camera" &&
+            peerData.role === "spectator"
+        ) {
+            continue;
+        }
+
         await createOffer(peerData.socketId, peerData);
     }
 });
 
 socket.on("user-connected", async (data) => {
-    const targetId = data.socketId || data;
+    const targetId = data.socketId;
     if (!targetId) return;
 
     savePeerInfo(targetId, data);
+
+    if (data.role === "spectator") return;
+
+    await createOffer(targetId, data);
 });
 
-socket.on("offer", async ({ offer, sender }) => {
+socket.on("offer", async ({ offer, sender, senderInfo }) => {
+    if (senderInfo) {
+        savePeerInfo(sender, senderInfo);
+    }
+
     const peer = createPeerConnection(sender);
 
     await peer.setRemoteDescription(new RTCSessionDescription(offer));
@@ -399,13 +443,7 @@ socket.on("ice-candidate", async ({ candidate, sender }) => {
 });
 
 socket.on("user-disconnected", (socketId) => {
-    if (peerConnections[socketId]) {
-        peerConnections[socketId].close();
-    }
-
-    delete peerConnections[socketId];
-    delete peerInfo[socketId];
-    delete remoteStreams[socketId];
+    cleanupPeer(socketId);
 });
 
 /* =========================

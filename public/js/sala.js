@@ -24,16 +24,36 @@ const focusViewBtn = document.getElementById("focusViewBtn");
 const dualViewBtnBottom = document.getElementById("dualViewBtnBottom");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
+const chatContainer = document.getElementById("chatContainer");
+const toggleChatBtn = document.getElementById("toggleChatBtn");
+const chatMessages = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
+const sendChatBtn = document.getElementById("sendChatBtn");
+
 let selectedRole = "player";
 let myPlayerNumber = null;
+let lastChatTime = 0;
 
-if (roomText) {
-    roomText.innerText = `Sala: ${roomId}`;
+if (roomText) roomText.innerText = `Sala: ${roomId}`;
+if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+
+/* =========================
+   LOCAL STORAGE
+========================= */
+
+function loadSavedPlayerData() {
+    if (playerNameInput) playerNameInput.value = localStorage.getItem("mt_player_name") || "";
+    if (deckNameInput) deckNameInput.value = localStorage.getItem("mt_deck_name") || "";
+    if (guildInput) guildInput.value = localStorage.getItem("mt_guild_name") || "";
 }
 
-if (entryRoomText) {
-    entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+function savePlayerData() {
+    if (playerNameInput) localStorage.setItem("mt_player_name", playerNameInput.value.trim());
+    if (deckNameInput) localStorage.setItem("mt_deck_name", deckNameInput.value);
+    if (guildInput) localStorage.setItem("mt_guild_name", guildInput.value);
 }
+
+loadSavedPlayerData();
 
 /* =========================
    MODO CÂMERA DO CELULAR
@@ -41,12 +61,9 @@ if (entryRoomText) {
 
 if (cameraFor) {
     selectedRole = "camera";
-
     document.body.classList.add("camera-mode");
 
-    if (entryModal) {
-        entryModal.style.display = "none";
-    }
+    if (entryModal) entryModal.style.display = "none";
 
     window.addEventListener("load", async () => {
         try {
@@ -94,16 +111,16 @@ if (enterRoomBtn) {
         if (entryError) entryError.innerText = "";
 
         const name = playerNameInput ? playerNameInput.value.trim() : "";
-        const deck = deckNameInput ? deckNameInput.value.trim() : "";
-        const guild = guildInput ? guildInput.value.trim() : "";
+        const deck = deckNameInput ? deckNameInput.value : "";
+        const guild = guildInput ? guildInput.value : "";
 
         if (selectedRole === "player") {
             if (!name || !deck) {
-                if (entryError) {
-                    entryError.innerText = "Preencha nome do jogador e nome do deck.";
-                }
+                if (entryError) entryError.innerText = "Preencha nome do jogador e selecione o deck.";
                 return;
             }
+
+            savePlayerData();
         }
 
         try {
@@ -114,20 +131,16 @@ if (enterRoomBtn) {
                 guild
             });
 
-            if (entryModal) {
-                entryModal.style.display = "none";
-            }
+            if (entryModal) entryModal.style.display = "none";
 
         } catch (error) {
-            if (entryError) {
-                entryError.innerText = "Erro ao entrar na sala: " + error.message;
-            }
+            if (entryError) entryError.innerText = "Erro ao entrar na sala: " + error.message;
         }
     });
 }
 
 /* =========================
-   SOCKET / STATUS DO USUÁRIO
+   SOCKET / STATUS
 ========================= */
 
 socket.on("assigned-role", (data) => {
@@ -138,7 +151,6 @@ socket.on("assigned-role", (data) => {
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
 
-        console.log("Você entrou como espectador.");
         return;
     }
 
@@ -158,8 +170,6 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.remove("spectator-mode");
         document.body.classList.remove("camera-mode");
-
-        console.log("Você é o jogador:", myPlayerNumber);
     }
 });
 
@@ -176,33 +186,31 @@ socket.on("room-state", (state) => {
     const p1 = state.players.find(p => p.playerNumber === 1);
     const p2 = state.players.find(p => p.playerNumber === 2);
 
-    if (p1) {
-        document.getElementById("player1Name").innerText = p1.name;
-        document.getElementById("player1Deck").innerText = p1.deck;
-        document.getElementById("player1Guild").innerText = p1.guild || "---";
-        document.getElementById("player1Life").innerText = p1.life;
-    } else {
-        document.getElementById("player1Name").innerText = "Jogador 1";
-        document.getElementById("player1Deck").innerText = "Aguardando...";
-        document.getElementById("player1Guild").innerText = "---";
-        document.getElementById("player1Life").innerText = "20";
-    }
-
-    if (p2) {
-        document.getElementById("player2Name").innerText = p2.name;
-        document.getElementById("player2Deck").innerText = p2.deck;
-        document.getElementById("player2Guild").innerText = p2.guild || "---";
-        document.getElementById("player2Life").innerText = p2.life;
-    } else {
-        document.getElementById("player2Name").innerText = "Jogador 2";
-        document.getElementById("player2Deck").innerText = "Aguardando...";
-        document.getElementById("player2Guild").innerText = "---";
-        document.getElementById("player2Life").innerText = "20";
-    }
+    updatePlayerPanel(1, p1);
+    updatePlayerPanel(2, p2);
 
     renderLifeHistory(state.lifeHistory || []);
     updateTimerDisplay(state.timer);
 });
+
+function updatePlayerPanel(playerNumber, playerData) {
+    const name = document.getElementById(`player${playerNumber}Name`);
+    const deck = document.getElementById(`player${playerNumber}Deck`);
+    const guild = document.getElementById(`player${playerNumber}Guild`);
+    const life = document.getElementById(`player${playerNumber}Life`);
+
+    if (playerData) {
+        if (name) name.innerText = playerData.name;
+        if (deck) deck.innerText = playerData.deck;
+        if (guild) guild.innerText = playerData.guild || "---";
+        if (life) life.innerText = playerData.life;
+    } else {
+        if (name) name.innerText = `Jogador ${playerNumber}`;
+        if (deck) deck.innerText = "Aguardando...";
+        if (guild) guild.innerText = "---";
+        if (life) life.innerText = "20";
+    }
+}
 
 /* =========================
    VIDA
@@ -213,10 +221,7 @@ document.querySelectorAll(".life-buttons button").forEach(button => {
         const playerNumber = Number(button.dataset.player);
         const amount = Number(button.dataset.amount);
 
-        if (selectedRole === "spectator" || selectedRole === "camera") {
-            alert("Você não pode alterar vida nesse modo.");
-            return;
-        }
+        if (selectedRole === "spectator" || selectedRole === "camera") return;
 
         if (myPlayerNumber !== playerNumber) {
             alert("Você só pode alterar a sua própria vida.");
@@ -232,10 +237,7 @@ document.querySelectorAll(".life-buttons button").forEach(button => {
 });
 
 window.setManualLife = function(playerNumber) {
-    if (selectedRole === "spectator" || selectedRole === "camera") {
-        alert("Você não pode alterar vida nesse modo.");
-        return;
-    }
+    if (selectedRole === "spectator" || selectedRole === "camera") return;
 
     if (myPlayerNumber !== playerNumber) {
         alert("Você só pode alterar a sua própria vida.");
@@ -262,10 +264,7 @@ window.setManualLife = function(playerNumber) {
 };
 
 window.resetLife = function(playerNumber) {
-    if (selectedRole === "spectator" || selectedRole === "camera") {
-        alert("Você não pode resetar vida nesse modo.");
-        return;
-    }
+    if (selectedRole === "spectator" || selectedRole === "camera") return;
 
     if (myPlayerNumber !== playerNumber) {
         alert("Você só pode resetar a sua própria vida.");
@@ -277,6 +276,30 @@ window.resetLife = function(playerNumber) {
         playerNumber: myPlayerNumber
     });
 };
+
+/* =========================
+   VIDA DO OPONENTE LOCAL
+========================= */
+
+document.querySelectorAll(".opponent-life").forEach(lifeBox => {
+    lifeBox.addEventListener("click", () => {
+        if (selectedRole !== "player") return;
+
+        const current = Number(lifeBox.innerText || 20);
+        const value = prompt("Digite a vida do oponente:", current);
+
+        if (value === null) return;
+
+        const newValue = Number(value);
+
+        if (isNaN(newValue)) {
+            alert("Valor inválido.");
+            return;
+        }
+
+        lifeBox.innerText = newValue;
+    });
+});
 
 /* =========================
    BOTÕES GERAIS
@@ -307,8 +330,7 @@ window.copyCameraLink = async function() {
         return;
     }
 
-    const cameraUrl =
-        `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}`;
+    const cameraUrl = `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}`;
 
     await navigator.clipboard.writeText(cameraUrl);
 
@@ -317,31 +339,32 @@ window.copyCameraLink = async function() {
 
 document.querySelectorAll(".rotate-btn").forEach(btn => {
     btn.addEventListener("click", () => {
+        if (selectedRole === "spectator") return;
+
         const video = btn.parentElement.querySelector("video");
         if (!video) return;
 
-        if (video.style.transform === "rotate(180deg)") {
-            video.style.transform = "rotate(0deg)";
-        } else {
-            video.style.transform = "rotate(180deg)";
-        }
+        video.style.transform = video.style.transform === "rotate(180deg)" ? "rotate(0deg)" : "rotate(180deg)";
     });
 });
 
 if (dualViewBtn) {
     dualViewBtn.addEventListener("click", () => {
+        if (selectedRole === "spectator") return;
         document.body.classList.remove("focus-mode");
     });
 }
 
 if (dualViewBtnBottom) {
     dualViewBtnBottom.addEventListener("click", () => {
+        if (selectedRole === "spectator") return;
         document.body.classList.remove("focus-mode");
     });
 }
 
 if (focusViewBtn) {
     focusViewBtn.addEventListener("click", () => {
+        if (selectedRole === "spectator") return;
         document.body.classList.add("focus-mode");
     });
 }
@@ -378,34 +401,31 @@ function updateTimerDisplay(timer) {
 }
 
 window.setTimer = function() {
+    if (selectedRole !== "player") return;
+
     const input = document.getElementById("timerMinutesInput");
     const minutes = Number(input.value);
-
-    if (selectedRole === "camera") return;
 
     if (isNaN(minutes) || minutes <= 0) {
         alert("Digite um tempo válido em minutos.");
         return;
     }
 
-    socket.emit("set-timer", {
-        roomId,
-        minutes
-    });
+    socket.emit("set-timer", { roomId, minutes });
 };
 
 window.startTimer = function() {
-    if (selectedRole === "camera") return;
+    if (selectedRole !== "player") return;
     socket.emit("start-timer", { roomId });
 };
 
 window.pauseTimer = function() {
-    if (selectedRole === "camera") return;
+    if (selectedRole !== "player") return;
     socket.emit("pause-timer", { roomId });
 };
 
 window.resetTimer = function() {
-    if (selectedRole === "camera") return;
+    if (selectedRole !== "player") return;
     socket.emit("reset-timer", { roomId });
 };
 
@@ -414,10 +434,12 @@ socket.on("timer-update", (timer) => {
 });
 
 /* =========================
-   HISTÓRICO DE VIDA
+   HISTÓRICO
 ========================= */
 
 window.togglePlayerHistory = function(playerNumber) {
+    if (selectedRole === "spectator") return;
+
     const panel = document.getElementById(`lifeHistoryPanel${playerNumber}`);
     if (!panel) return;
 
@@ -433,11 +455,8 @@ function renderLifeHistory(history) {
     list1.innerHTML = "";
     list2.innerHTML = "";
 
-    const history1 = history.filter(item => item.playerNumber === 1);
-    const history2 = history.filter(item => item.playerNumber === 2);
-
-    renderPlayerHistory(list1, history1);
-    renderPlayerHistory(list2, history2);
+    renderPlayerHistory(list1, history.filter(item => item.playerNumber === 1));
+    renderPlayerHistory(list2, history.filter(item => item.playerNumber === 2));
 }
 
 function renderPlayerHistory(list, history) {
@@ -460,6 +479,100 @@ function renderPlayerHistory(list, history) {
 }
 
 window.clearLifeHistory = function() {
-    if (selectedRole === "camera") return;
+    if (selectedRole !== "player") return;
     socket.emit("clear-life-history", { roomId });
 };
+
+/* =========================
+   CHAT
+========================= */
+
+if (toggleChatBtn) {
+    toggleChatBtn.addEventListener("click", () => {
+        if (!chatContainer) return;
+        chatContainer.classList.toggle("hidden");
+    });
+}
+
+function canSendChat() {
+    const now = Date.now();
+
+    if (now - lastChatTime < 5000) {
+        alert("Aguarde 5 segundos para enviar outra mensagem.");
+        return false;
+    }
+
+    lastChatTime = now;
+    return true;
+}
+
+function sendChatMessage(message, type = "text") {
+    if (!message || !message.trim()) return;
+    if (!canSendChat()) return;
+
+    socket.emit("chat-message", {
+        roomId,
+        name: selectedRole === "spectator" ? "Espectador" : `Jogador ${myPlayerNumber || ""}`,
+        message: message.trim(),
+        type
+    });
+}
+
+if (sendChatBtn) {
+    sendChatBtn.addEventListener("click", () => {
+        sendChatMessage(chatInput.value, "text");
+        chatInput.value = "";
+    });
+}
+
+if (chatInput) {
+    chatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            sendChatMessage(chatInput.value, "text");
+            chatInput.value = "";
+        }
+    });
+}
+
+document.querySelectorAll(".emoji-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        sendChatMessage(btn.innerText, "emoji");
+    });
+});
+
+socket.on("chat-message", (data) => {
+    renderChatMessage(data);
+
+    if (data.type === "emoji") {
+        spawnFloatingEmoji(data.message);
+    }
+});
+
+function renderChatMessage(data) {
+    if (!chatMessages) return;
+
+    const div = document.createElement("div");
+    div.className = "chat-message";
+
+    div.innerHTML = `
+        <strong>${data.name || "Usuário"}:</strong>
+        <span>${data.message}</span>
+    `;
+
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function spawnFloatingEmoji(emoji) {
+    const el = document.createElement("div");
+
+    el.className = "floating-emoji";
+    el.innerText = emoji;
+    el.style.left = `${Math.floor(Math.random() * 80) + 10}%`;
+
+    document.body.appendChild(el);
+
+    setTimeout(() => {
+        el.remove();
+    }, 5000);
+}
