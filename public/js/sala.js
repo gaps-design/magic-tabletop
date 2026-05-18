@@ -577,14 +577,25 @@ if (toggleChatBtn) {
 }
 
 function canSendChat() {
-    const now = Date.now();
 
-    if (now - lastChatTime < 5000) {
-        alert("Aguarde 5 segundos para enviar outra mensagem.");
+    if (chatCooldown) {
+        alert("Chat temporariamente bloqueado. Aguarde 3 segundos.");
         return false;
     }
 
-    lastChatTime = now;
+    chatMessagesSent++;
+
+    if (chatMessagesSent >= 5) {
+
+        chatCooldown = true;
+
+        setTimeout(() => {
+            chatMessagesSent = 0;
+            chatCooldown = false;
+        }, 3000);
+
+    }
+
     return true;
 }
 

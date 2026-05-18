@@ -416,15 +416,16 @@ socket.on("existing-peers", async ({ peers }) => {
     }
 });
 
-socket.on("user-connected", async (data) => {
+socket.on("user-connected", (data) => {
     const targetId = data.socketId;
     if (!targetId) return;
 
     savePeerInfo(targetId, data);
 
-    if (data.role === "spectator") return;
-
-    await createOffer(targetId, data);
+    // Importante:
+    // Quem entra na sala cria o offer via existing-peers.
+    // Quem já estava na sala apenas salva a informação.
+    // Isso evita dois offers ao mesmo tempo e corrige player x player.
 });
 
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
