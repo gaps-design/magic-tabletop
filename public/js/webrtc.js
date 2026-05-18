@@ -24,6 +24,7 @@ let selectedMicrophoneId = localStorage.getItem("magicSelectedMicrophone") || ""
 const peerConnections = {};
 const peerInfo = {};
 const remoteStreams = {};
+const pendingCandidates = {};
 
 const servers = {
     iceServers: [
@@ -44,7 +45,7 @@ async function getDevices() {
     const microphones = devices.filter(device => device.kind === "audioinput");
 
     if (cameraSelect) {
-        const currentValue = cameraSelect.value || selectedCameraId;
+        const currentValue = selectedCameraId || cameraSelect.value;
         cameraSelect.innerHTML = "";
 
         cameras.forEach((camera, index) => {
@@ -62,11 +63,12 @@ async function getDevices() {
         if (!selectedCameraId && cameras[0]) {
             selectedCameraId = cameras[0].deviceId;
             cameraSelect.value = selectedCameraId;
+            localStorage.setItem("magicSelectedCamera", selectedCameraId);
         }
     }
 
     if (microphoneSelect) {
-        const currentValue = microphoneSelect.value || selectedMicrophoneId;
+        const currentValue = selectedMicrophoneId || microphoneSelect.value;
         microphoneSelect.innerHTML = "";
 
         microphones.forEach((mic, index) => {
@@ -84,6 +86,7 @@ async function getDevices() {
         if (!selectedMicrophoneId && microphones[0]) {
             selectedMicrophoneId = microphones[0].deviceId;
             microphoneSelect.value = selectedMicrophoneId;
+            localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
         }
     }
 }
@@ -127,7 +130,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
         track.enabled = cameraEnabled;
     });
 
-    if (localVideo && currentRole !== "camera") {
+    if (localVideo) {
         localVideo.srcObject = localStream;
         localVideo.muted = true;
         localVideo.playsInline = true;
@@ -155,8 +158,108 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
         if (microphoneSelect) microphoneSelect.value = selectedMicrophoneId;
     }
 
-    replaceTracksOnPeers();
     updateMediaStatus();
+}
+
+/* =========================
+   TROCA SEPARADA DE CÂMERA
+========================= */
+
+async function switchCamera(cameraId) {
+    if (!cameraId) return;
+
+    selectedCameraId = cameraId;
+    localStorage.setItem("magicSelectedCamera", selectedCameraId);
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: selectedCameraId } },
+        audio: false
+    });
+
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    if (!newVideoTrack) return;
+
+    newVideoTrack.enabled = cameraEnabled;
+
+    if (!localStream) {
+        localStream = new MediaStream();
+    }
+
+    localStream.getVideoTracks().forEach(track => {
+        track.stop();
+        localStream.removeTrack(track);
+    });
+
+    localStream.addTrack(newVideoTrack);
+
+    if (localVideo) {
+        localVideo.srcObject = localStream;
+        localVideo.muted = true;
+        localVideo.playsInline = true;
+        await localVideo.play().catch(() => {});
+    }
+
+    replaceVideoTrackOnPeers(newVideoTrack);
+    updateMediaStatus();
+}
+
+/* =========================
+   TROCA SEPARADA DE MICROFONE
+========================= */
+
+async function switchMicrophone(microphoneId) {
+    if (!microphoneId) return;
+
+    selectedMicrophoneId = microphoneId;
+    localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+        video: false,
+        audio: { deviceId: { exact: selectedMicrophoneId } }
+    });
+
+    const newAudioTrack = newStream.getAudioTracks()[0];
+    if (!newAudioTrack) return;
+
+    newAudioTrack.enabled = micEnabled;
+
+    if (!localStream) {
+        localStream = new MediaStream();
+    }
+
+    localStream.getAudioTracks().forEach(track => {
+        track.stop();
+        localStream.removeTrack(track);
+    });
+
+    localStream.addTrack(newAudioTrack);
+
+    replaceAudioTrackOnPeers(newAudioTrack);
+    updateMediaStatus();
+}
+
+function replaceVideoTrackOnPeers(newVideoTrack) {
+    Object.values(peerConnections).forEach(peer => {
+        const sender = peer.getSenders().find(s => s.track && s.track.kind === "video");
+
+        if (sender) {
+            sender.replaceTrack(newVideoTrack);
+        } else if (localStream) {
+            peer.addTrack(newVideoTrack, localStream);
+        }
+    });
+}
+
+function replaceAudioTrackOnPeers(newAudioTrack) {
+    Object.values(peerConnections).forEach(peer => {
+        const sender = peer.getSenders().find(s => s.track && s.track.kind === "audio");
+
+        if (sender) {
+            sender.replaceTrack(newAudioTrack);
+        } else if (localStream) {
+            peer.addTrack(newAudioTrack, localStream);
+        }
+    });
 }
 
 /* =========================
@@ -255,31 +358,6 @@ function routeAllStreams() {
     });
 }
 
-function replaceTracksOnPeers() {
-    if (!localStream) return;
-
-    const newVideoTrack = localStream.getVideoTracks()[0];
-    const newAudioTrack = localStream.getAudioTracks()[0];
-
-    Object.values(peerConnections).forEach(peer => {
-        const videoSender = peer.getSenders().find(sender =>
-            sender.track && sender.track.kind === "video"
-        );
-
-        const audioSender = peer.getSenders().find(sender =>
-            sender.track && sender.track.kind === "audio"
-        );
-
-        if (videoSender && newVideoTrack) {
-            videoSender.replaceTrack(newVideoTrack);
-        }
-
-        if (audioSender && newAudioTrack) {
-            audioSender.replaceTrack(newAudioTrack);
-        }
-    });
-}
-
 /* =========================
    WEBRTC
 ========================= */
@@ -292,17 +370,26 @@ function createPeerConnection(targetId) {
     const peer = new RTCPeerConnection(servers);
     peerConnections[targetId] = peer;
 
+    peer.addTransceiver("video", { direction: "sendrecv" });
+    peer.addTransceiver("audio", { direction: "sendrecv" });
+
     if (localStream) {
         localStream.getTracks().forEach(track => {
-            peer.addTrack(track, localStream);
+            const senderExists = peer.getSenders().some(sender =>
+                sender.track && sender.track.kind === track.kind
+            );
+
+            if (!senderExists) {
+                peer.addTrack(track, localStream);
+            }
         });
-    } else {
-        peer.addTransceiver("video", { direction: "recvonly" });
-        peer.addTransceiver("audio", { direction: "recvonly" });
     }
 
     peer.ontrack = (event) => {
         const stream = event.streams[0];
+
+        if (!stream) return;
+
         remoteStreams[targetId] = stream;
         routeStream(targetId, stream);
     };
@@ -316,22 +403,15 @@ function createPeerConnection(targetId) {
         }
     };
 
-    peer.onconnectionstatechange = async () => {
+    peer.onconnectionstatechange = () => {
         const state = peer.connectionState;
+        console.log("Estado WebRTC", targetId, state);
 
         if (state === "connected") {
             routeAllStreams();
         }
 
-        if (state === "failed") {
-            try {
-                await peer.restartIce();
-            } catch (err) {
-                console.warn("Falha ao reiniciar ICE:", err);
-            }
-        }
-
-        if (state === "disconnected" || state === "closed") {
+        if (state === "failed" || state === "closed") {
             cleanupPeer(targetId);
         }
     };
@@ -352,6 +432,7 @@ function cleanupPeer(socketId) {
     delete peerConnections[socketId];
     delete peerInfo[socketId];
     delete remoteStreams[socketId];
+    delete pendingCandidates[socketId];
 }
 
 async function createOffer(targetId, data = {}) {
@@ -359,17 +440,30 @@ async function createOffer(targetId, data = {}) {
 
     const peer = createPeerConnection(targetId);
 
-    const offer = await peer.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-    });
-
+    const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
 
     socket.emit("offer", {
         target: targetId,
         offer
     });
+}
+
+async function flushPendingCandidates(sender) {
+    const peer = peerConnections[sender];
+    if (!peer) return;
+
+    if (!pendingCandidates[sender]) return;
+
+    for (const candidate of pendingCandidates[sender]) {
+        try {
+            await peer.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+            console.error("Erro ao aplicar ICE pendente:", err);
+        }
+    }
+
+    delete pendingCandidates[sender];
 }
 
 async function joinRoom(roomId, user) {
@@ -416,24 +510,38 @@ socket.on("existing-peers", async ({ peers }) => {
     }
 });
 
-socket.on("user-connected", (data) => {
+socket.on("user-connected", async (data) => {
     const targetId = data.socketId;
     if (!targetId) return;
 
     savePeerInfo(targetId, data);
 
-    // Importante:
-    // Quem entra na sala cria o offer via existing-peers.
-    // Quem já estava na sala apenas salva a informação.
-    // Isso evita dois offers ao mesmo tempo e corrige player x player.
+    if (data.role === "spectator") return;
+
+    await createOffer(targetId, data);
 });
 
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
+    if (!sender || !offer) return;
+
     if (senderInfo) {
         savePeerInfo(sender, senderInfo);
     }
 
-    const peer = createPeerConnection(sender);
+    let peer = peerConnections[sender];
+
+    if (!peer) {
+        peer = createPeerConnection(sender);
+    }
+
+    const offerCollision =
+        peer.signalingState !== "stable";
+
+    if (offerCollision) {
+        peer.close();
+        delete peerConnections[sender];
+        peer = createPeerConnection(sender);
+    }
 
     await peer.setRemoteDescription(new RTCSessionDescription(offer));
 
@@ -444,18 +552,35 @@ socket.on("offer", async ({ offer, sender, senderInfo }) => {
         target: sender,
         answer
     });
+
+    await flushPendingCandidates(sender);
 });
 
 socket.on("answer", async ({ answer, sender }) => {
     const peer = peerConnections[sender];
-    if (!peer) return;
+    if (!peer || !answer) return;
+
+    if (peer.signalingState === "stable") {
+        return;
+    }
 
     await peer.setRemoteDescription(new RTCSessionDescription(answer));
+    await flushPendingCandidates(sender);
 });
 
 socket.on("ice-candidate", async ({ candidate, sender }) => {
+    if (!candidate || !sender) return;
+
     const peer = peerConnections[sender];
-    if (!peer || !candidate) return;
+
+    if (!peer || !peer.remoteDescription) {
+        if (!pendingCandidates[sender]) {
+            pendingCandidates[sender] = [];
+        }
+
+        pendingCandidates[sender].push(candidate);
+        return;
+    }
 
     try {
         await peer.addIceCandidate(new RTCIceCandidate(candidate));
@@ -474,19 +599,23 @@ socket.on("user-disconnected", (socketId) => {
 
 if (cameraSelect) {
     cameraSelect.addEventListener("change", async () => {
-        selectedCameraId = cameraSelect.value;
-        localStorage.setItem("magicSelectedCamera", selectedCameraId);
-
-        await startWebcam(selectedCameraId, selectedMicrophoneId);
+        try {
+            await switchCamera(cameraSelect.value);
+        } catch (err) {
+            console.error("Erro ao trocar câmera:", err);
+            alert("Erro ao trocar câmera.");
+        }
     });
 }
 
 if (microphoneSelect) {
     microphoneSelect.addEventListener("change", async () => {
-        selectedMicrophoneId = microphoneSelect.value;
-        localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
-
-        await startWebcam(selectedCameraId, selectedMicrophoneId);
+        try {
+            await switchMicrophone(microphoneSelect.value);
+        } catch (err) {
+            console.error("Erro ao trocar microfone:", err);
+            alert("Erro ao trocar microfone.");
+        }
     });
 }
 

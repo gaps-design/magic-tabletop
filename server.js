@@ -15,8 +15,15 @@ const io = new Server(server, {
 app.use(express.static("public"));
 
 const rooms = {};
-const chatCooldown = {};
-const CHAT_COOLDOWN_MS = 5000;
+const chatControl = {};
+const clientProfiles = {};
+
+const CHAT_LIMIT = 5;
+const CHAT_BLOCK_MS = 3000;
+
+/* =========================
+   TIMER
+========================= */
 
 function createDefaultTimer() {
   return {
@@ -34,6 +41,10 @@ function publicTimer(timer) {
     running: timer.running
   };
 }
+
+/* =========================
+   ROOM
+========================= */
 
 function ensureRoom(roomId) {
   if (!rooms[roomId]) {
@@ -62,37 +73,21 @@ function sendRoomState(roomId) {
   });
 }
 
+/* =========================
+   CLIENT INFO
+========================= */
+
 function getClientInfo(socketId) {
-  for (const roomId in rooms) {
-    const room = rooms[roomId];
+  const profile = clientProfiles[socketId];
 
-    const player = room.players.find(p => p.socketId === socketId);
-    if (player) {
-      return {
-        roomId,
-        role: "player",
-        playerNumber: player.playerNumber
-      };
-    }
+  if (!profile) return null;
 
-    const camera = room.cameraClients.find(c => c.socketId === socketId);
-    if (camera) {
-      return {
-        roomId,
-        role: "camera",
-        linkedPlayer: camera.linkedPlayer
-      };
-    }
-
-    if (room.spectators.includes(socketId)) {
-      return {
-        roomId,
-        role: "spectator"
-      };
-    }
-  }
-
-  return null;
+  return {
+    role: profile.role,
+    playerNumber: profile.playerNumber,
+    linkedPlayer: profile.linkedPlayer,
+    name: profile.name
+  };
 }
 
 function getPlayerBySocket(room, socketId) {
@@ -103,8 +98,14 @@ function isPlayerInRoom(room, socketId) {
   return room.players.some(p => p.socketId === socketId);
 }
 
+/* =========================
+   REMOVE USER
+========================= */
+
 function removeSocketFromAllRooms(socketId) {
+
   for (const roomId in rooms) {
+
     const room = rooms[roomId];
 
     const wasInside =
@@ -112,12 +113,19 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.includes(socketId) ||
       room.cameraClients.some(c => c.socketId === socketId);
 
-    room.players = room.players.filter(p => p.socketId !== socketId);
-    room.spectators = room.spectators.filter(id => id !== socketId);
-    room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
+    room.players =
+      room.players.filter(p => p.socketId !== socketId);
+
+    room.spectators =
+      room.spectators.filter(id => id !== socketId);
+
+    room.cameraClients =
+      room.cameraClients.filter(c => c.socketId !== socketId);
 
     if (wasInside) {
+
       io.to(roomId).emit("user-disconnected", socketId);
+
       sendRoomState(roomId);
     }
 
@@ -126,35 +134,79 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.length === 0 &&
       room.cameraClients.length === 0
     ) {
-      if (room.timer?.interval) clearInterval(room.timer.interval);
+
+      if (room.timer?.interval) {
+        clearInterval(room.timer.interval);
+      }
+
       delete rooms[roomId];
     }
   }
 
-  delete chatCooldown[socketId];
+  delete chatControl[socketId];
+  delete clientProfiles[socketId];
 }
 
+/* =========================
+   SOCKET CONNECTION
+========================= */
+
 io.on("connection", (socket) => {
+
   console.log("Conectado:", socket.id);
 
+  /* =========================
+     JOIN ROOM
+  ========================= */
+
   socket.on("join-room", (data = {}) => {
+
     const roomId = data.roomId;
     if (!roomId) return;
 
     removeSocketFromAllRooms(socket.id);
 
     const user = data.user || {};
-    const role = data.role || user.role || "player";
-    const name = data.name || user.name || "Jogador";
-    const deck = data.deck || user.deck || "Deck não informado";
-    const guild = data.guild || user.guild || "---";
-    const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || 0);
+
+    const role =
+      data.role ||
+      user.role ||
+      "player";
+
+    const name =
+      data.name ||
+      user.name ||
+      "Usuário";
+
+    const deck =
+      data.deck ||
+      user.deck ||
+      "---";
+
+    const guild =
+      data.guild ||
+      user.guild ||
+      "---";
+
+    const linkedPlayer =
+      Number(data.linkedPlayer || user.linkedPlayer || 0);
 
     const room = ensureRoom(roomId);
+
     socket.join(roomId);
 
+    /* =========================
+       SPECTATOR
+    ========================= */
+
     if (role === "spectator") {
+
       room.spectators.push(socket.id);
+
+      clientProfiles[socket.id] = {
+        role: "spectator",
+        name
+      };
 
       socket.emit("assigned-role", {
         role: "spectator"
@@ -165,7 +217,8 @@ io.on("connection", (socket) => {
           ...room.players.map(p => ({
             socketId: p.socketId,
             role: "player",
-            playerNumber: p.playerNumber
+            playerNumber: p.playerNumber,
+            name: p.name
           })),
           ...room.cameraClients.map(c => ({
             socketId: c.socketId,
@@ -177,30 +230,41 @@ io.on("connection", (socket) => {
 
       socket.to(roomId).emit("user-connected", {
         socketId: socket.id,
-        role: "spectator"
+        role: "spectator",
+        name
       });
 
       sendRoomState(roomId);
+
       return;
     }
 
+    /* =========================
+       CAMERA
+    ========================= */
+
     if (role === "camera") {
+
       if (![1, 2].includes(linkedPlayer)) {
-        socket.emit("camera-error", "Jogador inválido para câmera.");
-        socket.leave(roomId);
+        socket.emit("camera-error", "Jogador inválido.");
         return;
       }
 
-      room.cameraClients = room.cameraClients.filter(
-        c => Number(c.linkedPlayer) !== linkedPlayer
-      );
+      room.cameraClients =
+        room.cameraClients.filter(
+          c => Number(c.linkedPlayer) !== linkedPlayer
+        );
 
-      const cameraData = {
+      room.cameraClients.push({
         socketId: socket.id,
         linkedPlayer
-      };
+      });
 
-      room.cameraClients.push(cameraData);
+      clientProfiles[socket.id] = {
+        role: "camera",
+        linkedPlayer,
+        name
+      };
 
       socket.emit("assigned-role", {
         role: "camera",
@@ -212,11 +276,8 @@ io.on("connection", (socket) => {
           ...room.players.map(p => ({
             socketId: p.socketId,
             role: "player",
-            playerNumber: p.playerNumber
-          })),
-          ...room.spectators.map(id => ({
-            socketId: id,
-            role: "spectator"
+            playerNumber: p.playerNumber,
+            name: p.name
           }))
         ]
       });
@@ -228,17 +289,24 @@ io.on("connection", (socket) => {
       });
 
       sendRoomState(roomId);
+
       return;
     }
+
+    /* =========================
+       PLAYER
+    ========================= */
 
     if (room.players.length >= 2) {
       socket.emit("room-full");
-      socket.leave(roomId);
       return;
     }
 
-    const usedNumbers = room.players.map(p => p.playerNumber);
-    const playerNumber = usedNumbers.includes(1) ? 2 : 1;
+    const usedNumbers =
+      room.players.map(p => p.playerNumber);
+
+    const playerNumber =
+      usedNumbers.includes(1) ? 2 : 1;
 
     const player = {
       socketId: socket.id,
@@ -250,6 +318,12 @@ io.on("connection", (socket) => {
     };
 
     room.players.push(player);
+
+    clientProfiles[socket.id] = {
+      role: "player",
+      playerNumber,
+      name
+    };
 
     socket.emit("assigned-role", {
       role: "player",
@@ -263,16 +337,13 @@ io.on("connection", (socket) => {
           .map(p => ({
             socketId: p.socketId,
             role: "player",
-            playerNumber: p.playerNumber
+            playerNumber: p.playerNumber,
+            name: p.name
           })),
         ...room.cameraClients.map(c => ({
           socketId: c.socketId,
           role: "camera",
           linkedPlayer: c.linkedPlayer
-        })),
-        ...room.spectators.map(id => ({
-          socketId: id,
-          role: "spectator"
         }))
       ]
     });
@@ -280,25 +351,30 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("user-connected", {
       socketId: socket.id,
       role: "player",
-      playerNumber
+      playerNumber,
+      name
     });
 
     sendRoomState(roomId);
   });
 
-  socket.on("offer", ({ target, offer }) => {
-    if (!target || !offer) return;
+  /* =========================
+     WEBRTC
+  ========================= */
 
-    const senderInfo = getClientInfo(socket.id);
+  socket.on("offer", ({ target, offer }) => {
+
+    if (!target || !offer) return;
 
     io.to(target).emit("offer", {
       offer,
       sender: socket.id,
-      senderInfo
+      senderInfo: getClientInfo(socket.id)
     });
   });
 
   socket.on("answer", ({ target, answer }) => {
+
     if (!target || !answer) return;
 
     io.to(target).emit("answer", {
@@ -308,6 +384,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("ice-candidate", ({ target, candidate }) => {
+
     if (!target || !candidate) return;
 
     io.to(target).emit("ice-candidate", {
@@ -316,18 +393,104 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("change-life", ({ roomId, playerNumber, amount }) => {
+  /* =========================
+     CHAT
+  ========================= */
+
+  socket.on("chat-message", ({ roomId, message, type }) => {
+
     const room = rooms[roomId];
     if (!room) return;
 
-    const player = getPlayerBySocket(room, socket.id);
+    const inside =
+      room.players.some(p => p.socketId === socket.id) ||
+      room.spectators.includes(socket.id);
+
+    if (!inside) return;
+
+    const now = Date.now();
+
+    if (!chatControl[socket.id]) {
+      chatControl[socket.id] = {
+        count: 0,
+        blockedUntil: 0
+      };
+    }
+
+    const control = chatControl[socket.id];
+
+    if (
+      control.blockedUntil &&
+      now < control.blockedUntil
+    ) {
+
+      socket.emit("chat-cooldown", {
+        remaining:
+          Math.ceil((control.blockedUntil - now) / 1000)
+      });
+
+      return;
+    }
+
+    const safeMessage =
+      String(message || "")
+        .trim()
+        .slice(0, 120);
+
+    if (!safeMessage) return;
+
+    control.count++;
+
+    io.to(roomId).emit("chat-message", {
+      name:
+        clientProfiles[socket.id]?.name ||
+        "Usuário",
+
+      message: safeMessage,
+
+      type:
+        type === "emoji"
+          ? "emoji"
+          : "text",
+
+      time:
+        new Date()
+          .toLocaleTimeString("pt-BR")
+    });
+
+    if (control.count >= CHAT_LIMIT) {
+
+      control.count = 0;
+
+      control.blockedUntil =
+        now + CHAT_BLOCK_MS;
+    }
+  });
+
+  /* =========================
+     LIFE
+  ========================= */
+
+  socket.on("change-life", ({ roomId, playerNumber, amount }) => {
+
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player =
+      getPlayerBySocket(room, socket.id);
+
     if (!player) return;
-    if (player.playerNumber !== Number(playerNumber)) return;
+
+    if (
+      player.playerNumber !== Number(playerNumber)
+    ) return;
 
     const change = Number(amount);
+
     if (isNaN(change)) return;
 
     const oldLife = player.life;
+
     player.life += change;
 
     room.lifeHistory.unshift({
@@ -336,24 +499,34 @@ io.on("connection", (socket) => {
       oldLife,
       newLife: player.life,
       change,
-      time: new Date().toLocaleTimeString("pt-BR")
+      time:
+        new Date()
+          .toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
   });
 
   socket.on("set-life", ({ roomId, playerNumber, value }) => {
+
     const room = rooms[roomId];
     if (!room) return;
 
-    const player = getPlayerBySocket(room, socket.id);
+    const player =
+      getPlayerBySocket(room, socket.id);
+
     if (!player) return;
-    if (player.playerNumber !== Number(playerNumber)) return;
+
+    if (
+      player.playerNumber !== Number(playerNumber)
+    ) return;
 
     const newLife = Number(value);
+
     if (isNaN(newLife)) return;
 
     const oldLife = player.life;
+
     player.life = newLife;
 
     room.lifeHistory.unshift({
@@ -362,21 +535,30 @@ io.on("connection", (socket) => {
       oldLife,
       newLife,
       change: "manual",
-      time: new Date().toLocaleTimeString("pt-BR")
+      time:
+        new Date()
+          .toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
   });
 
   socket.on("reset-life", ({ roomId, playerNumber }) => {
+
     const room = rooms[roomId];
     if (!room) return;
 
-    const player = getPlayerBySocket(room, socket.id);
+    const player =
+      getPlayerBySocket(room, socket.id);
+
     if (!player) return;
-    if (player.playerNumber !== Number(playerNumber)) return;
+
+    if (
+      player.playerNumber !== Number(playerNumber)
+    ) return;
 
     const oldLife = player.life;
+
     player.life = 20;
 
     room.lifeHistory.unshift({
@@ -385,18 +567,28 @@ io.on("connection", (socket) => {
       oldLife,
       newLife: 20,
       change: "reset",
-      time: new Date().toLocaleTimeString("pt-BR")
+      time:
+        new Date()
+          .toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
   });
 
+  /* =========================
+     TIMER
+  ========================= */
+
   socket.on("set-timer", ({ roomId, minutes }) => {
+
     const room = rooms[roomId];
     if (!room) return;
+
     if (!isPlayerInRoom(room, socket.id)) return;
 
-    const seconds = Number(minutes) * 60;
+    const seconds =
+      Number(minutes) * 60;
+
     if (isNaN(seconds) || seconds <= 0) return;
 
     room.timer.duration = seconds;
@@ -408,119 +600,133 @@ io.on("connection", (socket) => {
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit("timer-update", publicTimer(room.timer));
+    io.to(roomId).emit(
+      "timer-update",
+      publicTimer(room.timer)
+    );
+
     sendRoomState(roomId);
   });
 
   socket.on("start-timer", ({ roomId }) => {
+
     const room = rooms[roomId];
     if (!room) return;
+
     if (!isPlayerInRoom(room, socket.id)) return;
+
     if (room.timer.running) return;
 
     room.timer.running = true;
 
     room.timer.interval = setInterval(() => {
+
       if (room.timer.remaining > 0) {
         room.timer.remaining--;
       } else {
+
         room.timer.running = false;
+
         clearInterval(room.timer.interval);
+
         room.timer.interval = null;
       }
 
-      io.to(roomId).emit("timer-update", publicTimer(room.timer));
-    }, 1000);
+      io.to(roomId).emit(
+        "timer-update",
+        publicTimer(room.timer)
+      );
 
-    io.to(roomId).emit("timer-update", publicTimer(room.timer));
+    }, 1000);
   });
 
   socket.on("pause-timer", ({ roomId }) => {
+
     const room = rooms[roomId];
     if (!room) return;
+
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.timer.running = false;
 
     if (room.timer.interval) {
+
       clearInterval(room.timer.interval);
+
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit("timer-update", publicTimer(room.timer));
+    io.to(roomId).emit(
+      "timer-update",
+      publicTimer(room.timer)
+    );
   });
 
   socket.on("reset-timer", ({ roomId }) => {
+
     const room = rooms[roomId];
     if (!room) return;
+
     if (!isPlayerInRoom(room, socket.id)) return;
 
-    room.timer.remaining = room.timer.duration;
+    room.timer.remaining =
+      room.timer.duration;
+
     room.timer.running = false;
 
     if (room.timer.interval) {
+
       clearInterval(room.timer.interval);
+
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit("timer-update", publicTimer(room.timer));
+    io.to(roomId).emit(
+      "timer-update",
+      publicTimer(room.timer)
+    );
   });
 
+  /* =========================
+     HISTORY
+  ========================= */
+
   socket.on("clear-life-history", ({ roomId }) => {
+
     const room = rooms[roomId];
     if (!room) return;
+
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.lifeHistory = [];
+
     sendRoomState(roomId);
   });
 
-  socket.on("chat-message", ({ roomId, name, message, type }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    const inside =
-      room.players.some(p => p.socketId === socket.id) ||
-      room.spectators.includes(socket.id);
-
-    if (!inside) return;
-
-    const now = Date.now();
-    const last = chatCooldown[socket.id] || 0;
-
-    if (now - last < CHAT_COOLDOWN_MS) {
-      socket.emit("chat-cooldown", {
-        remaining: Math.ceil((CHAT_COOLDOWN_MS - (now - last)) / 1000)
-      });
-      return;
-    }
-
-    chatCooldown[socket.id] = now;
-
-    const safeMessage = String(message || "").trim().slice(0, 120);
-    if (!safeMessage) return;
-
-    io.to(roomId).emit("chat-message", {
-      name: String(name || "Usuário").slice(0, 30),
-      message: safeMessage,
-      type: type === "emoji" ? "emoji" : "text",
-      time: new Date().toLocaleTimeString("pt-BR")
-    });
-  });
+  /* =========================
+     LEAVE
+  ========================= */
 
   socket.on("leave-room", ({ roomId }) => {
+
     removeSocketFromAllRooms(socket.id);
+
     socket.leave(roomId);
+
     socket.emit("left-room");
   });
 
   socket.on("disconnect", () => {
+
     console.log("Desconectado:", socket.id);
+
     removeSocketFromAllRooms(socket.id);
   });
+
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);

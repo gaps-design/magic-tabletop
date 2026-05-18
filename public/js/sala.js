@@ -68,7 +68,9 @@ const sendChatBtn = document.getElementById("sendChatBtn");
 
 let selectedRole = "player";
 let myPlayerNumber = null;
-let lastChatTime = 0;
+
+let chatMessagesSent = 0;
+let chatCooldown = false;
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
@@ -106,6 +108,38 @@ function savePlayerData() {
 }
 
 loadSavedPlayerData();
+
+/* =========================
+   AJUSTE DOS CAMPOS DE ENTRADA
+========================= */
+
+function showPlayerFields() {
+    if (playerFields) {
+        playerFields.style.display = "flex";
+    }
+
+    if (deckNameInput?.closest("label")) {
+        deckNameInput.closest("label").style.display = "block";
+    }
+
+    if (guildInput?.closest("label")) {
+        guildInput.closest("label").style.display = "block";
+    }
+}
+
+function showSpectatorFields() {
+    if (playerFields) {
+        playerFields.style.display = "flex";
+    }
+
+    if (deckNameInput?.closest("label")) {
+        deckNameInput.closest("label").style.display = "none";
+    }
+
+    if (guildInput?.closest("label")) {
+        guildInput.closest("label").style.display = "none";
+    }
+}
 
 /* =========================
    MODO CÂMERA DO CELULAR
@@ -146,9 +180,7 @@ if (playerRoleBtn) {
             spectatorRoleBtn.classList.remove("active");
         }
 
-        if (playerFields) {
-            playerFields.style.display = "flex";
-        }
+        showPlayerFields();
     });
 }
 
@@ -162,9 +194,7 @@ if (spectatorRoleBtn) {
             playerRoleBtn.classList.remove("active");
         }
 
-        if (playerFields) {
-            playerFields.style.display = "none";
-        }
+        showSpectatorFields();
     });
 }
 
@@ -176,10 +206,17 @@ if (enterRoomBtn) {
         const deck = deckNameInput ? deckNameInput.value : "";
         const guild = guildInput ? guildInput.value : "";
 
+        if (!name) {
+            if (entryError) {
+                entryError.innerText = "Digite seu nome.";
+            }
+            return;
+        }
+
         if (selectedRole === "player") {
-            if (!name || !deck) {
+            if (!deck) {
                 if (entryError) {
-                    entryError.innerText = "Preencha nome do jogador e selecione o deck.";
+                    entryError.innerText = "Selecione o deck.";
                 }
                 return;
             }
@@ -190,7 +227,7 @@ if (enterRoomBtn) {
         try {
             await safeJoinRoom(roomId, {
                 role: selectedRole,
-                name: selectedRole === "spectator" ? "Espectador" : name,
+                name,
                 deck: selectedRole === "spectator" ? "---" : deck,
                 guild: selectedRole === "spectator" ? "---" : guild
             });
@@ -577,7 +614,6 @@ if (toggleChatBtn) {
 }
 
 function canSendChat() {
-
     if (chatCooldown) {
         alert("Chat temporariamente bloqueado. Aguarde 3 segundos.");
         return false;
@@ -586,14 +622,12 @@ function canSendChat() {
     chatMessagesSent++;
 
     if (chatMessagesSent >= 5) {
-
         chatCooldown = true;
 
         setTimeout(() => {
             chatMessagesSent = 0;
             chatCooldown = false;
         }, 3000);
-
     }
 
     return true;
@@ -605,7 +639,6 @@ function sendChatMessage(message, type = "text") {
 
     socket.emit("chat-message", {
         roomId,
-        name: selectedRole === "spectator" ? "Espectador" : `Jogador ${myPlayerNumber || ""}`,
         message: message.trim(),
         type
     });
@@ -641,6 +674,10 @@ socket.on("chat-message", (data) => {
     if (data.type === "emoji") {
         spawnFloatingEmoji(data.message);
     }
+});
+
+socket.on("chat-cooldown", (data) => {
+    alert(`Aguarde ${data.remaining || 3} segundos para enviar outra mensagem.`);
 });
 
 function renderChatMessage(data) {
