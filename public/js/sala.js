@@ -74,7 +74,7 @@ if (playerRoleBtn) {
         playerRoleBtn.classList.add("active");
         spectatorRoleBtn.classList.remove("active");
 
-        playerFields.style.display = "flex";
+        if (playerFields) playerFields.style.display = "flex";
     });
 }
 
@@ -85,21 +85,23 @@ if (spectatorRoleBtn) {
         spectatorRoleBtn.classList.add("active");
         playerRoleBtn.classList.remove("active");
 
-        playerFields.style.display = "none";
+        if (playerFields) playerFields.style.display = "none";
     });
 }
 
 if (enterRoomBtn) {
     enterRoomBtn.addEventListener("click", async () => {
-        entryError.innerText = "";
+        if (entryError) entryError.innerText = "";
 
-        const name = playerNameInput.value.trim();
-        const deck = deckNameInput.value.trim();
-        const guild = guildInput.value.trim();
+        const name = playerNameInput ? playerNameInput.value.trim() : "";
+        const deck = deckNameInput ? deckNameInput.value.trim() : "";
+        const guild = guildInput ? guildInput.value.trim() : "";
 
         if (selectedRole === "player") {
             if (!name || !deck) {
-                entryError.innerText = "Preencha nome do jogador e nome do deck.";
+                if (entryError) {
+                    entryError.innerText = "Preencha nome do jogador e nome do deck.";
+                }
                 return;
             }
         }
@@ -107,15 +109,19 @@ if (enterRoomBtn) {
         try {
             await joinRoom(roomId, {
                 role: selectedRole,
-                name: name || "Espectador",
+                name: selectedRole === "spectator" ? "Espectador" : name,
                 deck,
                 guild
             });
 
-            entryModal.style.display = "none";
+            if (entryModal) {
+                entryModal.style.display = "none";
+            }
 
         } catch (error) {
-            entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            if (entryError) {
+                entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            }
         }
     });
 }
@@ -128,20 +134,31 @@ socket.on("assigned-role", (data) => {
     if (data.role === "spectator") {
         myPlayerNumber = null;
         selectedRole = "spectator";
-        alert("Você entrou como espectador.");
+
+        document.body.classList.add("spectator-mode");
+        document.body.classList.remove("camera-mode");
+
+        console.log("Você entrou como espectador.");
         return;
     }
 
     if (data.role === "camera") {
         myPlayerNumber = null;
         selectedRole = "camera";
+
         document.body.classList.add("camera-mode");
+        document.body.classList.remove("spectator-mode");
+
         return;
     }
 
     if (data.playerNumber) {
-        myPlayerNumber = data.playerNumber;
+        myPlayerNumber = Number(data.playerNumber);
         selectedRole = "player";
+
+        document.body.classList.remove("spectator-mode");
+        document.body.classList.remove("camera-mode");
+
         console.log("Você é o jogador:", myPlayerNumber);
     }
 });

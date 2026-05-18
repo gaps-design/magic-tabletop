@@ -28,6 +28,8 @@ const servers = {
 ========================= */
 
 async function getDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+
     const devices = await navigator.mediaDevices.enumerateDevices();
 
     const cameras = devices.filter(device => device.kind === "videoinput");
@@ -164,7 +166,7 @@ function routeStream(socketId, stream) {
     if (currentRole === "spectator") {
         if (info.role === "camera") {
             if (Number(info.linkedPlayer) === 1) {
-                setVideoStream(localVideo, stream, true);
+                setVideoStream(localVideo, stream, false);
             }
 
             if (Number(info.linkedPlayer) === 2) {
@@ -176,7 +178,7 @@ function routeStream(socketId, stream) {
 
         if (info.role === "player") {
             if (Number(info.playerNumber) === 1) {
-                setVideoStream(localVideo, stream, true);
+                setVideoStream(localVideo, stream, false);
             }
 
             if (Number(info.playerNumber) === 2) {
@@ -260,6 +262,9 @@ function createPeerConnection(targetId) {
         localStream.getTracks().forEach(track => {
             peer.addTrack(track, localStream);
         });
+    } else {
+        peer.addTransceiver("video", { direction: "recvonly" });
+        peer.addTransceiver("audio", { direction: "recvonly" });
     }
 
     peer.ontrack = (event) => {
@@ -359,9 +364,6 @@ socket.on("user-connected", async (data) => {
     if (!targetId) return;
 
     savePeerInfo(targetId, data);
-
-    // Não cria offer aqui.
-    // Quem entrou agora recebe "existing-peers" e cria a offer.
 });
 
 socket.on("offer", async ({ offer, sender }) => {

@@ -777,3 +777,21 @@ body.camera-mode video{
     border-radius:0;
     object-fit:cover;
 }
+
+body.spectator-mode .video-area{
+    grid-template-columns:1fr;
+    grid-template-rows:1fr 1fr;
+}
+
+body.spectator-mode .camera-card{
+    min-height:0;
+}
+
+body.spectator-mode video{
+    object-fit:contain;
+    background:#000;
+}
+
+body.spectator-mode .camera-card:first-child video{
+    transform:rotate(180deg);
+}
