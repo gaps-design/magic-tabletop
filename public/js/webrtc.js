@@ -101,6 +101,10 @@ function updateMediaStatus() {
     }
 }
 
+/* =========================
+   WEBCAM
+========================= */
+
 async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedMicrophoneId) {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -146,7 +150,6 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
         const settings = videoTrack.getSettings();
         selectedCameraId = settings.deviceId || selectedCameraId;
         localStorage.setItem("magicSelectedCamera", selectedCameraId);
-
         if (cameraSelect) cameraSelect.value = selectedCameraId;
     }
 
@@ -154,7 +157,6 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
         const settings = audioTrack.getSettings();
         selectedMicrophoneId = settings.deviceId || selectedMicrophoneId;
         localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
-
         if (microphoneSelect) microphoneSelect.value = selectedMicrophoneId;
     }
 
@@ -162,7 +164,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
 }
 
 /* =========================
-   TROCA SEPARADA DE CÂMERA
+   TROCA CÂMERA / MICROFONE
 ========================= */
 
 async function switchCamera(cameraId) {
@@ -199,13 +201,9 @@ async function switchCamera(cameraId) {
         await localVideo.play().catch(() => {});
     }
 
-    replaceVideoTrackOnPeers(newVideoTrack);
+    replaceTrackOnPeers("video", newVideoTrack);
     updateMediaStatus();
 }
-
-/* =========================
-   TROCA SEPARADA DE MICROFONE
-========================= */
 
 async function switchMicrophone(microphoneId) {
     if (!microphoneId) return;
@@ -234,36 +232,22 @@ async function switchMicrophone(microphoneId) {
 
     localStream.addTrack(newAudioTrack);
 
-    replaceAudioTrackOnPeers(newAudioTrack);
+    replaceTrackOnPeers("audio", newAudioTrack);
     updateMediaStatus();
 }
 
-function replaceVideoTrackOnPeers(newVideoTrack) {
+function replaceTrackOnPeers(kind, newTrack) {
     Object.values(peerConnections).forEach(peer => {
-        const sender = peer.getSenders().find(s => s.track && s.track.kind === "video");
+        const sender = peer.getSenders().find(s => s.track && s.track.kind === kind);
 
         if (sender) {
-            sender.replaceTrack(newVideoTrack);
-        } else if (localStream) {
-            peer.addTrack(newVideoTrack, localStream);
-        }
-    });
-}
-
-function replaceAudioTrackOnPeers(newAudioTrack) {
-    Object.values(peerConnections).forEach(peer => {
-        const sender = peer.getSenders().find(s => s.track && s.track.kind === "audio");
-
-        if (sender) {
-            sender.replaceTrack(newAudioTrack);
-        } else if (localStream) {
-            peer.addTrack(newAudioTrack, localStream);
+            sender.replaceTrack(newTrack);
         }
     });
 }
 
 /* =========================
-   ROTAS DE VÍDEO
+   ROTEAMENTO DE VÍDEO
 ========================= */
 
 function savePeerInfo(socketId, data = {}) {
@@ -299,9 +283,21 @@ function clearVideoIfStream(videoElement, stream) {
 
 function routeStream(socketId, stream) {
     if (!socketId || !stream) return;
-    if (currentRole === "camera") return;
+
+    if (currentRole === "camera") {
+        return;
+    }
 
     const info = peerInfo[socketId] || {};
+
+    console.log("Roteando stream:", {
+        socketId,
+        currentRole,
+        myPlayerNumberRTC,
+        peerRole: info.role,
+        linkedPlayer: info.linkedPlayer,
+        playerNumber: info.playerNumber
+    });
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
@@ -327,18 +323,16 @@ function routeStream(socketId, stream) {
 
             return;
         }
-
-        return;
     }
 
     if (currentRole === "player") {
         if (info.role === "camera") {
             if (Number(info.linkedPlayer) === Number(myPlayerNumberRTC)) {
                 setVideoStream(localVideo, stream, true);
-                return;
+            } else {
+                setVideoStream(remoteVideo, stream, false);
             }
 
-            setVideoStream(remoteVideo, stream, false);
             return;
         }
 
@@ -370,43 +364,37 @@ function createPeerConnection(targetId) {
     const peer = new RTCPeerConnection(servers);
     peerConnections[targetId] = peer;
 
-    peer.addTransceiver("video", { direction: "sendrecv" });
-    peer.addTransceiver("audio", { direction: "sendrecv" });
-
     if (localStream) {
         localStream.getTracks().forEach(track => {
-            const senderExists = peer.getSenders().some(sender =>
-                sender.track && sender.track.kind === track.kind
-            );
-
-            if (!senderExists) {
-                peer.addTrack(track, localStream);
-            }
+            peer.addTrack(track, localStream);
         });
+    } else {
+        peer.addTransceiver("video", { direction: "recvonly" });
+        peer.addTransceiver("audio", { direction: "recvonly" });
     }
 
     peer.ontrack = (event) => {
-    console.log("TRACK RECEBIDA DE:", targetId, event.track.kind, event.streams);
+        console.log("Track recebida:", targetId, event.track.kind);
 
-    let stream = event.streams[0];
+        let stream = event.streams[0];
 
-    if (!stream) {
-        if (!remoteStreams[targetId]) {
-            remoteStreams[targetId] = new MediaStream();
+        if (!stream) {
+            if (!remoteStreams[targetId]) {
+                remoteStreams[targetId] = new MediaStream();
+            }
+
+            remoteStreams[targetId].addTrack(event.track);
+            stream = remoteStreams[targetId];
+        } else {
+            remoteStreams[targetId] = stream;
         }
 
-        remoteStreams[targetId].addTrack(event.track);
-        stream = remoteStreams[targetId];
-    } else {
-        remoteStreams[targetId] = stream;
-    }
-
-    routeStream(targetId, stream);
-
-    setTimeout(() => {
         routeStream(targetId, stream);
-    }, 500);
-};
+
+        setTimeout(() => {
+            routeStream(targetId, stream);
+        }, 500);
+    };
 
     peer.onicecandidate = (event) => {
         if (event.candidate) {
@@ -418,14 +406,13 @@ function createPeerConnection(targetId) {
     };
 
     peer.onconnectionstatechange = () => {
-        const state = peer.connectionState;
-        console.log("Estado WebRTC", targetId, state);
+        console.log("Estado WebRTC:", targetId, peer.connectionState);
 
-        if (state === "connected") {
+        if (peer.connectionState === "connected") {
             routeAllStreams();
         }
 
-        if (state === "failed" || state === "closed") {
+        if (peer.connectionState === "failed" || peer.connectionState === "closed") {
             cleanupPeer(targetId);
         }
     };
@@ -454,6 +441,10 @@ async function createOffer(targetId, data = {}) {
 
     const peer = createPeerConnection(targetId);
 
+    if (peer.signalingState !== "stable") {
+        return;
+    }
+
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
 
@@ -473,12 +464,16 @@ async function flushPendingCandidates(sender) {
         try {
             await peer.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
-            console.error("Erro ao aplicar ICE pendente:", err);
+            console.error("Erro ICE pendente:", err);
         }
     }
 
     delete pendingCandidates[sender];
 }
+
+/* =========================
+   ENTRAR NA SALA
+========================= */
 
 async function joinRoom(roomId, user) {
     currentRoomId = roomId;
@@ -516,23 +511,20 @@ socket.on("existing-peers", async ({ peers }) => {
 
         savePeerInfo(peerData.socketId, peerData);
 
-        if (currentRole === "spectator" && peerData.role === "spectator") continue;
-        if (currentRole === "player" && peerData.role === "spectator") continue;
-        if (currentRole === "camera" && peerData.role === "spectator") continue;
+        if (peerData.role === "spectator") continue;
 
         await createOffer(peerData.socketId, peerData);
     }
 });
 
-socket.on("user-connected", async (data) => {
-    const targetId = data.socketId;
-    if (!targetId) return;
+socket.on("user-connected", (data) => {
+    if (!data.socketId) return;
 
-    savePeerInfo(targetId, data);
+    savePeerInfo(data.socketId, data);
 
-    if (data.role === "spectator") return;
-
-    await createOffer(targetId, data);
+    // Quem já estava na sala NÃO cria offer.
+    // Quem entra cria offer pelo existing-peers.
+    // Isso evita conflito entre player/player e player/camera.
 });
 
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
@@ -548,10 +540,7 @@ socket.on("offer", async ({ offer, sender, senderInfo }) => {
         peer = createPeerConnection(sender);
     }
 
-    const offerCollision =
-        peer.signalingState !== "stable";
-
-    if (offerCollision) {
+    if (peer.signalingState !== "stable") {
         peer.close();
         delete peerConnections[sender];
         peer = createPeerConnection(sender);
@@ -574,9 +563,7 @@ socket.on("answer", async ({ answer, sender }) => {
     const peer = peerConnections[sender];
     if (!peer || !answer) return;
 
-    if (peer.signalingState === "stable") {
-        return;
-    }
+    if (peer.signalingState === "stable") return;
 
     await peer.setRemoteDescription(new RTCSessionDescription(answer));
     await flushPendingCandidates(sender);
@@ -608,7 +595,7 @@ socket.on("user-disconnected", (socketId) => {
 });
 
 /* =========================
-   TROCA DE CÂMERA / MICROFONE
+   TROCA DE DISPOSITIVOS
 ========================= */
 
 if (cameraSelect) {
@@ -634,7 +621,7 @@ if (microphoneSelect) {
 }
 
 /* =========================
-   LIGAR / DESLIGAR MIC E CÂMERA
+   LIGAR / DESLIGAR
 ========================= */
 
 window.toggleMicrophone = function() {
