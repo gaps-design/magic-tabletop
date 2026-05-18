@@ -47,10 +47,20 @@ body{
 }
 
 .logo{
-    width:230px;
-    max-width:55vw;
-    filter:drop-shadow(0 0 22px rgba(120,80,255,0.55));
+    width:320px;
+    max-width:70vw;
+
+    filter:
+    drop-shadow(0 0 12px rgba(255,215,120,0.35))
+    drop-shadow(0 0 30px rgba(80,120,255,0.28));
+
+    transition:0.3s;
 }
+
+.logo:hover{
+    transform:scale(1.03);
+}
+
 
 .login-btn{
     padding:12px 26px;
