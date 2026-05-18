@@ -5,10 +5,18 @@ const remoteVideo = document.getElementById("remoteVideo");
 const cameraSelect = document.getElementById("cameraSelect");
 const microphoneSelect = document.getElementById("microphoneSelect");
 
+const micStatusText = document.getElementById("micStatusText");
+const cameraStatusText = document.getElementById("cameraStatusText");
+const toggleMicBtn = document.getElementById("toggleMicBtn");
+const toggleCameraBtn = document.getElementById("toggleCameraBtn");
+
 let localStream = null;
 let currentRoomId = null;
 let currentRole = null;
 let myPlayerNumberRTC = null;
+
+let micEnabled = true;
+let cameraEnabled = true;
 
 let selectedCameraId = localStorage.getItem("magicSelectedCamera") || "";
 let selectedMicrophoneId = localStorage.getItem("magicSelectedMicrophone") || "";
@@ -36,6 +44,7 @@ async function getDevices() {
     const microphones = devices.filter(device => device.kind === "audioinput");
 
     if (cameraSelect) {
+        const currentValue = cameraSelect.value || selectedCameraId;
         cameraSelect.innerHTML = "";
 
         cameras.forEach((camera, index) => {
@@ -43,7 +52,7 @@ async function getDevices() {
             option.value = camera.deviceId;
             option.text = camera.label || `Câmera ${index + 1}`;
 
-            if (camera.deviceId === selectedCameraId) {
+            if (camera.deviceId === currentValue) {
                 option.selected = true;
             }
 
@@ -57,6 +66,7 @@ async function getDevices() {
     }
 
     if (microphoneSelect) {
+        const currentValue = microphoneSelect.value || selectedMicrophoneId;
         microphoneSelect.innerHTML = "";
 
         microphones.forEach((mic, index) => {
@@ -64,7 +74,7 @@ async function getDevices() {
             option.value = mic.deviceId;
             option.text = mic.label || `Microfone ${index + 1}`;
 
-            if (mic.deviceId === selectedMicrophoneId) {
+            if (mic.deviceId === currentValue) {
                 option.selected = true;
             }
 
@@ -75,6 +85,16 @@ async function getDevices() {
             selectedMicrophoneId = microphones[0].deviceId;
             microphoneSelect.value = selectedMicrophoneId;
         }
+    }
+}
+
+function updateMediaStatus() {
+    if (micStatusText) {
+        micStatusText.innerText = micEnabled ? "Ativado" : "Desativado";
+    }
+
+    if (cameraStatusText) {
+        cameraStatusText.innerText = cameraEnabled ? "Ativada" : "Desativada";
     }
 }
 
@@ -99,7 +119,15 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
         });
     }
 
-    if (localVideo) {
+    localStream.getAudioTracks().forEach(track => {
+        track.enabled = micEnabled;
+    });
+
+    localStream.getVideoTracks().forEach(track => {
+        track.enabled = cameraEnabled;
+    });
+
+    if (localVideo && currentRole !== "camera") {
         localVideo.srcObject = localStream;
         localVideo.muted = true;
         localVideo.playsInline = true;
@@ -128,6 +156,7 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     }
 
     replaceTracksOnPeers();
+    updateMediaStatus();
 }
 
 /* =========================
@@ -274,7 +303,6 @@ function createPeerConnection(targetId) {
 
     peer.ontrack = (event) => {
         const stream = event.streams[0];
-
         remoteStreams[targetId] = stream;
         routeStream(targetId, stream);
     };
@@ -290,6 +318,10 @@ function createPeerConnection(targetId) {
 
     peer.onconnectionstatechange = async () => {
         const state = peer.connectionState;
+
+        if (state === "connected") {
+            routeAllStreams();
+        }
 
         if (state === "failed") {
             try {
@@ -327,7 +359,11 @@ async function createOffer(targetId, data = {}) {
 
     const peer = createPeerConnection(targetId);
 
-    const offer = await peer.createOffer();
+    const offer = await peer.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+    });
+
     await peer.setLocalDescription(offer);
 
     socket.emit("offer", {
@@ -362,6 +398,8 @@ socket.on("assigned-role", (data) => {
     if (data.playerNumber) {
         myPlayerNumberRTC = Number(data.playerNumber);
     }
+
+    routeAllStreams();
 });
 
 socket.on("existing-peers", async ({ peers }) => {
@@ -370,26 +408,9 @@ socket.on("existing-peers", async ({ peers }) => {
 
         savePeerInfo(peerData.socketId, peerData);
 
-        if (
-            currentRole === "spectator" &&
-            peerData.role === "spectator"
-        ) {
-            continue;
-        }
-
-        if (
-            currentRole === "player" &&
-            peerData.role === "spectator"
-        ) {
-            continue;
-        }
-
-        if (
-            currentRole === "camera" &&
-            peerData.role === "spectator"
-        ) {
-            continue;
-        }
+        if (currentRole === "spectator" && peerData.role === "spectator") continue;
+        if (currentRole === "player" && peerData.role === "spectator") continue;
+        if (currentRole === "camera" && peerData.role === "spectator") continue;
 
         await createOffer(peerData.socketId, peerData);
     }
@@ -468,6 +489,48 @@ if (microphoneSelect) {
     });
 }
 
+/* =========================
+   LIGAR / DESLIGAR MIC E CÂMERA
+========================= */
+
+window.toggleMicrophone = function() {
+    if (!localStream) return;
+
+    micEnabled = !micEnabled;
+
+    localStream.getAudioTracks().forEach(track => {
+        track.enabled = micEnabled;
+    });
+
+    updateMediaStatus();
+};
+
+window.toggleCamera = function() {
+    if (!localStream) return;
+
+    cameraEnabled = !cameraEnabled;
+
+    localStream.getVideoTracks().forEach(track => {
+        track.enabled = cameraEnabled;
+    });
+
+    updateMediaStatus();
+};
+
+if (toggleMicBtn) {
+    toggleMicBtn.addEventListener("click", () => {
+        window.toggleMicrophone();
+    });
+}
+
+if (toggleCameraBtn) {
+    toggleCameraBtn.addEventListener("click", () => {
+        window.toggleCamera();
+    });
+}
+
 navigator.mediaDevices?.addEventListener?.("devicechange", async () => {
     await getDevices();
 });
+
+updateMediaStatus();
