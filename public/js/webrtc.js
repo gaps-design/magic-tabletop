@@ -386,13 +386,27 @@ function createPeerConnection(targetId) {
     }
 
     peer.ontrack = (event) => {
-        const stream = event.streams[0];
+    console.log("TRACK RECEBIDA DE:", targetId, event.track.kind, event.streams);
 
-        if (!stream) return;
+    let stream = event.streams[0];
 
+    if (!stream) {
+        if (!remoteStreams[targetId]) {
+            remoteStreams[targetId] = new MediaStream();
+        }
+
+        remoteStreams[targetId].addTrack(event.track);
+        stream = remoteStreams[targetId];
+    } else {
         remoteStreams[targetId] = stream;
+    }
+
+    routeStream(targetId, stream);
+
+    setTimeout(() => {
         routeStream(targetId, stream);
-    };
+    }, 500);
+};
 
     peer.onicecandidate = (event) => {
         if (event.candidate) {
