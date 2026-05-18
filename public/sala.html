@@ -723,43 +723,42 @@
 
     </footer>
 
-    <!-- SCRIPTS -->
+   <!-- SCRIPTS -->
 
     <script>
-
         function toggleBottomBar() {
+            const bottomBar = document.getElementById("bottomBar");
+            const bottomToggleBtn = document.getElementById("bottomToggleBtn");
 
-            const bottomBar =
-                document.getElementById("bottomBar");
-
-            const bottomToggleBtn =
-                document.getElementById("bottomToggleBtn");
+            if (!bottomBar || !bottomToggleBtn) return;
 
             bottomBar.classList.toggle("collapsed");
 
-            if (
-                bottomBar.classList.contains("collapsed")
-            ) {
+            if (bottomBar.classList.contains("collapsed")) {
                 bottomToggleBtn.innerText = "⌃";
             } else {
                 bottomToggleBtn.innerText = "⌄";
             }
-
         }
 
         function toggleTimerControls() {
-
-            const timerControls =
-                document.getElementById("timerControls");
+            const timerControls = document.getElementById("timerControls");
+            if (!timerControls) return;
 
             timerControls.classList.toggle("hidden");
-
         }
 
         function toggleOpponentLife(player) {
+            const box = document.getElementById(`opponentLifeBox${player}`);
+            if (!box) return;
 
-            const box =
-                document.getElementById(
-                    `opponentLifeBox${player}`
-                );
+            box.classList.toggle("hidden");
         }
+    </script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script src="js/sala.js"></script>
+
+</body>
+</html>

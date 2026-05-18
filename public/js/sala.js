@@ -1,6 +1,42 @@
 const params = new URLSearchParams(window.location.search);
-const roomId = params.get("room");
+
+let roomId = params.get("room");
 const cameraFor = params.get("cameraFor");
+
+/* =========================
+   PROTEÇÃO DA SALA
+========================= */
+
+function generateRoomId() {
+    return "sala-" + Math.random().toString(36).substring(2, 8);
+}
+
+if (!roomId || roomId === "null" || roomId === "undefined") {
+    roomId = generateRoomId();
+
+    const newUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    window.history.replaceState({}, "", newUrl);
+}
+
+/* =========================
+   FUNÇÃO SEGURA PARA ENTRAR
+========================= */
+
+async function safeJoinRoom(roomId, data) {
+    if (!roomId) {
+        throw new Error("Sala inválida.");
+    }
+
+    if (typeof joinRoom !== "function") {
+        throw new Error("Função joinRoom não carregou. Verifique se o webrtc.js está antes do sala.js no HTML.");
+    }
+
+    return await joinRoom(roomId, data);
+}
+
+/* =========================
+   ELEMENTOS DA TELA
+========================= */
 
 const roomText = document.getElementById("roomText");
 const entryRoomText = document.getElementById("entryRoomText");
@@ -42,15 +78,31 @@ if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala
 ========================= */
 
 function loadSavedPlayerData() {
-    if (playerNameInput) playerNameInput.value = localStorage.getItem("mt_player_name") || "";
-    if (deckNameInput) deckNameInput.value = localStorage.getItem("mt_deck_name") || "";
-    if (guildInput) guildInput.value = localStorage.getItem("mt_guild_name") || "";
+    if (playerNameInput) {
+        playerNameInput.value = localStorage.getItem("mt_player_name") || "";
+    }
+
+    if (deckNameInput) {
+        deckNameInput.value = localStorage.getItem("mt_deck_name") || "";
+    }
+
+    if (guildInput) {
+        guildInput.value = localStorage.getItem("mt_guild_name") || "";
+    }
 }
 
 function savePlayerData() {
-    if (playerNameInput) localStorage.setItem("mt_player_name", playerNameInput.value.trim());
-    if (deckNameInput) localStorage.setItem("mt_deck_name", deckNameInput.value);
-    if (guildInput) localStorage.setItem("mt_guild_name", guildInput.value);
+    if (playerNameInput) {
+        localStorage.setItem("mt_player_name", playerNameInput.value.trim());
+    }
+
+    if (deckNameInput) {
+        localStorage.setItem("mt_deck_name", deckNameInput.value);
+    }
+
+    if (guildInput) {
+        localStorage.setItem("mt_guild_name", guildInput.value);
+    }
 }
 
 loadSavedPlayerData();
@@ -67,7 +119,7 @@ if (cameraFor) {
 
     window.addEventListener("load", async () => {
         try {
-            await joinRoom(roomId, {
+            await safeJoinRoom(roomId, {
                 role: "camera",
                 linkedPlayer: Number(cameraFor),
                 name: `Câmera Jogador ${cameraFor}`,
@@ -89,9 +141,14 @@ if (playerRoleBtn) {
         selectedRole = "player";
 
         playerRoleBtn.classList.add("active");
-        spectatorRoleBtn.classList.remove("active");
 
-        if (playerFields) playerFields.style.display = "flex";
+        if (spectatorRoleBtn) {
+            spectatorRoleBtn.classList.remove("active");
+        }
+
+        if (playerFields) {
+            playerFields.style.display = "flex";
+        }
     });
 }
 
@@ -100,9 +157,14 @@ if (spectatorRoleBtn) {
         selectedRole = "spectator";
 
         spectatorRoleBtn.classList.add("active");
-        playerRoleBtn.classList.remove("active");
 
-        if (playerFields) playerFields.style.display = "none";
+        if (playerRoleBtn) {
+            playerRoleBtn.classList.remove("active");
+        }
+
+        if (playerFields) {
+            playerFields.style.display = "none";
+        }
     });
 }
 
@@ -116,7 +178,9 @@ if (enterRoomBtn) {
 
         if (selectedRole === "player") {
             if (!name || !deck) {
-                if (entryError) entryError.innerText = "Preencha nome do jogador e selecione o deck.";
+                if (entryError) {
+                    entryError.innerText = "Preencha nome do jogador e selecione o deck.";
+                }
                 return;
             }
 
@@ -124,17 +188,21 @@ if (enterRoomBtn) {
         }
 
         try {
-            await joinRoom(roomId, {
+            await safeJoinRoom(roomId, {
                 role: selectedRole,
                 name: selectedRole === "spectator" ? "Espectador" : name,
-                deck,
-                guild
+                deck: selectedRole === "spectator" ? "---" : deck,
+                guild: selectedRole === "spectator" ? "---" : guild
             });
 
-            if (entryModal) entryModal.style.display = "none";
+            if (entryModal) {
+                entryModal.style.display = "none";
+            }
 
         } catch (error) {
-            if (entryError) entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            if (entryError) {
+                entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            }
         }
     });
 }
@@ -179,12 +247,17 @@ socket.on("room-full", () => {
 
 socket.on("room-state", (state) => {
     if (usersCountBtn) {
-        const cameraCount = state.cameraClients ? state.cameraClients.length : 0;
-        usersCountBtn.innerText = `👥 ${state.players.length + state.spectators + cameraCount}`;
+        const playersCount = Array.isArray(state.players) ? state.players.length : 0;
+        const spectatorsCount = Number(state.spectators || 0);
+        const cameraCount = Array.isArray(state.cameraClients) ? state.cameraClients.length : 0;
+
+        usersCountBtn.innerText = `👥 ${playersCount + spectatorsCount + cameraCount}`;
     }
 
-    const p1 = state.players.find(p => p.playerNumber === 1);
-    const p2 = state.players.find(p => p.playerNumber === 2);
+    const players = Array.isArray(state.players) ? state.players : [];
+
+    const p1 = players.find(p => Number(p.playerNumber) === 1);
+    const p2 = players.find(p => Number(p.playerNumber) === 2);
 
     updatePlayerPanel(1, p1);
     updatePlayerPanel(2, p2);
@@ -200,10 +273,10 @@ function updatePlayerPanel(playerNumber, playerData) {
     const life = document.getElementById(`player${playerNumber}Life`);
 
     if (playerData) {
-        if (name) name.innerText = playerData.name;
-        if (deck) deck.innerText = playerData.deck;
+        if (name) name.innerText = playerData.name || `Jogador ${playerNumber}`;
+        if (deck) deck.innerText = playerData.deck || "---";
         if (guild) guild.innerText = playerData.guild || "---";
-        if (life) life.innerText = playerData.life;
+        if (life) life.innerText = playerData.life ?? 20;
     } else {
         if (name) name.innerText = `Jogador ${playerNumber}`;
         if (deck) deck.innerText = "Aguardando...";
@@ -319,8 +392,12 @@ socket.on("left-room", () => {
 
 if (copyRoomBtn) {
     copyRoomBtn.addEventListener("click", async () => {
-        await navigator.clipboard.writeText(window.location.href);
-        alert("Link da sala copiado!");
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            alert("Link da sala copiado!");
+        } catch (error) {
+            alert("Não foi possível copiar o link.");
+        }
     });
 }
 
@@ -332,9 +409,12 @@ window.copyCameraLink = async function() {
 
     const cameraUrl = `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}`;
 
-    await navigator.clipboard.writeText(cameraUrl);
-
-    alert("Link da câmera copiado! Abra esse link no celular.");
+    try {
+        await navigator.clipboard.writeText(cameraUrl);
+        alert("Link da câmera copiado! Abra esse link no celular.");
+    } catch (error) {
+        alert(cameraUrl);
+    }
 };
 
 document.querySelectorAll(".rotate-btn").forEach(btn => {
@@ -404,6 +484,8 @@ window.setTimer = function() {
     if (selectedRole !== "player") return;
 
     const input = document.getElementById("timerMinutesInput");
+    if (!input) return;
+
     const minutes = Number(input.value);
 
     if (isNaN(minutes) || minutes <= 0) {
@@ -455,8 +537,8 @@ function renderLifeHistory(history) {
     list1.innerHTML = "";
     list2.innerHTML = "";
 
-    renderPlayerHistory(list1, history.filter(item => item.playerNumber === 1));
-    renderPlayerHistory(list2, history.filter(item => item.playerNumber === 2));
+    renderPlayerHistory(list1, history.filter(item => Number(item.playerNumber) === 1));
+    renderPlayerHistory(list2, history.filter(item => Number(item.playerNumber) === 2));
 }
 
 function renderPlayerHistory(list, history) {
@@ -520,6 +602,8 @@ function sendChatMessage(message, type = "text") {
 
 if (sendChatBtn) {
     sendChatBtn.addEventListener("click", () => {
+        if (!chatInput) return;
+
         sendChatMessage(chatInput.value, "text");
         chatInput.value = "";
     });
