@@ -4,52 +4,179 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sala Magic Tabletop</title>
+
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
+    <!-- MODAL ENTRADA -->
+
     <div id="entryModal" class="entry-modal">
         <div class="entry-box">
+
             <h2>Entrar na sala</h2>
-            <p id="entryRoomText">Escolha como deseja entrar</p>
+
+            <p id="entryRoomText">
+                Escolha como deseja entrar
+            </p>
 
             <div class="role-options">
+
                 <button id="playerRoleBtn" class="role-card active">
                     🎮 Jogador
-                    <span>Participa da partida com câmera.</span>
+                    <span>
+                        Participa da partida com câmera.
+                    </span>
                 </button>
 
                 <button id="spectatorRoleBtn" class="role-card">
                     👀 Espectador
-                    <span>Apenas assiste à partida.</span>
+                    <span>
+                        Apenas assiste à partida.
+                    </span>
                 </button>
+
             </div>
 
             <div id="playerFields" class="player-fields">
+
                 <label>
                     Nome do jogador *
-                    <input id="playerNameInput" type="text" placeholder="Ex: Guilherme">
+
+                    <input
+                        id="playerNameInput"
+                        type="text"
+                        placeholder="Ex: Guilherme"
+                    >
                 </label>
 
                 <label>
                     Nome do deck *
-                    <input id="deckNameInput" type="text" placeholder="Ex: Dimir Control">
+
+                    <select id="deckNameInput">
+                        <option value="">Selecione o deck</option>
+
+                        <option>Affinity</option>
+                        <option>Aggro</option>
+                        <option>Amulet Titan</option>
+                        <option>Asmo Food</option>
+                        <option>Belcher</option>
+                        <option>Blink</option>
+                        <option>Broodscale</option>
+                        <option>Burn</option>
+                        <option>Cascade</option>
+                        <option>Combo</option>
+                        <option>Control</option>
+                        <option>Creativity</option>
+                        <option>Death's Shadow</option>
+                        <option>Delirium</option>
+                        <option>Domain Zoo</option>
+                        <option>Dredge</option>
+                        <option>Eldrazi</option>
+                        <option>Eldrazi Aggro</option>
+                        <option>Eldrazi Breach</option>
+                        <option>Eldrazi Ramp</option>
+                        <option>Elementals</option>
+                        <option>Emry Station</option>
+                        <option>Energy</option>
+                        <option>Goblins</option>
+                        <option>Goryo's</option>
+                        <option>Hammer</option>
+                        <option>Hollow One</option>
+                        <option>Humans</option>
+                        <option>Land Destruction</option>
+                        <option>Living End</option>
+                        <option>Merfolk</option>
+                        <option>Metalcraft</option>
+                        <option>Midrange</option>
+                        <option>Mill</option>
+                        <option>Miracles</option>
+                        <option>Murktide</option>
+                        <option>Necro</option>
+                        <option>Neoform</option>
+                        <option>Omnath</option>
+                        <option>Prowess</option>
+                        <option>Reanimator</option>
+                        <option>Ritual</option>
+                        <option>Ruby Storm</option>
+                        <option>Samwise Gamgee Combo</option>
+                        <option>Scam</option>
+                        <option>Song of Creation</option>
+                        <option>Spirits</option>
+                        <option>Storm</option>
+                        <option>Tempo</option>
+                        <option>Through the Breach</option>
+                        <option>Tron</option>
+                        <option>Twiddle Storm</option>
+                        <option>Valakut</option>
+                        <option>Vampire</option>
+                        <option>Wizards</option>
+                        <option>Yawgmoth</option>
+                        <option>Zombies</option>
+
+                    </select>
                 </label>
 
                 <label>
                     Tribo/Guilda
-                    <input id="guildInput" type="text" placeholder="Ex: Dimir / Izzet / Elfos">
+
+                    <select id="guildInput">
+
+                        <option value="">Selecione a guilda</option>
+
+                        <option>Sem Guilda</option>
+                        <option>Tribal</option>
+                        <option>Mono Black</option>
+                        <option>Mono Blue</option>
+                        <option>Mono Green</option>
+                        <option>Mono Red</option>
+                        <option>Mono White</option>
+                        <option>Colorless</option>
+                        <option>5C</option>
+                        <option>4C</option>
+                        <option>Abzan</option>
+                        <option>Azorius</option>
+                        <option>Bant</option>
+                        <option>Boros</option>
+                        <option>Dimir</option>
+                        <option>Esper</option>
+                        <option>Golgari</option>
+                        <option>Grixis</option>
+                        <option>Gruul</option>
+                        <option>Izzet</option>
+                        <option>Jeskai</option>
+                        <option>Jund</option>
+                        <option>Mardu</option>
+                        <option>Naya</option>
+                        <option>Orzhov</option>
+                        <option>Rakdos</option>
+                        <option>Selesnya</option>
+                        <option>Simic</option>
+                        <option>Sultai</option>
+                        <option>Temur</option>
+
+                    </select>
                 </label>
+
             </div>
 
-            <button id="enterRoomBtn" class="enter-btn">Entrar na sala</button>
+            <button id="enterRoomBtn" class="enter-btn">
+                Entrar na sala
+            </button>
+
             <p id="entryError" class="entry-error"></p>
+
         </div>
     </div>
 
+    <!-- TOPO -->
+
     <header class="topbar">
+
         <div class="logo-area">
+
             <div>
+
                 <div class="logo-title">
                     <span class="logo-icon">🛡️</span>
                     <strong>Mesa PvP</strong>
@@ -57,174 +184,491 @@
 
                 <div class="room-info under-logo">
                     <span id="roomText">Sala:</span>
+
                     <span class="status-dot"></span>
-                    <span class="status-text">Conectado</span>
+
+                    <span class="status-text">
+                        Conectado
+                    </span>
                 </div>
+
             </div>
+
         </div>
 
-        <section class="match-tools top-timer">
-            <div class="timer-box compact-timer">
-                <div id="timerDisplay" class="timer-display">50:00</div>
+        <!-- TIMER -->
 
-                <button class="timer-toggle" onclick="toggleTimerControls()">⚙️</button>
+        <section class="match-tools top-timer">
+
+            <div class="timer-box compact-timer">
+
+                <div id="timerDisplay" class="timer-display">
+                    50:00
+                </div>
+
+                <button
+                    id="timerSettingsBtn"
+                    class="timer-toggle"
+                    onclick="toggleTimerControls()"
+                >
+                    ⚙️
+                </button>
 
                 <div id="timerControls" class="timer-controls hidden">
-                    <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
+
+                    <input
+                        id="timerMinutesInput"
+                        type="number"
+                        placeholder="Min"
+                        value="50"
+                    >
+
                     <button onclick="setTimer()">Ajustar</button>
                     <button onclick="startTimer()">Start</button>
                     <button onclick="pauseTimer()">Pause</button>
                     <button onclick="resetTimer()">Reset</button>
+
                 </div>
+
             </div>
+
         </section>
 
+        <!-- TOPO DIREITA -->
+
         <div class="top-actions">
-            <button id="copyRoomBtn">🔗 Copiar link da sala</button>
-            <button id="usersCountBtn">👥 0</button>
-            <button>⚙️</button>
+
+            <button id="copyRoomBtn">
+                🔗 Copiar link da sala
+            </button>
+
+            <button id="usersCountBtn">
+                👥 0
+            </button>
+
+            <button id="settingsBtn">
+                ⚙️
+            </button>
+
         </div>
+
     </header>
+
+    <!-- LAYOUT -->
 
     <main class="game-layout">
 
-        <aside class="player-panel player-one">
-            <h2 id="player1Name">Jogador 1</h2>
+        <!-- PLAYER 1 -->
+
+        <aside
+            id="playerPanel1"
+            class="player-panel player-one"
+        >
+
+            <h2 id="player1Name">
+                Jogador 1
+            </h2>
 
             <div>
                 <span class="label">Vida</span>
-                <div id="player1Life" class="life life-blue">20</div>
+
+                <div id="player1Life" class="life life-blue">
+                    20
+                </div>
+            </div>
+
+            <!-- VIDA OPONENTE -->
+
+            <div class="opponent-life-wrapper">
+
+                <button
+                    class="toggle-opponent-life"
+                    onclick="toggleOpponentLife(1)"
+                >
+                    ↔ Vida Oponente
+                </button>
+
+                <div
+                    id="opponentLifeBox1"
+                    class="opponent-life-box hidden"
+                >
+
+                    <span class="label">
+                        Vida do oponente
+                    </span>
+
+                    <div
+                        id="player1OpponentLife"
+                        class="life opponent-life"
+                    >
+                        20
+                    </div>
+
+                </div>
+
             </div>
 
             <div class="life-buttons">
-                <button data-player="1" data-amount="-1">-</button>
-                <button data-player="1" data-amount="1">+</button>
+
+                <button data-player="1" data-amount="-1">
+                    -
+                </button>
+
+                <button data-player="1" data-amount="1">
+                    +
+                </button>
+
             </div>
 
             <div class="manual-life-box">
-                <input id="manualLife1" type="number" placeholder="Ex: 3000">
-                <button onclick="setManualLife(1)">Aplicar</button>
-                <button onclick="resetLife(1)">Reset</button>
+
+                <input
+                    id="manualLife1"
+                    type="number"
+                    placeholder="Ex: 3000"
+                >
+
+                <button onclick="setManualLife(1)">
+                    Aplicar
+                </button>
+
+                <button onclick="resetLife(1)">
+                    Reset
+                </button>
+
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(1)" class="history-small-btn">📜 Histórico</button>
-                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
-                <div id="lifeHistoryPanel1" class="player-life-history hidden">
+                <button
+                    onclick="togglePlayerHistory(1)"
+                    class="history-small-btn"
+                >
+                    📜 Histórico
+                </button>
+
+                <button
+                    onclick="clearLifeHistory()"
+                    class="history-clear-small"
+                >
+                    Limpar
+                </button>
+
+                <div
+                    id="lifeHistoryPanel1"
+                    class="player-life-history hidden"
+                >
+
                     <div id="lifeHistoryList1"></div>
+
                 </div>
+
             </div>
 
             <div class="player-info">
+
                 <div>
                     <span class="label">Deck</span>
-                    <strong id="player1Deck">Aguardando...</strong>
+
+                    <strong id="player1Deck">
+                        Aguardando...
+                    </strong>
                 </div>
 
                 <div>
-                    <span class="label">Tribo/Guilda</span>
-                    <strong id="player1Guild" class="guild-blue">---</strong>
+                    <span class="label">
+                        Tribo/Guilda
+                    </span>
+
+                    <strong
+                        id="player1Guild"
+                        class="guild-blue"
+                    >
+                        ---
+                    </strong>
                 </div>
+
             </div>
 
-            <div class="notes">
-                <span class="label">Anotações</span>
-                <textarea placeholder="Suas anotações..."></textarea>
-            </div>
         </aside>
 
+        <!-- VÍDEOS -->
+
         <section class="video-area">
+
             <div class="camera-card camera-player-1">
+
                 <div class="camera-title">
+
                     <span class="blue-dot"></span>
-                    <strong id="localCameraTitle">Minha câmera</strong>
+
+                    <strong id="localCameraTitle">
+                        Minha câmera
+                    </strong>
+
                 </div>
 
-                <button class="rotate-btn">Inverter Mesa</button>
-                <video id="localVideo" autoplay playsinline muted></video>
+                <button class="rotate-btn">
+                    Inverter Mesa
+                </button>
+
+                <video
+                    id="localVideo"
+                    autoplay
+                    playsinline
+                    muted
+                ></video>
 
                 <div class="camera-status">
+
                     <span class="status-dot"></span>
+
                     Câmera ativa
+
                 </div>
+
             </div>
 
             <div class="camera-card camera-player-2">
+
                 <div class="camera-title">
+
                     <span class="green-dot"></span>
-                    <strong id="remoteCameraTitle">Outro jogador</strong>
+
+                    <strong id="remoteCameraTitle">
+                        Outro jogador
+                    </strong>
+
                 </div>
 
-                <button class="rotate-btn">Inverter Mesa</button>
-                <video id="remoteVideo" autoplay playsinline></video>
+                <button class="rotate-btn">
+                    Inverter Mesa
+                </button>
+
+                <video
+                    id="remoteVideo"
+                    autoplay
+                    playsinline
+                ></video>
 
                 <div class="camera-status">
+
                     <span class="status-dot"></span>
+
                     Câmera ativa
+
                 </div>
+
             </div>
+
         </section>
 
-        <aside class="player-panel player-two">
-            <h2 id="player2Name">Jogador 2</h2>
+        <!-- PLAYER 2 -->
+
+        <aside
+            id="playerPanel2"
+            class="player-panel player-two"
+        >
+
+            <h2 id="player2Name">
+                Jogador 2
+            </h2>
 
             <div>
                 <span class="label">Vida</span>
-                <div id="player2Life" class="life life-green">20</div>
+
+                <div id="player2Life" class="life life-green">
+                    20
+                </div>
+            </div>
+
+            <!-- VIDA OPONENTE -->
+
+            <div class="opponent-life-wrapper">
+
+                <button
+                    class="toggle-opponent-life"
+                    onclick="toggleOpponentLife(2)"
+                >
+                    ↔ Vida Oponente
+                </button>
+
+                <div
+                    id="opponentLifeBox2"
+                    class="opponent-life-box hidden"
+                >
+
+                    <span class="label">
+                        Vida do oponente
+                    </span>
+
+                    <div
+                        id="player2OpponentLife"
+                        class="life opponent-life"
+                    >
+                        20
+                    </div>
+
+                </div>
+
             </div>
 
             <div class="life-buttons">
-                <button data-player="2" data-amount="-1">-</button>
-                <button data-player="2" data-amount="1">+</button>
+
+                <button data-player="2" data-amount="-1">
+                    -
+                </button>
+
+                <button data-player="2" data-amount="1">
+                    +
+                </button>
+
             </div>
 
             <div class="manual-life-box">
-                <input id="manualLife2" type="number" placeholder="Ex: 3000">
-                <button onclick="setManualLife(2)">Aplicar</button>
-                <button onclick="resetLife(2)">Reset</button>
+
+                <input
+                    id="manualLife2"
+                    type="number"
+                    placeholder="Ex: 3000"
+                >
+
+                <button onclick="setManualLife(2)">
+                    Aplicar
+                </button>
+
+                <button onclick="resetLife(2)">
+                    Reset
+                </button>
+
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(2)" class="history-small-btn">📜 Histórico</button>
-                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
-                <div id="lifeHistoryPanel2" class="player-life-history hidden">
+                <button
+                    onclick="togglePlayerHistory(2)"
+                    class="history-small-btn"
+                >
+                    📜 Histórico
+                </button>
+
+                <button
+                    onclick="clearLifeHistory()"
+                    class="history-clear-small"
+                >
+                    Limpar
+                </button>
+
+                <div
+                    id="lifeHistoryPanel2"
+                    class="player-life-history hidden"
+                >
+
                     <div id="lifeHistoryList2"></div>
+
                 </div>
+
             </div>
 
             <div class="player-info">
+
                 <div>
                     <span class="label">Deck</span>
-                    <strong id="player2Deck">Aguardando...</strong>
+
+                    <strong id="player2Deck">
+                        Aguardando...
+                    </strong>
                 </div>
 
                 <div>
-                    <span class="label">Tribo/Guilda</span>
-                    <strong id="player2Guild" class="guild-green">---</strong>
+                    <span class="label">
+                        Tribo/Guilda
+                    </span>
+
+                    <strong
+                        id="player2Guild"
+                        class="guild-green"
+                    >
+                        ---
+                    </strong>
                 </div>
+
             </div>
 
-            <div class="notes">
-                <span class="label">Anotações</span>
-                <textarea placeholder="Suas anotações..."></textarea>
-            </div>
         </aside>
 
     </main>
 
-    <div class="layout-buttons">
-        <button id="dualViewBtn">Dual View</button>
-        <button id="focusViewBtn">Focus Mode</button>
+    <!-- CHAT -->
+
+    <div id="chatContainer" class="chat-container hidden">
+
+        <div class="chat-header">
+            💬 Chat da mesa
+        </div>
+
+        <div id="chatMessages" class="chat-messages"></div>
+
+        <div class="chat-input-area">
+
+            <input
+                id="chatInput"
+                type="text"
+                placeholder="Digite uma mensagem..."
+            >
+
+            <button id="sendChatBtn">
+                Enviar
+            </button>
+
+        </div>
+
+        <div class="emoji-bar">
+
+            <button class="emoji-btn">🔥</button>
+            <button class="emoji-btn">😂</button>
+            <button class="emoji-btn">😱</button>
+            <button class="emoji-btn">👏</button>
+            <button class="emoji-btn">❤️</button>
+
+        </div>
+
     </div>
 
-    <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">⌄</button>
+    <!-- BOTÕES -->
 
-    <footer id="bottomBar" class="bottom-bar collapsed">
+    <div class="layout-buttons">
+
+        <button id="dualViewBtn">
+            Dual View
+        </button>
+
+        <button id="focusViewBtn">
+            Focus Mode
+        </button>
+
+    </div>
+
+    <!-- BOTTOM -->
+
+    <button
+        id="bottomToggleBtn"
+        class="bottom-toggle"
+        onclick="toggleBottomBar()"
+    >
+        ⌄
+    </button>
+
+    <footer
+        id="bottomBar"
+        class="bottom-bar collapsed"
+    >
+
         <div class="device-controls">
+
             <div class="control-item status-control">
                 🎙️
+
                 <div>
                     <strong>Microfone</strong>
                     <span>Ativado</span>
@@ -233,6 +677,7 @@
 
             <div class="control-item status-control">
                 🎥
+
                 <div>
                     <strong>Câmera</strong>
                     <span>Ativada</span>
@@ -246,40 +691,74 @@
             <div class="control-item select-control">
                 <select id="microphoneSelect"></select>
             </div>
+
         </div>
 
         <div class="main-controls">
-            <button id="fullscreenBtn">⛶ Tela cheia</button>
-            <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
-            <button onclick="copyCameraLink()">📷 Celular como câmera</button>
-            <button>💬 Chat</button>
-            <button class="leave-btn" onclick="leaveRoom()">📞 Sair da sala</button>
+
+            <button id="fullscreenBtn">
+                ⛶ Tela cheia
+            </button>
+
+            <button id="dualViewBtnBottom">
+                ▦ Layout 2 câmeras
+            </button>
+
+            <button onclick="copyCameraLink()">
+                📷 Celular como câmera
+            </button>
+
+            <button id="toggleChatBtn">
+                💬 Chat
+            </button>
+
+            <button
+                class="leave-btn"
+                onclick="leaveRoom()"
+            >
+                📞 Sair da sala
+            </button>
+
         </div>
+
     </footer>
 
+    <!-- SCRIPTS -->
+
     <script>
+
         function toggleBottomBar() {
-            const bottomBar = document.getElementById("bottomBar");
-            const bottomToggleBtn = document.getElementById("bottomToggleBtn");
+
+            const bottomBar =
+                document.getElementById("bottomBar");
+
+            const bottomToggleBtn =
+                document.getElementById("bottomToggleBtn");
 
             bottomBar.classList.toggle("collapsed");
 
-            if (bottomBar.classList.contains("collapsed")) {
+            if (
+                bottomBar.classList.contains("collapsed")
+            ) {
                 bottomToggleBtn.innerText = "⌃";
             } else {
                 bottomToggleBtn.innerText = "⌄";
             }
+
         }
 
         function toggleTimerControls() {
-            const timerControls = document.getElementById("timerControls");
+
+            const timerControls =
+                document.getElementById("timerControls");
+
             timerControls.classList.toggle("hidden");
+
         }
-    </script>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/webrtc.js"></script>
-    <script src="js/sala.js"></script>
+        function toggleOpponentLife(player) {
 
-</body>
-</html>
+            const box =
+                document.getElementById(
+                    `opponentLifeBox${player}`
+                );
