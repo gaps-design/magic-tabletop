@@ -513,7 +513,13 @@ async function joinRoom(roomId, user) {
 
     socket.emit("join-room", {
         roomId,
-        user
+
+        role: user.role,
+        name: user.name,
+        deck: user.deck,
+        guild: user.guild,
+        linkedPlayer: user.linkedPlayer,
+        format: user.format
     });
 }
 
