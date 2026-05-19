@@ -1174,7 +1174,6 @@ if (currentRole === "spectator" && leaveSpectatorBtn) {
 
     });
 }
-const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
 
 if (leaveSpectatorBtn) {
     if (selectedRole === "spectator") {
