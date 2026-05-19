@@ -202,8 +202,12 @@ io.on("connection", (socket) => {
 
     const room = ensureRoom(roomId);
 
-    if (data.format) {
-  room.format = data.format;
+const incomingFormat = data.format || "";
+
+if (roomId === "mtg-1002") {
+  room.format = "Mesa da Resenha";
+} else if (incomingFormat) {
+  room.format = incomingFormat;
 }
 
     socket.join(roomId);
