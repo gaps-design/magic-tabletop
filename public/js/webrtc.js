@@ -665,6 +665,11 @@ window.toggleMicrophone = function() {
         track.enabled = micEnabled;
     });
 
+    socket.emit("update-mic-status", {
+        roomId,
+        micEnabled
+    });
+
     updateMediaStatus();
 };
 

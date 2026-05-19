@@ -67,11 +67,25 @@ const chatMessages = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 
+const diceOverlay = document.getElementById("diceOverlay");
+const rollDiceBtn = document.getElementById("rollDiceBtn");
+const resetDiceBtn = document.getElementById("resetDiceBtn");
+const diceOne = document.getElementById("diceOne");
+const diceTwo = document.getElementById("diceTwo");
+const diceResultText = document.getElementById("diceResultText");
+
+const localMutedIcon = document.getElementById("localMutedIcon");
+const remoteMutedIcon = document.getElementById("remoteMutedIcon");
+
 let selectedRole = "player";
 let myPlayerNumber = null;
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
+
+let currentPlayersCount = 0;
+
+const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
@@ -111,35 +125,19 @@ function savePlayerData() {
 loadSavedPlayerData();
 
 /* =========================
-   AJUSTE DOS CAMPOS DE ENTRADA
+   CAMPOS DE ENTRADA
 ========================= */
 
 function showPlayerFields() {
-    if (playerFields) {
-        playerFields.style.display = "flex";
-    }
-
-    if (deckNameInput?.closest("label")) {
-        deckNameInput.closest("label").style.display = "block";
-    }
-
-    if (guildInput?.closest("label")) {
-        guildInput.closest("label").style.display = "block";
-    }
+    if (playerFields) playerFields.style.display = "flex";
+    if (deckNameInput?.closest("label")) deckNameInput.closest("label").style.display = "block";
+    if (guildInput?.closest("label")) guildInput.closest("label").style.display = "block";
 }
 
 function showSpectatorFields() {
-    if (playerFields) {
-        playerFields.style.display = "flex";
-    }
-
-    if (deckNameInput?.closest("label")) {
-        deckNameInput.closest("label").style.display = "none";
-    }
-
-    if (guildInput?.closest("label")) {
-        guildInput.closest("label").style.display = "none";
-    }
+    if (playerFields) playerFields.style.display = "flex";
+    if (deckNameInput?.closest("label")) deckNameInput.closest("label").style.display = "none";
+    if (guildInput?.closest("label")) guildInput.closest("label").style.display = "none";
 }
 
 /* =========================
@@ -155,13 +153,13 @@ if (cameraFor) {
     window.addEventListener("load", async () => {
         try {
             await safeJoinRoom(roomId, {
-    role: "camera",
-    linkedPlayer: Number(cameraFor),
-    name: `Câmera Jogador ${cameraFor}`,
-    deck: "Câmera auxiliar",
-    guild: "---",
-    format: roomFormat
-});
+                role: "camera",
+                linkedPlayer: Number(cameraFor),
+                name: `Câmera Jogador ${cameraFor}`,
+                deck: "Câmera auxiliar",
+                guild: "---",
+                format: roomFormat
+            });
         } catch (error) {
             alert("Erro ao iniciar câmera do celular: " + error.message);
         }
@@ -175,13 +173,8 @@ if (cameraFor) {
 if (playerRoleBtn) {
     playerRoleBtn.addEventListener("click", () => {
         selectedRole = "player";
-
         playerRoleBtn.classList.add("active");
-
-        if (spectatorRoleBtn) {
-            spectatorRoleBtn.classList.remove("active");
-        }
-
+        spectatorRoleBtn?.classList.remove("active");
         showPlayerFields();
     });
 }
@@ -189,13 +182,8 @@ if (playerRoleBtn) {
 if (spectatorRoleBtn) {
     spectatorRoleBtn.addEventListener("click", () => {
         selectedRole = "spectator";
-
         spectatorRoleBtn.classList.add("active");
-
-        if (playerRoleBtn) {
-            playerRoleBtn.classList.remove("active");
-        }
-
+        playerRoleBtn?.classList.remove("active");
         showSpectatorFields();
     });
 }
@@ -209,17 +197,13 @@ if (enterRoomBtn) {
         const guild = guildInput ? guildInput.value : "";
 
         if (!name) {
-            if (entryError) {
-                entryError.innerText = "Digite seu nome.";
-            }
+            if (entryError) entryError.innerText = "Digite seu nome.";
             return;
         }
 
         if (selectedRole === "player") {
             if (!deck) {
-                if (entryError) {
-                    entryError.innerText = "Selecione o deck.";
-                }
+                if (entryError) entryError.innerText = "Selecione o deck.";
                 return;
             }
 
@@ -228,21 +212,17 @@ if (enterRoomBtn) {
 
         try {
             await safeJoinRoom(roomId, {
-    role: selectedRole,
-    name,
-    deck: selectedRole === "spectator" ? "---" : deck,
-    guild: selectedRole === "spectator" ? "---" : guild,
-    format: roomFormat
-});
+                role: selectedRole,
+                name,
+                deck: selectedRole === "spectator" ? "---" : deck,
+                guild: selectedRole === "spectator" ? "---" : guild,
+                format: roomFormat
+            });
 
-            if (entryModal) {
-                entryModal.style.display = "none";
-            }
+            if (entryModal) entryModal.style.display = "none";
 
         } catch (error) {
-            if (entryError) {
-                entryError.innerText = "Erro ao entrar na sala: " + error.message;
-            }
+            if (entryError) entryError.innerText = "Erro ao entrar na sala: " + error.message;
         }
     });
 }
@@ -255,27 +235,22 @@ socket.on("assigned-role", (data) => {
     if (data.role === "spectator") {
         myPlayerNumber = null;
         selectedRole = "spectator";
-
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
-
         return;
     }
 
     if (data.role === "camera") {
         myPlayerNumber = null;
         selectedRole = "camera";
-
         document.body.classList.add("camera-mode");
         document.body.classList.remove("spectator-mode");
-
         return;
     }
 
     if (data.playerNumber) {
         myPlayerNumber = Number(data.playerNumber);
         selectedRole = "player";
-
         document.body.classList.remove("spectator-mode");
         document.body.classList.remove("camera-mode");
     }
@@ -292,6 +267,7 @@ socket.on("room-state", (state) => {
         const cameraCount = Array.isArray(state.cameraClients) ? state.cameraClients.length : 0;
 
         usersCountBtn.innerText = `👥 ${playersCount + spectatorsCount + cameraCount}`;
+        currentPlayersCount = playersCount;
     }
 
     const players = Array.isArray(state.players) ? state.players : [];
@@ -304,6 +280,10 @@ socket.on("room-state", (state) => {
 
     renderLifeHistory(state.lifeHistory || []);
     updateTimerDisplay(state.timer);
+
+    if (state.micStatus) {
+        updateMicIconsFromState(state);
+    }
 });
 
 function updatePlayerPanel(playerNumber, playerData) {
@@ -324,6 +304,181 @@ function updatePlayerPanel(playerNumber, playerData) {
         if (life) life.innerText = "20";
     }
 }
+
+/* =========================
+   MICROFONE MUTADO
+========================= */
+
+function updateLocalMutedIcon(micEnabled) {
+    if (!localMutedIcon) return;
+
+    if (micEnabled) {
+        localMutedIcon.classList.add("hidden");
+    } else {
+        localMutedIcon.classList.remove("hidden");
+    }
+}
+
+function updateRemoteMutedIcon(micEnabled) {
+    if (!remoteMutedIcon) return;
+
+    if (micEnabled) {
+        remoteMutedIcon.classList.add("hidden");
+    } else {
+        remoteMutedIcon.classList.remove("hidden");
+    }
+}
+
+function updateMicIconsFromState(state) {
+    const players = Array.isArray(state.players) ? state.players : [];
+    const micStatus = state.micStatus || {};
+
+    const me = players.find(p => Number(p.playerNumber) === myPlayerNumber);
+    const remote = players.find(p => Number(p.playerNumber) !== myPlayerNumber);
+
+    if (me && micStatus[me.socketId] !== undefined) {
+        updateLocalMutedIcon(micStatus[me.socketId]);
+    }
+
+    if (remote && micStatus[remote.socketId] !== undefined) {
+        updateRemoteMutedIcon(micStatus[remote.socketId]);
+    }
+}
+
+socket.on("mic-status-update", ({ socketId, micEnabled }) => {
+    if (socketId === socket.id) {
+        updateLocalMutedIcon(micEnabled);
+    } else {
+        updateRemoteMutedIcon(micEnabled);
+    }
+});
+
+/* =========================
+   DADOS DE INÍCIO
+========================= */
+
+window.toggleDiceOverlay = function() {
+    if (!diceOverlay) return;
+    diceOverlay.classList.toggle("hidden");
+};
+
+function setDiceFaces(d1, d2) {
+    if (diceOne) diceOne.innerText = diceSymbols[Math.max(1, d1) - 1] || "⚀";
+    if (diceTwo) diceTwo.innerText = diceSymbols[Math.max(1, d2) - 1] || "⚀";
+}
+
+function startDiceAnimation() {
+    if (!diceOne || !diceTwo) return;
+
+    diceOne.classList.add("rolling");
+    diceTwo.classList.add("rolling");
+
+    let counter = 0;
+
+    const interval = setInterval(() => {
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+
+        setDiceFaces(d1, d2);
+
+        counter++;
+
+        if (counter >= 12) {
+            clearInterval(interval);
+        }
+    }, 80);
+}
+
+function stopDiceAnimation(d1, d2) {
+    if (diceOne) diceOne.classList.remove("rolling");
+    if (diceTwo) diceTwo.classList.remove("rolling");
+
+    setDiceFaces(d1, d2);
+}
+
+if (rollDiceBtn) {
+    rollDiceBtn.addEventListener("click", () => {
+        if (selectedRole !== "player") {
+            alert("Apenas jogadores podem lançar dados.");
+            return;
+        }
+
+        if (currentPlayersCount < 2) {
+            if (diceResultText) {
+                diceResultText.innerText = "Aguardando o segundo jogador entrar para disputar o início.";
+            }
+            return;
+        }
+
+        if (diceOverlay) diceOverlay.classList.remove("hidden");
+
+        if (diceResultText) {
+            diceResultText.innerText = "Dados rolando...";
+        }
+
+        startDiceAnimation();
+
+        socket.emit("roll-dice", { roomId });
+    });
+}
+
+if (resetDiceBtn) {
+    resetDiceBtn.addEventListener("click", () => {
+        if (selectedRole !== "player") return;
+
+        socket.emit("reset-dice", { roomId });
+
+        setDiceFaces(1, 1);
+
+        if (diceResultText) {
+            diceResultText.innerText = "Cada jogador lança 2D6. Maior resultado escolhe se quer começar.";
+        }
+    });
+}
+
+socket.on("dice-rolled", (roll) => {
+    if (diceOverlay) diceOverlay.classList.remove("hidden");
+
+    setTimeout(() => {
+        stopDiceAnimation(roll.dice1, roll.dice2);
+
+        if (diceResultText) {
+            diceResultText.innerText =
+                `Jogador ${roll.playerNumber} rolou ${roll.dice1} + ${roll.dice2} = ${roll.total}.`;
+        }
+    }, 900);
+});
+
+socket.on("dice-winner", (data) => {
+    if (diceOverlay) diceOverlay.classList.remove("hidden");
+
+    setTimeout(() => {
+        if (diceResultText) {
+            diceResultText.innerText =
+                `🏆 ${data.message} Resultado: ${data.total}.`;
+        }
+    }, 1100);
+});
+
+socket.on("dice-draw", (data) => {
+    if (diceOverlay) diceOverlay.classList.remove("hidden");
+
+    setTimeout(() => {
+        setDiceFaces(1, 1);
+
+        if (diceResultText) {
+            diceResultText.innerText = data.message || "Empate! Lancem novamente.";
+        }
+    }, 1000);
+});
+
+socket.on("dice-reset", () => {
+    setDiceFaces(1, 1);
+
+    if (diceResultText) {
+        diceResultText.innerText = "Cada jogador lança 2D6. Maior resultado escolhe se quer começar.";
+    }
+});
 
 /* =========================
    VIDA
@@ -464,7 +619,10 @@ document.querySelectorAll(".rotate-btn").forEach(btn => {
         const video = btn.parentElement.querySelector("video");
         if (!video) return;
 
-        video.style.transform = video.style.transform === "rotate(180deg)" ? "rotate(0deg)" : "rotate(180deg)";
+        video.style.transform =
+            video.style.transform === "rotate(180deg)"
+                ? "rotate(0deg)"
+                : "rotate(180deg)";
     });
 });
 
@@ -606,8 +764,45 @@ window.clearLifeHistory = function() {
 };
 
 /* =========================
-   CHAT
+   CHAT / EMOTES
 ========================= */
+
+function injectChatEmotes() {
+    const emojiBar = document.querySelector(".emoji-bar");
+    if (!emojiBar) return;
+
+    emojiBar.innerHTML = "";
+
+    const emotes = [
+        { emoji: "🔥", label: "Fogo" },
+        { emoji: "😂", label: "Rindo" },
+        { emoji: "😱", label: "Surpreso" },
+        { emoji: "👏", label: "Palmas" },
+        { emoji: "❤️", label: "Coração" },
+        { emoji: "🤫", label: "Silêncio" },
+        { emoji: "🙏", label: "Fé" },
+        { emoji: "👍", label: "Joinha" },
+        { emoji: "😴", label: "Dormindo" },
+        { emoji: "😈", label: "Capetinha" },
+        { emoji: "🤨", label: "Duvidando" },
+        { emoji: "🤔", label: "Pensativo" }
+    ];
+
+    emotes.forEach(item => {
+        const button = document.createElement("button");
+        button.className = "emoji-btn";
+        button.innerText = item.emoji;
+        button.title = item.label;
+
+        button.addEventListener("click", () => {
+            sendChatMessage(item.emoji, "emoji");
+        });
+
+        emojiBar.appendChild(button);
+    });
+}
+
+injectChatEmotes();
 
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener("click", () => {
@@ -664,12 +859,6 @@ if (chatInput) {
         }
     });
 }
-
-document.querySelectorAll(".emoji-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-        sendChatMessage(btn.innerText, "emoji");
-    });
-});
 
 socket.on("chat-message", (data) => {
     renderChatMessage(data);
