@@ -1440,9 +1440,6 @@ body.spectator-mode video{
     background:#000;
 }
 
-body.spectator-mode .camera-card:first-child video{
-    transform:rotate(180deg);
-}
 
 body.spectator-mode .camera-title{
     font-size:18px;
@@ -1834,4 +1831,14 @@ body.spectator-mode .bottom-bar,
 body.spectator-mode .layout-buttons,
 body.spectator-mode .bottom-toggle{
     display:none !important;
+}
+.leave-spectator-btn{
+    background:linear-gradient(135deg,#7f1d1d,#dc2626);
+    border:none;
+    color:white;
+    font-weight:800;
+}
+
+.leave-spectator-btn:hover{
+    background:linear-gradient(135deg,#991b1b,#ef4444);
 }

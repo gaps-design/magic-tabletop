@@ -1064,19 +1064,37 @@ socket.on("chat-cooldown", (data) => {
 });
 
 function renderChatMessage(data) {
-    const container = document.getElementById("chatMessages");
-    if (!container) return;
 
-    const div = document.createElement("div");
-    div.className = "chat-message";
-
-    div.innerHTML = `
+    const messageHtml = `
         <strong>${data.name || "Usuário"}:</strong>
         <span>${data.message}</span>
     `;
 
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    // CHAT NORMAL
+    const container = document.getElementById("chatMessages");
+
+    if (container) {
+
+        const div = document.createElement("div");
+        div.className = "chat-message";
+        div.innerHTML = messageHtml;
+
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // CHAT ESPECTADOR
+    const spectatorContainer = document.getElementById("spectatorChatMessages");
+
+    if (spectatorContainer) {
+
+        const spectatorDiv = document.createElement("div");
+        spectatorDiv.className = "chat-message";
+        spectatorDiv.innerHTML = messageHtml;
+
+        spectatorContainer.appendChild(spectatorDiv);
+        spectatorContainer.scrollTop = spectatorContainer.scrollHeight;
+    }
 }
 
 function spawnFloatingEmoji(emoji) {
@@ -1143,3 +1161,18 @@ renderDiceHistory();
 ========================= */
 
 console.log("Sala.js carregado com sucesso");
+const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
+
+if (currentRole === "spectator" && leaveSpectatorBtn) {
+    leaveSpectatorBtn.classList.remove("hidden");
+
+    leaveSpectatorBtn.addEventListener("click", () => {
+
+        if (window.opener && !window.opener.closed) {
+            window.close();
+        } else {
+            window.location.href = "/";
+        }
+
+    });
+}
