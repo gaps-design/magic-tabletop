@@ -26,17 +26,25 @@ const PUBLIC_TABLES = [
   "mtg-1006", "mtg-1007", "mtg-1008", "mtg-1009", "mtg-1010", "mtg-1011"
 ];
 
+function isResenhaRoom(roomId) {
+  return roomId === "mtg-1002";
+}
+
 function buildLobbyState() {
   return PUBLIC_TABLES.map(roomId => {
     const room = rooms[roomId];
 
+    const players = room?.players?.length || 0;
+    const isResenha = isResenhaRoom(roomId);
+
     return {
       roomId,
-      format: room?.format || (roomId === "mtg-1002" ? "Mesa da Resenha" : "Formato livre"),
-      players: room?.players?.length || 0,
+      format: room?.format || (isResenha ? "Mesa da Resenha" : "Formato livre"),
+      players,
       spectators: room?.spectators?.length || 0,
       cameras: room?.cameraClients?.length || 0,
-      isResenha: roomId === "mtg-1002"
+      isResenha,
+      isFull: !isResenha && players >= 2
     };
   });
 }
@@ -44,10 +52,6 @@ function buildLobbyState() {
 function broadcastLobbyState() {
   io.emit("lobby-state", buildLobbyState());
 }
-
-/* =========================
-   TIMER
-========================= */
 
 function createDefaultTimer() {
   return {
@@ -66,10 +70,6 @@ function publicTimer(timer) {
   };
 }
 
-/* =========================
-   ROOM
-========================= */
-
 function ensureRoom(roomId) {
   if (!rooms[roomId]) {
     rooms[roomId] = {
@@ -77,8 +77,10 @@ function ensureRoom(roomId) {
       spectators: [],
       cameraClients: [],
       lifeHistory: [],
-      format: roomId === "mtg-1002" ? "Mesa da Resenha" : "",
-      timer: createDefaultTimer()
+      format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
+      timer: createDefaultTimer(),
+      diceRolls: [],
+      micStatus: {}
     };
   }
 
@@ -95,24 +97,22 @@ function sendRoomState(roomId) {
     cameraClients: room.cameraClients,
     lifeHistory: room.lifeHistory,
     timer: publicTimer(room.timer),
-    format: room.format
+    format: room.format,
+    diceRolls: room.diceRolls,
+    micStatus: room.micStatus
   });
 }
 
-/* =========================
-   CLIENT INFO
-========================= */
-
 function getClientInfo(socketId) {
   const profile = clientProfiles[socketId];
-
   if (!profile) return null;
 
   return {
     role: profile.role,
     playerNumber: profile.playerNumber,
     linkedPlayer: profile.linkedPlayer,
-    name: profile.name
+    name: profile.name,
+    micEnabled: profile.micEnabled
   };
 }
 
@@ -124,9 +124,49 @@ function isPlayerInRoom(room, socketId) {
   return room.players.some(p => p.socketId === socketId);
 }
 
-/* =========================
-   REMOVE USER
-========================= */
+function addSpectator(socket, roomId, name, reason = "") {
+  const room = ensureRoom(roomId);
+
+  if (!room.spectators.includes(socket.id)) {
+    room.spectators.push(socket.id);
+  }
+
+  clientProfiles[socket.id] = {
+    role: "spectator",
+    name,
+    micEnabled: true
+  };
+
+  socket.emit("assigned-role", {
+    role: "spectator",
+    reason
+  });
+
+  socket.emit("existing-peers", {
+    peers: [
+      ...room.players.map(p => ({
+        socketId: p.socketId,
+        role: "player",
+        playerNumber: p.playerNumber,
+        name: p.name
+      })),
+      ...room.cameraClients.map(c => ({
+        socketId: c.socketId,
+        role: "camera",
+        linkedPlayer: c.linkedPlayer
+      }))
+    ]
+  });
+
+  socket.to(roomId).emit("user-connected", {
+    socketId: socket.id,
+    role: "spectator",
+    name
+  });
+
+  sendRoomState(roomId);
+  broadcastLobbyState();
+}
 
 function removeSocketFromAllRooms(socketId) {
   let changedLobby = false;
@@ -142,12 +182,13 @@ function removeSocketFromAllRooms(socketId) {
     room.players = room.players.filter(p => p.socketId !== socketId);
     room.spectators = room.spectators.filter(id => id !== socketId);
     room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
+    room.diceRolls = room.diceRolls.filter(r => r.socketId !== socketId);
+
+    delete room.micStatus[socketId];
 
     if (wasInside) {
       changedLobby = true;
-
       io.to(roomId).emit("user-disconnected", socketId);
-
       sendRoomState(roomId);
     }
 
@@ -156,10 +197,7 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.length === 0 &&
       room.cameraClients.length === 0
     ) {
-      if (room.timer?.interval) {
-        clearInterval(room.timer.interval);
-      }
-
+      if (room.timer?.interval) clearInterval(room.timer.interval);
       delete rooms[roomId];
       changedLobby = true;
     }
@@ -168,23 +206,13 @@ function removeSocketFromAllRooms(socketId) {
   delete chatControl[socketId];
   delete clientProfiles[socketId];
 
-  if (changedLobby) {
-    broadcastLobbyState();
-  }
+  if (changedLobby) broadcastLobbyState();
 }
-
-/* =========================
-   SOCKET CONNECTION
-========================= */
 
 io.on("connection", (socket) => {
   console.log("Conectado:", socket.id);
 
   socket.emit("lobby-state", buildLobbyState());
-
-  /* =========================
-     JOIN ROOM
-  ========================= */
 
   socket.on("join-room", (data = {}) => {
     const roomId = data.roomId;
@@ -193,72 +221,27 @@ io.on("connection", (socket) => {
     removeSocketFromAllRooms(socket.id);
 
     const user = data.user || {};
-
     const role = data.role || user.role || "player";
     const name = data.name || user.name || "Usuário";
     const deck = data.deck || user.deck || "---";
     const guild = data.guild || user.guild || "---";
     const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || 0);
+    const incomingFormat = data.format || "";
 
     const room = ensureRoom(roomId);
 
-const incomingFormat = data.format || "";
-
-if (roomId === "mtg-1002") {
-  room.format = "Mesa da Resenha";
-} else if (incomingFormat) {
-  room.format = incomingFormat;
-}
+    if (isResenhaRoom(roomId)) {
+      room.format = "Mesa da Resenha";
+    } else if (!room.format && incomingFormat && room.players.length === 0) {
+      room.format = incomingFormat;
+    }
 
     socket.join(roomId);
 
-    /* =========================
-       SPECTATOR
-    ========================= */
-
     if (role === "spectator") {
-      room.spectators.push(socket.id);
-
-      clientProfiles[socket.id] = {
-        role: "spectator",
-        name
-      };
-
-      socket.emit("assigned-role", {
-        role: "spectator"
-      });
-
-      socket.emit("existing-peers", {
-        peers: [
-          ...room.players.map(p => ({
-            socketId: p.socketId,
-            role: "player",
-            playerNumber: p.playerNumber,
-            name: p.name
-          })),
-          ...room.cameraClients.map(c => ({
-            socketId: c.socketId,
-            role: "camera",
-            linkedPlayer: c.linkedPlayer
-          }))
-        ]
-      });
-
-      socket.to(roomId).emit("user-connected", {
-        socketId: socket.id,
-        role: "spectator",
-        name
-      });
-
-      sendRoomState(roomId);
-      broadcastLobbyState();
-
+      addSpectator(socket, roomId, name, "spectator-choice");
       return;
     }
-
-    /* =========================
-       CAMERA
-    ========================= */
 
     if (role === "camera") {
       if (![1, 2].includes(linkedPlayer)) {
@@ -277,8 +260,11 @@ if (roomId === "mtg-1002") {
       clientProfiles[socket.id] = {
         role: "camera",
         linkedPlayer,
-        name
+        name,
+        micEnabled: true
       };
+
+      room.micStatus[socket.id] = true;
 
       socket.emit("assigned-role", {
         role: "camera",
@@ -304,21 +290,20 @@ if (roomId === "mtg-1002") {
 
       sendRoomState(roomId);
       broadcastLobbyState();
-
       return;
     }
 
-    /* =========================
-       PLAYER
-    ========================= */
-
-    if (room.players.length >= 2) {
-      socket.emit("room-full");
+    if (!isResenhaRoom(roomId) && room.players.length >= 2) {
+      addSpectator(socket, roomId, name, "room-full");
       return;
     }
 
     const usedNumbers = room.players.map(p => p.playerNumber);
-    const playerNumber = usedNumbers.includes(1) ? 2 : 1;
+    let playerNumber = 1;
+
+    while (usedNumbers.includes(playerNumber)) {
+      playerNumber++;
+    }
 
     const player = {
       socketId: socket.id,
@@ -334,8 +319,11 @@ if (roomId === "mtg-1002") {
     clientProfiles[socket.id] = {
       role: "player",
       playerNumber,
-      name
+      name,
+      micEnabled: true
     };
+
+    room.micStatus[socket.id] = true;
 
     socket.emit("assigned-role", {
       role: "player",
@@ -371,9 +359,91 @@ if (roomId === "mtg-1002") {
     broadcastLobbyState();
   });
 
-  /* =========================
-     WEBRTC
-  ========================= */
+  socket.on("roll-dice", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+
+    const alreadyRolled = room.diceRolls.some(r => r.socketId === socket.id);
+    if (alreadyRolled) return;
+
+    const dice1 = Math.floor(Math.random() * 6) + 1;
+    const dice2 = Math.floor(Math.random() * 6) + 1;
+    const total = dice1 + dice2;
+
+    const roll = {
+      socketId: socket.id,
+      playerNumber: player.playerNumber,
+      playerName: player.name,
+      dice1,
+      dice2,
+      total,
+      time: new Date().toLocaleTimeString("pt-BR")
+    };
+
+    room.diceRolls.push(roll);
+
+    io.to(roomId).emit("dice-rolled", roll);
+
+    const activePlayers = room.players.length;
+
+    if (room.diceRolls.length >= Math.min(activePlayers, 2)) {
+      const sorted = [...room.diceRolls].sort((a, b) => b.total - a.total);
+      const top = sorted[0];
+      const second = sorted[1];
+
+      if (second && top.total === second.total) {
+        io.to(roomId).emit("dice-draw", {
+          message: "Empate nos dados! Lancem novamente."
+        });
+
+        room.diceRolls = [];
+        sendRoomState(roomId);
+        return;
+      }
+
+      io.to(roomId).emit("dice-winner", {
+        playerNumber: top.playerNumber,
+        playerName: top.playerName,
+        total: top.total,
+        message: `Jogador ${top.playerNumber} escolhe se quer começar.`
+      });
+    }
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("reset-dice", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!isPlayerInRoom(room, socket.id)) return;
+
+    room.diceRolls = [];
+
+    io.to(roomId).emit("dice-reset");
+    sendRoomState(roomId);
+  });
+
+  socket.on("update-mic-status", ({ roomId, micEnabled }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const profile = clientProfiles[socket.id];
+    if (!profile) return;
+
+    profile.micEnabled = !!micEnabled;
+    room.micStatus[socket.id] = !!micEnabled;
+
+    io.to(roomId).emit("mic-status-update", {
+      socketId: socket.id,
+      micEnabled: !!micEnabled,
+      info: getClientInfo(socket.id)
+    });
+
+    sendRoomState(roomId);
+  });
 
   socket.on("offer", ({ target, offer }) => {
     if (!target || !offer) return;
@@ -403,10 +473,6 @@ if (roomId === "mtg-1002") {
     });
   });
 
-  /* =========================
-     CHAT
-  ========================= */
-
   socket.on("chat-message", ({ roomId, message, type }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -432,7 +498,6 @@ if (roomId === "mtg-1002") {
       socket.emit("chat-cooldown", {
         remaining: Math.ceil((control.blockedUntil - now) / 1000)
       });
-
       return;
     }
 
@@ -454,10 +519,6 @@ if (roomId === "mtg-1002") {
     }
   });
 
-  /* =========================
-     LIFE
-  ========================= */
-
   socket.on("change-life", ({ roomId, playerNumber, amount }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -471,7 +532,6 @@ if (roomId === "mtg-1002") {
     if (isNaN(change)) return;
 
     const oldLife = player.life;
-
     player.life += change;
 
     room.lifeHistory.unshift({
@@ -500,7 +560,6 @@ if (roomId === "mtg-1002") {
     if (isNaN(newLife)) return;
 
     const oldLife = player.life;
-
     player.life = newLife;
 
     room.lifeHistory.unshift({
@@ -526,7 +585,6 @@ if (roomId === "mtg-1002") {
     if (player.playerNumber !== Number(playerNumber)) return;
 
     const oldLife = player.life;
-
     player.life = 20;
 
     room.lifeHistory.unshift({
@@ -542,14 +600,9 @@ if (roomId === "mtg-1002") {
     broadcastLobbyState();
   });
 
-  /* =========================
-     TIMER
-  ========================= */
-
   socket.on("set-timer", ({ roomId, minutes }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     if (!isPlayerInRoom(room, socket.id)) return;
 
     const seconds = Number(minutes) * 60;
@@ -565,15 +618,12 @@ if (roomId === "mtg-1002") {
     }
 
     io.to(roomId).emit("timer-update", publicTimer(room.timer));
-
     sendRoomState(roomId);
-    broadcastLobbyState();
   });
 
   socket.on("start-timer", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     if (!isPlayerInRoom(room, socket.id)) return;
     if (room.timer.running) return;
 
@@ -595,7 +645,6 @@ if (roomId === "mtg-1002") {
   socket.on("pause-timer", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.timer.running = false;
@@ -611,7 +660,6 @@ if (roomId === "mtg-1002") {
   socket.on("reset-timer", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.timer.remaining = room.timer.duration;
@@ -625,25 +673,14 @@ if (roomId === "mtg-1002") {
     io.to(roomId).emit("timer-update", publicTimer(room.timer));
   });
 
-  /* =========================
-     HISTORY
-  ========================= */
-
   socket.on("clear-life-history", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.lifeHistory = [];
-
     sendRoomState(roomId);
-    broadcastLobbyState();
   });
-
-  /* =========================
-     LEAVE
-  ========================= */
 
   socket.on("leave-room", ({ roomId }) => {
     removeSocketFromAllRooms(socket.id);

@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sala Magic Tabletop</title>
-
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
 
     <!-- MODAL ENTRADA -->
@@ -16,24 +16,18 @@
 
             <h2>Entrar na sala</h2>
 
-            <p id="entryRoomText">
-                Escolha como deseja entrar
-            </p>
+            <p id="entryRoomText">Escolha como deseja entrar</p>
 
             <div class="role-options">
 
                 <button id="playerRoleBtn" class="role-card active">
                     🎮 Jogador
-                    <span>
-                        Participa da partida com câmera.
-                    </span>
+                    <span>Participa da partida com câmera.</span>
                 </button>
 
                 <button id="spectatorRoleBtn" class="role-card">
                     👀 Espectador
-                    <span>
-                        Apenas assiste à partida.
-                    </span>
+                    <span>Apenas assiste à partida.</span>
                 </button>
 
             </div>
@@ -42,20 +36,13 @@
 
                 <label>
                     Nome do jogador *
-
-                    <input
-                        id="playerNameInput"
-                        type="text"
-                        placeholder="Ex: Guilherme"
-                    >
+                    <input id="playerNameInput" type="text" placeholder="Ex: Guilherme">
                 </label>
 
                 <label>
                     Nome do deck *
-
                     <select id="deckNameInput">
                         <option value="">Selecione o deck</option>
-
                         <option>Affinity</option>
                         <option>Aggro</option>
                         <option>Amulet Titan</option>
@@ -113,17 +100,13 @@
                         <option>Wizards</option>
                         <option>Yawgmoth</option>
                         <option>Zombies</option>
-
                     </select>
                 </label>
 
                 <label>
                     Tribo/Guilda
-
                     <select id="guildInput">
-
                         <option value="">Selecione a guilda</option>
-
                         <option>Sem Guilda</option>
                         <option>Tribal</option>
                         <option>Mono Black</option>
@@ -154,16 +137,12 @@
                         <option>Simic</option>
                         <option>Sultai</option>
                         <option>Temur</option>
-
                     </select>
                 </label>
 
             </div>
 
-            <button id="enterRoomBtn" class="enter-btn">
-                Entrar na sala
-            </button>
-
+            <button id="enterRoomBtn" class="enter-btn">Entrar na sala</button>
             <p id="entryError" class="entry-error"></p>
 
         </div>
@@ -174,86 +153,48 @@
     <header class="topbar">
 
         <div class="logo-area">
-
             <div>
-
                 <div class="logo-title">
-                <span class="logo-icon">🛡️</span>
-                <strong id="tableTitle">Mesa PvP</strong>
+                    <span class="logo-icon">🛡️</span>
+                    <strong id="tableTitle">Mesa PvP</strong>
                 </div>
 
                 <div id="formatText" class="format-room-text">
-                Formato: Livre
-             </div>
+                    Formato: Livre
+                </div>
 
                 <div class="room-info under-logo">
                     <span id="roomText">Sala:</span>
-
                     <span class="status-dot"></span>
-
-                    <span class="status-text">
-                        Conectado
-                    </span>
+                    <span class="status-text">Conectado</span>
                 </div>
-
             </div>
-
         </div>
 
-        <!-- TIMER -->
-
         <section class="match-tools top-timer">
-
             <div class="timer-box compact-timer">
 
-                <div id="timerDisplay" class="timer-display">
-                    50:00
-                </div>
+                <div id="timerDisplay" class="timer-display">50:00</div>
 
-                <button
-                    id="timerSettingsBtn"
-                    class="timer-toggle"
-                    onclick="toggleTimerControls()"
-                >
+                <button id="timerSettingsBtn" class="timer-toggle" onclick="toggleTimerControls()">
                     ⚙️
                 </button>
 
                 <div id="timerControls" class="timer-controls hidden">
-
-                    <input
-                        id="timerMinutesInput"
-                        type="number"
-                        placeholder="Min"
-                        value="50"
-                    >
-
+                    <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
                     <button onclick="setTimer()">Ajustar</button>
                     <button onclick="startTimer()">Start</button>
                     <button onclick="pauseTimer()">Pause</button>
                     <button onclick="resetTimer()">Reset</button>
-
                 </div>
 
             </div>
-
         </section>
 
-        <!-- TOPO DIREITA -->
-
         <div class="top-actions">
-
-            <button id="copyRoomBtn">
-                🔗 Copiar link da sala
-            </button>
-
-            <button id="usersCountBtn">
-                👥 0
-            </button>
-
-            <button id="settingsBtn">
-                ⚙️
-            </button>
-
+            <button id="copyRoomBtn">🔗 Copiar link da sala</button>
+            <button id="usersCountBtn">👥 0</button>
+            <button id="settingsBtn">⚙️</button>
         </div>
 
     </header>
@@ -264,134 +205,61 @@
 
         <!-- PLAYER 1 -->
 
-        <aside
-            id="playerPanel1"
-            class="player-panel player-one"
-        >
+        <aside id="playerPanel1" class="player-panel player-one">
 
-            <h2 id="player1Name">
-                Jogador 1
-            </h2>
+            <h2 id="player1Name">Jogador 1</h2>
 
             <div>
                 <span class="label">Vida</span>
-
-                <div id="player1Life" class="life life-blue">
-                    20
-                </div>
+                <div id="player1Life" class="life life-blue">20</div>
             </div>
 
-            <!-- VIDA OPONENTE -->
-
             <div class="opponent-life-wrapper">
-
-                <button
-                    class="toggle-opponent-life"
-                    onclick="toggleOpponentLife(1)"
-                >
+                <button class="toggle-opponent-life" onclick="toggleOpponentLife(1)">
                     ↔ Vida Oponente
                 </button>
 
-                <div
-                    id="opponentLifeBox1"
-                    class="opponent-life-box hidden"
-                >
-
-                    <span class="label">
-                        Vida do oponente
-                    </span>
-
-                    <div
-                        id="player1OpponentLife"
-                        class="life opponent-life"
-                    >
-                        20
-                    </div>
-
+                <div id="opponentLifeBox1" class="opponent-life-box hidden">
+                    <span class="label">Vida do oponente</span>
+                    <div id="player1OpponentLife" class="life opponent-life">20</div>
                 </div>
-
             </div>
 
             <div class="life-buttons">
-
-                <button data-player="1" data-amount="-1">
-                    -
-                </button>
-
-                <button data-player="1" data-amount="1">
-                    +
-                </button>
-
+                <button data-player="1" data-amount="-1">-</button>
+                <button data-player="1" data-amount="1">+</button>
             </div>
 
             <div class="manual-life-box">
-
-                <input
-                    id="manualLife1"
-                    type="number"
-                    placeholder="Ex: 3000"
-                >
-
-                <button onclick="setManualLife(1)">
-                    Aplicar
-                </button>
-
-                <button onclick="resetLife(1)">
-                    Reset
-                </button>
-
+                <input id="manualLife1" type="number" placeholder="Ex: 3000">
+                <button onclick="setManualLife(1)">Aplicar</button>
+                <button onclick="resetLife(1)">Reset</button>
             </div>
 
             <div class="player-history-box">
-
-                <button
-                    onclick="togglePlayerHistory(1)"
-                    class="history-small-btn"
-                >
+                <button onclick="togglePlayerHistory(1)" class="history-small-btn">
                     📜 Histórico
                 </button>
 
-                <button
-                    onclick="clearLifeHistory()"
-                    class="history-clear-small"
-                >
+                <button onclick="clearLifeHistory()" class="history-clear-small">
                     Limpar
                 </button>
 
-                <div
-                    id="lifeHistoryPanel1"
-                    class="player-life-history hidden"
-                >
-
+                <div id="lifeHistoryPanel1" class="player-life-history hidden">
                     <div id="lifeHistoryList1"></div>
-
                 </div>
-
             </div>
 
             <div class="player-info">
-
                 <div>
                     <span class="label">Deck</span>
-
-                    <strong id="player1Deck">
-                        Aguardando...
-                    </strong>
+                    <strong id="player1Deck">Aguardando...</strong>
                 </div>
 
                 <div>
-                    <span class="label">
-                        Tribo/Guilda
-                    </span>
-
-                    <strong
-                        id="player1Guild"
-                        class="guild-blue"
-                    >
-                        ---
-                    </strong>
+                    <span class="label">Tribo/Guilda</span>
+                    <strong id="player1Guild" class="guild-blue">---</strong>
                 </div>
-
             </div>
 
         </aside>
@@ -400,67 +268,71 @@
 
         <section class="video-area">
 
+            <!-- CÂMERA LOCAL -->
+
             <div class="camera-card camera-player-1">
 
                 <div class="camera-title">
-
                     <span class="blue-dot"></span>
-
-                    <strong id="localCameraTitle">
-                        Minha câmera
-                    </strong>
-
+                    <strong id="localCameraTitle">Minha câmera</strong>
                 </div>
 
-                <button class="rotate-btn">
-                    Inverter Mesa
-                </button>
+                <button class="rotate-btn">Inverter Mesa</button>
 
-                <video
-                    id="localVideo"
-                    autoplay
-                    playsinline
-                    muted
-                ></video>
+                <video id="localVideo" autoplay playsinline muted></video>
+
+                <div id="localMutedIcon" class="muted-icon hidden">🔇</div>
 
                 <div class="camera-status">
-
                     <span class="status-dot"></span>
-
                     Câmera ativa
-
                 </div>
 
             </div>
 
+            <!-- DADOS DE INÍCIO -->
+
+            <div id="diceOverlay" class="dice-overlay">
+
+                <div class="dice-title">🎲 Disputa de início</div>
+
+                <div class="dice-area">
+                    <div id="diceOne" class="dice-face">⚀</div>
+                    <div id="diceTwo" class="dice-face">⚀</div>
+                </div>
+
+                <button id="rollDiceBtn" class="roll-dice-btn">
+                    🎲 Lançar dados
+                </button>
+
+                <button id="resetDiceBtn" class="reset-dice-btn">
+                    🔄 Resetar dados
+                </button>
+
+                <div id="diceResultText" class="dice-result-text">
+                    Cada jogador lança 2D6. Maior resultado escolhe se quer começar.
+                </div>
+
+            </div>
+
+            <!-- CÂMERA REMOTA -->
+
             <div class="camera-card camera-player-2">
 
                 <div class="camera-title">
-
                     <span class="green-dot"></span>
-
-                    <strong id="remoteCameraTitle">
-                        Outro jogador
-                    </strong>
-
+                    <strong id="remoteCameraTitle">Outro jogador</strong>
                 </div>
 
-                <button class="rotate-btn">
-                    Inverter Mesa
-                </button>
+                <button class="rotate-btn">Inverter Mesa</button>
 
-                <video
-                    id="remoteVideo"
-                    autoplay
-                    playsinline
-                ></video>
+                <video id="remoteVideo" autoplay playsinline></video>
+
+                <div id="remoteMutedIcon" class="muted-icon hidden">🔇</div>
 
                 <div class="camera-status">
-
                     <span class="status-dot"></span>
-
                     Câmera ativa
-
                 </div>
 
             </div>
@@ -469,134 +341,61 @@
 
         <!-- PLAYER 2 -->
 
-        <aside
-            id="playerPanel2"
-            class="player-panel player-two"
-        >
+        <aside id="playerPanel2" class="player-panel player-two">
 
-            <h2 id="player2Name">
-                Jogador 2
-            </h2>
+            <h2 id="player2Name">Jogador 2</h2>
 
             <div>
                 <span class="label">Vida</span>
-
-                <div id="player2Life" class="life life-green">
-                    20
-                </div>
+                <div id="player2Life" class="life life-green">20</div>
             </div>
 
-            <!-- VIDA OPONENTE -->
-
             <div class="opponent-life-wrapper">
-
-                <button
-                    class="toggle-opponent-life"
-                    onclick="toggleOpponentLife(2)"
-                >
+                <button class="toggle-opponent-life" onclick="toggleOpponentLife(2)">
                     ↔ Vida Oponente
                 </button>
 
-                <div
-                    id="opponentLifeBox2"
-                    class="opponent-life-box hidden"
-                >
-
-                    <span class="label">
-                        Vida do oponente
-                    </span>
-
-                    <div
-                        id="player2OpponentLife"
-                        class="life opponent-life"
-                    >
-                        20
-                    </div>
-
+                <div id="opponentLifeBox2" class="opponent-life-box hidden">
+                    <span class="label">Vida do oponente</span>
+                    <div id="player2OpponentLife" class="life opponent-life">20</div>
                 </div>
-
             </div>
 
             <div class="life-buttons">
-
-                <button data-player="2" data-amount="-1">
-                    -
-                </button>
-
-                <button data-player="2" data-amount="1">
-                    +
-                </button>
-
+                <button data-player="2" data-amount="-1">-</button>
+                <button data-player="2" data-amount="1">+</button>
             </div>
 
             <div class="manual-life-box">
-
-                <input
-                    id="manualLife2"
-                    type="number"
-                    placeholder="Ex: 3000"
-                >
-
-                <button onclick="setManualLife(2)">
-                    Aplicar
-                </button>
-
-                <button onclick="resetLife(2)">
-                    Reset
-                </button>
-
+                <input id="manualLife2" type="number" placeholder="Ex: 3000">
+                <button onclick="setManualLife(2)">Aplicar</button>
+                <button onclick="resetLife(2)">Reset</button>
             </div>
 
             <div class="player-history-box">
-
-                <button
-                    onclick="togglePlayerHistory(2)"
-                    class="history-small-btn"
-                >
+                <button onclick="togglePlayerHistory(2)" class="history-small-btn">
                     📜 Histórico
                 </button>
 
-                <button
-                    onclick="clearLifeHistory()"
-                    class="history-clear-small"
-                >
+                <button onclick="clearLifeHistory()" class="history-clear-small">
                     Limpar
                 </button>
 
-                <div
-                    id="lifeHistoryPanel2"
-                    class="player-life-history hidden"
-                >
-
+                <div id="lifeHistoryPanel2" class="player-life-history hidden">
                     <div id="lifeHistoryList2"></div>
-
                 </div>
-
             </div>
 
             <div class="player-info">
-
                 <div>
                     <span class="label">Deck</span>
-
-                    <strong id="player2Deck">
-                        Aguardando...
-                    </strong>
+                    <strong id="player2Deck">Aguardando...</strong>
                 </div>
 
                 <div>
-                    <span class="label">
-                        Tribo/Guilda
-                    </span>
-
-                    <strong
-                        id="player2Guild"
-                        class="guild-green"
-                    >
-                        ---
-                    </strong>
+                    <span class="label">Tribo/Guilda</span>
+                    <strong id="player2Guild" class="guild-green">---</strong>
                 </div>
-
             </div>
 
         </aside>
@@ -607,87 +406,58 @@
 
     <div id="chatContainer" class="chat-container hidden">
 
-        <div class="chat-header">
-            💬 Chat da mesa
-        </div>
+        <div class="chat-header">💬 Chat da mesa</div>
 
         <div id="chatMessages" class="chat-messages"></div>
 
         <div class="chat-input-area">
-
-            <input
-                id="chatInput"
-                type="text"
-                placeholder="Digite uma mensagem..."
-            >
-
-            <button id="sendChatBtn">
-                Enviar
-            </button>
-
+            <input id="chatInput" type="text" placeholder="Digite uma mensagem...">
+            <button id="sendChatBtn">Enviar</button>
         </div>
 
         <div class="emoji-bar">
-
             <button class="emoji-btn">🔥</button>
             <button class="emoji-btn">😂</button>
             <button class="emoji-btn">😱</button>
             <button class="emoji-btn">👏</button>
             <button class="emoji-btn">❤️</button>
-
         </div>
 
     </div>
 
-    <!-- BOTÕES -->
+    <!-- BOTÕES DE LAYOUT -->
 
     <div class="layout-buttons">
-
-        <button id="dualViewBtn">
-            Dual View
-        </button>
-
-        <button id="focusViewBtn">
-            Focus Mode
-        </button>
-
+        <button id="dualViewBtn">Dual View</button>
+        <button id="focusViewBtn">Focus Mode</button>
     </div>
 
     <!-- BOTTOM -->
 
-    <button
-        id="bottomToggleBtn"
-        class="bottom-toggle"
-        onclick="toggleBottomBar()"
-    >
+    <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">
         ⌄
     </button>
 
-    <footer
-        id="bottomBar"
-        class="bottom-bar collapsed"
-    >
+    <footer id="bottomBar" class="bottom-bar collapsed">
 
         <div class="device-controls">
 
-           <button id="toggleMicBtn" class="control-item status-control">
-    🎙️
+            <button id="toggleMicBtn" class="control-item status-control">
+                🎙️
+                <div>
+                    <strong>Microfone</strong>
+                    <span id="micStatusText">Ativado</span>
+                </div>
+            </button>
 
-    <div>
-        <strong>Microfone</strong>
-        <span id="micStatusText">Ativado</span>
-    </div>
-</button>
+            <button id="toggleCameraBtn" class="control-item status-control">
+                🎥
+                <div>
+                    <strong>Câmera</strong>
+                    <span id="cameraStatusText">Ativada</span>
+                </div>
+            </button>
 
-<button id="toggleCameraBtn" class="control-item status-control">
-    🎥
-
-    <div>
-        <strong>Câmera</strong>
-        <span id="cameraStatusText">Ativada</span>
-    </div>
-    
-</button>
             <div class="control-item select-control">
                 <select id="cameraSelect"></select>
             </div>
@@ -700,26 +470,16 @@
 
         <div class="main-controls">
 
-            <button id="fullscreenBtn">
-                ⛶ Tela cheia
-            </button>
-
-            <button id="dualViewBtnBottom">
-                ▦ Layout 2 câmeras
-            </button>
+            <button id="fullscreenBtn">⛶ Tela cheia</button>
+            <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
 
             <button onclick="copyCameraLink()">
                 📷 Celular como câmera
             </button>
 
-            <button id="toggleChatBtn">
-                💬 Chat
-            </button>
+            <button id="toggleChatBtn">💬 Chat</button>
 
-            <button
-                class="leave-btn"
-                onclick="leaveRoom()"
-            >
+            <button class="leave-btn" onclick="leaveRoom()">
                 📞 Sair da sala
             </button>
 
@@ -727,7 +487,7 @@
 
     </footer>
 
-   <!-- SCRIPTS -->
+    <!-- SCRIPTS -->
 
     <script>
         function toggleBottomBar() {
@@ -759,43 +519,35 @@
             box.classList.toggle("hidden");
         }
     </script>
-    
- <script src="/socket.io/socket.io.js"></script>
-<script src="js/webrtc.js"></script>
-<script src="js/sala.js"></script>
 
-<script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script src="js/sala.js"></script>
 
-const params = new URLSearchParams(window.location.search);
+    <script>
+        const params = new URLSearchParams(window.location.search);
 
-const roomIdFromUrl = params.get("room");
-const formatFromUrl = params.get("format");
+        const roomIdFromUrl = params.get("room");
+        const formatFromUrl = params.get("format");
 
-const tableTitle = document.getElementById("tableTitle");
-const formatText = document.getElementById("formatText");
+        const tableTitle = document.getElementById("tableTitle");
+        const formatText = document.getElementById("formatText");
 
-if (roomIdFromUrl === "mtg-1002") {
+        if (roomIdFromUrl === "mtg-1002") {
+            tableTitle.innerText = "Mesa 02 — Mesa da Resenha";
+        } else if (roomIdFromUrl) {
+            tableTitle.innerText = `Mesa ${roomIdFromUrl.toUpperCase()}`;
+        }
 
-    tableTitle.innerText = "Mesa 02 — Mesa da Resenha";
+        if (formatFromUrl) {
+            const cleanFormat =
+                decodeURIComponent(formatFromUrl)
+                    .replaceAll("-", " ")
+                    .toUpperCase();
 
-} else if (roomIdFromUrl) {
-
-    tableTitle.innerText =
-        `Mesa ${roomIdFromUrl.toUpperCase()}`;
-}
-
-if (formatFromUrl) {
-
-    const cleanFormat =
-        decodeURIComponent(formatFromUrl)
-        .replaceAll("-", " ")
-        .toUpperCase();
-
-    formatText.innerText =
-        `Formato: ${cleanFormat}`;
-}
-
-</script>
+            formatText.innerText = `Formato: ${cleanFormat}`;
+        }
+    </script>
 
 </body>
 </html>
