@@ -1694,3 +1694,48 @@ body.spectator-mode .life{
         height:360px;
     }
 }
+/* =========================
+   CORREÇÃO FINAL ESPECTADOR
+========================= */
+
+body.spectator-mode .game-layout{
+    grid-template-columns:220px 1fr 220px !important;
+    gap:12px !important;
+}
+
+body.spectator-mode .video-area{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    grid-template-rows:none !important;
+    gap:14px !important;
+    height:100% !important;
+}
+
+body.spectator-mode .camera-card{
+    height:100% !important;
+}
+
+body.spectator-mode video{
+    width:100% !important;
+    height:100% !important;
+    object-fit:contain !important;
+    background:#000 !important;
+}
+
+body.spectator-mode .rotate-btn{
+    display:block !important;
+}
+
+body.spectator-mode .camera-card:first-child video{
+    transform:none !important;
+}
+
+body.spectator-mode .bottom-bar,
+body.spectator-mode .bottom-toggle,
+body.spectator-mode .layout-buttons,
+body.spectator-mode .manual-life-box,
+body.spectator-mode .life-vertical-buttons,
+body.spectator-mode .opponent-life-wrapper,
+body.spectator-mode .player-history-box{
+    display:none !important;
+}
