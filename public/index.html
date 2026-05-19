@@ -16,7 +16,6 @@
 
     <header class="topbar">
       <img src="/assets/logo.png" class="logo" alt="Magic Tabletop">
-
       <button class="login-btn">👤 Entrar</button>
     </header>
 
@@ -37,7 +36,7 @@
           <span></span>
         </div>
 
-        <button id="createRoom" class="create-btn">Criar nova sala +</button>
+        <button id="createPrivateRoom" class="create-btn">Criar sala privada +</button>
       </div>
 
       <div class="feature-cards">
@@ -67,34 +66,10 @@
         <button id="refreshRooms" class="refresh-btn">⟳ Atualizar</button>
       </div>
 
-      <div class="rooms-list">
+      <div class="resenha-area">
+        <div class="room-card resenha-card" data-room="mtg-1002" data-special="resenha">
+          <div class="format-badge">Mesa da Resenha</div>
 
-        <div class="room-card" data-room="mtg-1001">
-          <h3>MTG-1001</h3>
-
-          <div class="table-image">
-            <img src="/assets/mesa.jpg" alt="Mesa 01">
-            <strong>01</strong>
-          </div>
-
-          <div class="room-info">
-            <div>
-              <span>👥</span>
-              <strong>0/2</strong>
-              <small>Jogadores</small>
-            </div>
-
-            <div>
-              <span>👁️</span>
-              <strong>0</strong>
-              <small>Espectadores</small>
-            </div>
-          </div>
-
-          <button class="enter-table-btn">Entrar na mesa →</button>
-        </div>
-
-        <div class="room-card" data-room="mtg-1002">
           <h3>MTG-1002</h3>
 
           <div class="table-image">
@@ -102,11 +77,19 @@
             <strong>02</strong>
           </div>
 
+          <p class="resenha-text">A lendária mesa sem ponta. Os antigos sabem...</p>
+
           <div class="room-info">
             <div>
-              <span>👥</span>
+              <span>🎥</span>
               <strong>0/2</strong>
-              <small>Jogadores</small>
+              <small>Câmeras ativas</small>
+            </div>
+
+            <div>
+              <span>👥</span>
+              <strong>0</strong>
+              <small>Fila/Resenha</small>
             </div>
 
             <div>
@@ -116,31 +99,135 @@
             </div>
           </div>
 
+          <button class="enter-table-btn">Entrar na resenha →</button>
+        </div>
+      </div>
+
+      <div class="rooms-list">
+
+        <div class="room-card" data-room="mtg-1001">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1001</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 01">
+            <strong>01</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
           <button class="enter-table-btn">Entrar na mesa →</button>
         </div>
 
         <div class="room-card" data-room="mtg-1003">
+          <div class="format-badge">Formato livre</div>
           <h3>MTG-1003</h3>
-
           <div class="table-image">
             <img src="/assets/mesa.jpg" alt="Mesa 03">
             <strong>03</strong>
           </div>
-
           <div class="room-info">
-            <div>
-              <span>👥</span>
-              <strong>0/2</strong>
-              <small>Jogadores</small>
-            </div>
-
-            <div>
-              <span>👁️</span>
-              <strong>0</strong>
-              <small>Espectadores</small>
-            </div>
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
           </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
 
+        <div class="room-card" data-room="mtg-1004">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1004</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 04">
+            <strong>04</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1005">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1005</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 05">
+            <strong>05</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1006">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1006</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 06">
+            <strong>06</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1007">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1007</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 07">
+            <strong>07</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1008">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1008</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 08">
+            <strong>08</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1009">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1009</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 09">
+            <strong>09</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1010">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1010</h3>
+          <div class="table-image">
+            <img src="/assets/mesa.jpg" alt="Mesa 10">
+            <strong>10</strong>
+          </div>
+          <div class="room-info">
+            <div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          </div>
           <button class="enter-table-btn">Entrar na mesa →</button>
         </div>
 
@@ -149,18 +236,18 @@
 
     <section class="info-bar">
       <div>
-        <strong>👥 Máximo de 2 jogadores</strong>
-        <p>Cada mesa comporta até 2 jogadores.</p>
+        <strong>⚔️ Mesas públicas</strong>
+        <p>Mesas 01 e 03 a 10 para partidas padrão com até 2 jogadores.</p>
       </div>
 
       <div>
-        <strong>📹 Câmera do celular</strong>
-        <p>Use o celular para transmitir sua mesa.</p>
+        <strong>🔥 Mesa 02 da Resenha</strong>
+        <p>Mesa sem ponta, fila livre e câmera ativa para quem está jogando.</p>
       </div>
 
       <div>
-        <strong>👁️ Espectadores</strong>
-        <p>Convide amigos para assistir às partidas.</p>
+        <strong>🔒 Salas privadas</strong>
+        <p>Crie uma sala invisível e envie o link apenas para seu oponente.</p>
       </div>
     </section>
 
@@ -170,6 +257,27 @@
     </footer>
 
   </main>
+
+  <div id="formatModal" class="format-modal">
+    <div class="format-box">
+      <h2>Escolha o formato</h2>
+      <p>Esse formato aparecerá no topo da mesa.</p>
+
+      <select id="formatSelect">
+        <option value="Modern">Modern</option>
+        <option value="Pauper">Pauper</option>
+        <option value="Commander">Commander</option>
+        <option value="Standard">Standard</option>
+        <option value="Casual">Casual</option>
+        <option value="Limitado">Limitado</option>
+      </select>
+
+      <div class="format-actions">
+        <button id="cancelFormat">Cancelar</button>
+        <button id="confirmFormat">Entrar na mesa</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/home.js"></script>
 </body>

@@ -178,9 +178,13 @@
             <div>
 
                 <div class="logo-title">
-                    <span class="logo-icon">🛡️</span>
-                    <strong>Mesa PvP</strong>
+                <span class="logo-icon">🛡️</span>
+                <strong id="tableTitle">Mesa PvP</strong>
                 </div>
+
+                <div id="formatText" class="format-room-text">
+                Formato: Livre
+             </div>
 
                 <div class="room-info under-logo">
                     <span id="roomText">Sala:</span>
@@ -755,10 +759,43 @@
             box.classList.toggle("hidden");
         }
     </script>
+    
+ <script src="/socket.io/socket.io.js"></script>
+<script src="js/webrtc.js"></script>
+<script src="js/sala.js"></script>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/webrtc.js"></script>
-    <script src="js/sala.js"></script>
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const roomIdFromUrl = params.get("room");
+const formatFromUrl = params.get("format");
+
+const tableTitle = document.getElementById("tableTitle");
+const formatText = document.getElementById("formatText");
+
+if (roomIdFromUrl === "mtg-1002") {
+
+    tableTitle.innerText = "Mesa 02 — Mesa da Resenha";
+
+} else if (roomIdFromUrl) {
+
+    tableTitle.innerText =
+        `Mesa ${roomIdFromUrl.toUpperCase()}`;
+}
+
+if (formatFromUrl) {
+
+    const cleanFormat =
+        decodeURIComponent(formatFromUrl)
+        .replaceAll("-", " ")
+        .toUpperCase();
+
+    formatText.innerText =
+        `Formato: ${cleanFormat}`;
+}
+
+</script>
 
 </body>
 </html>
