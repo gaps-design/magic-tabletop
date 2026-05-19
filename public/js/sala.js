@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 
 let roomId = params.get("room");
 const cameraFor = params.get("cameraFor");
+const forcedRole = params.get("role");
 const roomFormat = params.get("format") || "Formato livre";
 
 function generateRoomId() {
@@ -66,7 +67,10 @@ const diceHistoryList = document.getElementById("diceHistoryList");
 const localMutedIcon = document.getElementById("localMutedIcon");
 const remoteMutedIcon = document.getElementById("remoteMutedIcon");
 
-let selectedRole = "player";
+let selectedRole =
+    forcedRole === "spectator"
+        ? "spectator"
+        : "player";
 let myPlayerNumber = null;
 let currentPlayersCount = 0;
 let currentPlayers = [];
@@ -114,6 +118,29 @@ function savePlayerData() {
 }
 
 loadSavedPlayerData();
+
+/* =========================
+   ENTRADA FORÇADA ESPECTADOR
+========================= */
+
+if (forcedRole === "spectator") {
+
+    selectedRole = "spectator";
+
+    if (playerRoleBtn) {
+        playerRoleBtn.classList.remove("active");
+    }
+
+    if (spectatorRoleBtn) {
+        spectatorRoleBtn.classList.add("active");
+    }
+
+    showSpectatorFields();
+
+    if (entryError) {
+        entryError.innerText = "Sala cheia. Entrando como espectador.";
+    }
+}
 
 /* =========================
    MODAL ENTRADA

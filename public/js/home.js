@@ -10,18 +10,20 @@ const confirmFormat = document.getElementById("confirmFormat");
 const cancelFormat = document.getElementById("cancelFormat");
 
 let selectedRoomId = null;
+let lobbyTables = {};
 
 function normalizeRoomCode(value) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
-function enterRoom(roomId, format = "casual") {
+function enterRoom(roomId, format = "Formato livre", role = "player") {
   if (!roomId) {
     alert("Digite o código da mesa.");
     return;
   }
 
-  const url = `/sala.html?room=${roomId}&format=${encodeURIComponent(format)}`;
+  const url =
+    `/sala.html?room=${roomId}&format=${encodeURIComponent(format)}&role=${role}`;
 
   window.open(url, "_blank");
 }
@@ -37,15 +39,13 @@ function closeFormatModal() {
 }
 
 createPrivateRoomButton.addEventListener("click", () => {
-
   const randomCode =
     "private-" + Math.floor(100000 + Math.random() * 900000);
 
-  enterRoom(randomCode, "privado");
+  openFormatModal(randomCode);
 });
 
 joinRoomBtn.addEventListener("click", () => {
-
   const roomId = normalizeRoomCode(roomCodeInput.value);
 
   if (!roomId) {
@@ -53,38 +53,46 @@ joinRoomBtn.addEventListener("click", () => {
     return;
   }
 
+  const table = lobbyTables[roomId];
+
+  if (table?.isFull) {
+    enterRoom(roomId, table.format || "Formato livre", "spectator");
+    return;
+  }
+
+  if (table?.players > 0) {
+    enterRoom(roomId, table.format || "Formato livre", "player");
+    return;
+  }
+
   openFormatModal(roomId);
 });
 
 roomCodeInput.addEventListener("keydown", (event) => {
-
   if (event.key === "Enter") {
-
-    const roomId = normalizeRoomCode(roomCodeInput.value);
-
-    if (!roomId) {
-      alert("Digite o código da mesa.");
-      return;
-    }
-
-    openFormatModal(roomId);
+    joinRoomBtn.click();
   }
 });
 
 enterTableButtons.forEach((button) => {
-
   button.addEventListener("click", () => {
-
     const card = button.closest(".room-card");
-
     const roomId = card.dataset.room;
-
-    const isResenha =
-      card.dataset.special === "resenha";
+    const table = lobbyTables[roomId];
+    const isResenha = card.dataset.special === "resenha";
 
     if (isResenha) {
+      enterRoom(roomId, "Mesa da Resenha", "player");
+      return;
+    }
 
-      enterRoom(roomId, "mesa-da-resenha");
+    if (table?.isFull) {
+      enterRoom(roomId, table.format || "Formato livre", "spectator");
+      return;
+    }
+
+    if (table?.players > 0) {
+      enterRoom(roomId, table.format || "Formato livre", "player");
       return;
     }
 
@@ -93,12 +101,11 @@ enterTableButtons.forEach((button) => {
 });
 
 confirmFormat.addEventListener("click", () => {
-
   if (!selectedRoomId) return;
 
   const selectedFormat = formatSelect.value;
 
-  enterRoom(selectedRoomId, selectedFormat);
+  enterRoom(selectedRoomId, selectedFormat, "player");
 });
 
 cancelFormat.addEventListener("click", () => {
@@ -106,7 +113,6 @@ cancelFormat.addEventListener("click", () => {
 });
 
 formatModal.addEventListener("click", (event) => {
-
   if (event.target === formatModal) {
     closeFormatModal();
   }
@@ -123,79 +129,53 @@ refreshRoomsButton.addEventListener("click", () => {
 const socket = io();
 
 socket.on("lobby-state", (tables) => {
-
   if (!Array.isArray(tables)) return;
 
   tables.forEach((table) => {
+    lobbyTables[table.roomId] = table;
 
     const card =
       document.querySelector(`[data-room="${table.roomId}"]`);
 
     if (!card) return;
 
-    /* =========================
-       FORMATO
-    ========================= */
-
     const formatBadge =
       card.querySelector(".format-badge");
 
     if (formatBadge) {
-
       formatBadge.innerText =
         table.format || "Formato livre";
     }
-
-    /* =========================
-       INFO
-    ========================= */
 
     const strongs =
       card.querySelectorAll(".room-info strong");
 
     if (table.isResenha) {
-
-      if (strongs[0]) {
-        strongs[0].innerText =
-          `${table.cameras}/2`;
-      }
-
-      if (strongs[1]) {
-        strongs[1].innerText =
-          table.players;
-      }
-
-      if (strongs[2]) {
-        strongs[2].innerText =
-          table.spectators;
-      }
-
+      if (strongs[0]) strongs[0].innerText = `${table.cameras}/2`;
+      if (strongs[1]) strongs[1].innerText = table.players;
+      if (strongs[2]) strongs[2].innerText = table.spectators;
     } else {
-
-      if (strongs[0]) {
-        strongs[0].innerText =
-          `${table.players}/2`;
-      }
-
-      if (strongs[1]) {
-        strongs[1].innerText =
-          table.spectators;
-      }
+      if (strongs[0]) strongs[0].innerText = `${table.players}/2`;
+      if (strongs[1]) strongs[1].innerText = table.spectators;
     }
 
-    /* =========================
-       STATUS VISUAL
-    ========================= */
+    const button =
+      card.querySelector(".enter-table-btn");
 
-    if (!table.isResenha) {
+    if (!button) return;
 
-      if (table.players >= 2) {
+    if (!table.isResenha && table.isFull) {
+      card.classList.add("table-full");
+      button.classList.add("full-btn");
+      button.innerText = "Sala cheia — assistir 👁️";
+    } else {
+      card.classList.remove("table-full");
+      button.classList.remove("full-btn");
 
-        card.classList.add("table-full");
-
+      if (table.isResenha) {
+        button.innerText = "Entrar na resenha →";
       } else {
-
-        card.classList.remove("table-full");
+        button.innerText = "Entrar na mesa →";
       }
     }
   });
