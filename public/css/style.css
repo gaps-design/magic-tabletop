@@ -1866,3 +1866,25 @@ body.spectator-mode .bottom-toggle{
 .leave-spectator-btn:hover{
     background:linear-gradient(135deg,#991b1b,#ef4444);
 }
+.spectator-chat-input-area{
+    display:flex;
+    gap:8px;
+    padding:10px;
+    border-top:1px solid rgba(255,255,255,0.08);
+}
+
+.spectator-chat-input-area input{
+    flex:1;
+    background:#071421;
+    border:none;
+    color:white;
+    border-radius:10px;
+    padding:10px;
+    outline:none;
+}
+
+.spectator-chat-input-area button{
+    background:linear-gradient(135deg,#2563eb,#38bdf8);
+    border:none;
+    font-weight:800;
+}

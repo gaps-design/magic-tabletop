@@ -750,8 +750,6 @@ window.copyCameraLink = async function() {
 
 document.querySelectorAll(".rotate-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-        if (selectedRole === "spectator") return;
-
         const video = btn.parentElement.querySelector("video");
         if (!video) return;
 
@@ -1174,5 +1172,44 @@ if (currentRole === "spectator" && leaveSpectatorBtn) {
             window.location.href = "/";
         }
 
+    });
+}
+const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
+
+if (leaveSpectatorBtn) {
+    if (selectedRole === "spectator") {
+        leaveSpectatorBtn.classList.remove("hidden");
+    }
+
+    leaveSpectatorBtn.addEventListener("click", () => {
+        socket.emit("leave-room", { roomId });
+
+        setTimeout(() => {
+            window.close();
+
+            setTimeout(() => {
+                window.location.href = "/";
+            }, 200);
+        }, 300);
+    });
+}
+const spectatorChatInput = document.getElementById("spectatorChatInput");
+const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
+
+if (sendSpectatorChatBtn) {
+    sendSpectatorChatBtn.addEventListener("click", () => {
+        if (!spectatorChatInput) return;
+
+        sendChatMessage(spectatorChatInput.value, "text");
+        spectatorChatInput.value = "";
+    });
+}
+
+if (spectatorChatInput) {
+    spectatorChatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            sendChatMessage(spectatorChatInput.value, "text");
+            spectatorChatInput.value = "";
+        }
     });
 }
