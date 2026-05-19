@@ -4,39 +4,28 @@ let roomId = params.get("room");
 const cameraFor = params.get("cameraFor");
 const roomFormat = params.get("format") || "Formato livre";
 
-/* =========================
-   PROTEÇÃO DA SALA
-========================= */
-
 function generateRoomId() {
     return "sala-" + Math.random().toString(36).substring(2, 8);
 }
 
 if (!roomId || roomId === "null" || roomId === "undefined") {
     roomId = generateRoomId();
-
     const newUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     window.history.replaceState({}, "", newUrl);
 }
 
-/* =========================
-   FUNÇÃO SEGURA PARA ENTRAR
-========================= */
-
 async function safeJoinRoom(roomId, data) {
-    if (!roomId) {
-        throw new Error("Sala inválida.");
-    }
+    if (!roomId) throw new Error("Sala inválida.");
 
     if (typeof joinRoom !== "function") {
-        throw new Error("Função joinRoom não carregou. Verifique se o webrtc.js está antes do sala.js no HTML.");
+        throw new Error("Função joinRoom não carregou. Verifique se o webrtc.js está antes do sala.js.");
     }
 
     return await joinRoom(roomId, data);
 }
 
 /* =========================
-   ELEMENTOS DA TELA
+   ELEMENTOS
 ========================= */
 
 const roomText = document.getElementById("roomText");
@@ -63,7 +52,6 @@ const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 const chatContainer = document.getElementById("chatContainer");
 const toggleChatBtn = document.getElementById("toggleChatBtn");
-const chatMessages = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -73,17 +61,20 @@ const resetDiceBtn = document.getElementById("resetDiceBtn");
 const diceOne = document.getElementById("diceOne");
 const diceTwo = document.getElementById("diceTwo");
 const diceResultText = document.getElementById("diceResultText");
+const diceHistoryList = document.getElementById("diceHistoryList");
 
 const localMutedIcon = document.getElementById("localMutedIcon");
 const remoteMutedIcon = document.getElementById("remoteMutedIcon");
 
 let selectedRole = "player";
 let myPlayerNumber = null;
+let currentPlayersCount = 0;
+let currentPlayers = [];
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
 
-let currentPlayersCount = 0;
+let diceHistory = [];
 
 const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
@@ -125,7 +116,7 @@ function savePlayerData() {
 loadSavedPlayerData();
 
 /* =========================
-   CAMPOS DE ENTRADA
+   MODAL ENTRADA
 ========================= */
 
 function showPlayerFields() {
@@ -140,8 +131,26 @@ function showSpectatorFields() {
     if (guildInput?.closest("label")) guildInput.closest("label").style.display = "none";
 }
 
+if (playerRoleBtn) {
+    playerRoleBtn.addEventListener("click", () => {
+        selectedRole = "player";
+        playerRoleBtn.classList.add("active");
+        spectatorRoleBtn?.classList.remove("active");
+        showPlayerFields();
+    });
+}
+
+if (spectatorRoleBtn) {
+    spectatorRoleBtn.addEventListener("click", () => {
+        selectedRole = "spectator";
+        spectatorRoleBtn.classList.add("active");
+        playerRoleBtn?.classList.remove("active");
+        showSpectatorFields();
+    });
+}
+
 /* =========================
-   MODO CÂMERA DO CELULAR
+   CÂMERA CELULAR
 ========================= */
 
 if (cameraFor) {
@@ -167,26 +176,8 @@ if (cameraFor) {
 }
 
 /* =========================
-   ENTRADA NA SALA
+   ENTRAR NA SALA
 ========================= */
-
-if (playerRoleBtn) {
-    playerRoleBtn.addEventListener("click", () => {
-        selectedRole = "player";
-        playerRoleBtn.classList.add("active");
-        spectatorRoleBtn?.classList.remove("active");
-        showPlayerFields();
-    });
-}
-
-if (spectatorRoleBtn) {
-    spectatorRoleBtn.addEventListener("click", () => {
-        selectedRole = "spectator";
-        spectatorRoleBtn.classList.add("active");
-        playerRoleBtn?.classList.remove("active");
-        showSpectatorFields();
-    });
-}
 
 if (enterRoomBtn) {
     enterRoomBtn.addEventListener("click", async () => {
@@ -201,12 +192,12 @@ if (enterRoomBtn) {
             return;
         }
 
-        if (selectedRole === "player") {
-            if (!deck) {
-                if (entryError) entryError.innerText = "Selecione o deck.";
-                return;
-            }
+        if (selectedRole === "player" && !deck) {
+            if (entryError) entryError.innerText = "Selecione o deck.";
+            return;
+        }
 
+        if (selectedRole === "player") {
             savePlayerData();
         }
 
@@ -220,21 +211,23 @@ if (enterRoomBtn) {
             });
 
             if (entryModal) entryModal.style.display = "none";
-
         } catch (error) {
-            if (entryError) entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            if (entryError) {
+                entryError.innerText = "Erro ao entrar na sala: " + error.message;
+            }
         }
     });
 }
 
 /* =========================
-   SOCKET / STATUS
+   SOCKET STATUS
 ========================= */
 
 socket.on("assigned-role", (data) => {
     if (data.role === "spectator") {
         myPlayerNumber = null;
         selectedRole = "spectator";
+
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
         return;
@@ -243,6 +236,7 @@ socket.on("assigned-role", (data) => {
     if (data.role === "camera") {
         myPlayerNumber = null;
         selectedRole = "camera";
+
         document.body.classList.add("camera-mode");
         document.body.classList.remove("spectator-mode");
         return;
@@ -251,6 +245,7 @@ socket.on("assigned-role", (data) => {
     if (data.playerNumber) {
         myPlayerNumber = Number(data.playerNumber);
         selectedRole = "player";
+
         document.body.classList.remove("spectator-mode");
         document.body.classList.remove("camera-mode");
     }
@@ -261,16 +256,17 @@ socket.on("room-full", () => {
 });
 
 socket.on("room-state", (state) => {
+    const players = Array.isArray(state.players) ? state.players : [];
+
+    currentPlayers = players;
+    currentPlayersCount = players.length;
+
     if (usersCountBtn) {
-        const playersCount = Array.isArray(state.players) ? state.players.length : 0;
         const spectatorsCount = Number(state.spectators || 0);
         const cameraCount = Array.isArray(state.cameraClients) ? state.cameraClients.length : 0;
 
-        usersCountBtn.innerText = `👥 ${playersCount + spectatorsCount + cameraCount}`;
-        currentPlayersCount = playersCount;
+        usersCountBtn.innerText = `👥 ${players.length + spectatorsCount + cameraCount}`;
     }
-
-    const players = Array.isArray(state.players) ? state.players : [];
 
     const p1 = players.find(p => Number(p.playerNumber) === 1);
     const p2 = players.find(p => Number(p.playerNumber) === 2);
@@ -353,8 +349,17 @@ socket.on("mic-status-update", ({ socketId, micEnabled }) => {
     }
 });
 
+/* reforço local caso o webrtc.js emita corretamente */
+socket.on("update-mic-status", ({ socketId, micEnabled }) => {
+    if (socketId === socket.id) {
+        updateLocalMutedIcon(micEnabled);
+    } else {
+        updateRemoteMutedIcon(micEnabled);
+    }
+});
+
 /* =========================
-   DADOS DE INÍCIO
+   DADOS
 ========================= */
 
 window.toggleDiceOverlay = function() {
@@ -396,6 +401,31 @@ function stopDiceAnimation(d1, d2) {
     setDiceFaces(d1, d2);
 }
 
+function addDiceHistoryLine(text) {
+    if (!text) return;
+
+    diceHistory.push(text);
+    renderDiceHistory();
+}
+
+function renderDiceHistory() {
+    if (!diceHistoryList) return;
+
+    if (diceHistory.length === 0) {
+        diceHistoryList.innerHTML = "Aguardando lançamento...";
+        return;
+    }
+
+    diceHistoryList.innerHTML = diceHistory
+        .map(item => `<div>${item}</div>`)
+        .join("");
+}
+
+function getPlayerNameByNumber(playerNumber) {
+    const player = currentPlayers.find(p => Number(p.playerNumber) === Number(playerNumber));
+    return player?.name || `Jogador ${playerNumber}`;
+}
+
 if (rollDiceBtn) {
     rollDiceBtn.addEventListener("click", () => {
         if (selectedRole !== "player") {
@@ -428,6 +458,9 @@ if (resetDiceBtn) {
 
         socket.emit("reset-dice", { roomId });
 
+        diceHistory = [];
+        renderDiceHistory();
+
         setDiceFaces(1, 1);
 
         if (diceResultText) {
@@ -439,24 +472,37 @@ if (resetDiceBtn) {
 socket.on("dice-rolled", (roll) => {
     if (diceOverlay) diceOverlay.classList.remove("hidden");
 
+    const playerName = roll.playerName || getPlayerNameByNumber(roll.playerNumber);
+
     setTimeout(() => {
         stopDiceAnimation(roll.dice1, roll.dice2);
 
+        const line = `${playerName} tirou ${roll.total} (${roll.dice1}+${roll.dice2})`;
+
         if (diceResultText) {
-            diceResultText.innerText =
-                `Jogador ${roll.playerNumber} rolou ${roll.dice1} + ${roll.dice2} = ${roll.total}.`;
+            diceResultText.innerText = line;
         }
+
+        addDiceHistoryLine(line);
     }, 900);
 });
 
 socket.on("dice-winner", (data) => {
     if (diceOverlay) diceOverlay.classList.remove("hidden");
 
+    const winnerName =
+        data.playerName ||
+        data.winnerName ||
+        getPlayerNameByNumber(data.playerNumber);
+
     setTimeout(() => {
+        const line = `🏆 ${winnerName} escolhe se vai começar.`;
+
         if (diceResultText) {
-            diceResultText.innerText =
-                `🏆 ${data.message} Resultado: ${data.total}.`;
+            diceResultText.innerText = line;
         }
+
+        addDiceHistoryLine(line);
     }, 1100);
 });
 
@@ -466,13 +512,20 @@ socket.on("dice-draw", (data) => {
     setTimeout(() => {
         setDiceFaces(1, 1);
 
+        const line = data.message || "Empate! Lancem novamente.";
+
         if (diceResultText) {
-            diceResultText.innerText = data.message || "Empate! Lancem novamente.";
+            diceResultText.innerText = line;
         }
+
+        addDiceHistoryLine(`⚠️ ${line}`);
     }, 1000);
 });
 
 socket.on("dice-reset", () => {
+    diceHistory = [];
+    renderDiceHistory();
+
     setDiceFaces(1, 1);
 
     if (diceResultText) {
@@ -481,34 +534,49 @@ socket.on("dice-reset", () => {
 });
 
 /* =========================
-   VIDA
+   VIDA OFICIAL
 ========================= */
 
-document.querySelectorAll(".life-buttons button").forEach(button => {
+function changeOfficialLife(playerNumber, amount) {
+    if (selectedRole !== "player") return;
+
+    if (Number(playerNumber) !== Number(myPlayerNumber)) {
+        alert("Você só pode alterar a sua própria vida oficial.");
+        return;
+    }
+
+    socket.emit("change-life", {
+        roomId,
+        playerNumber: myPlayerNumber,
+        amount: Number(amount)
+    });
+}
+
+/* funciona com HTML antigo e novo */
+document.querySelectorAll("[data-player][data-amount]").forEach(button => {
     button.addEventListener("click", () => {
         const playerNumber = Number(button.dataset.player);
         const amount = Number(button.dataset.amount);
 
-        if (selectedRole === "spectator" || selectedRole === "camera") return;
-
-        if (myPlayerNumber !== playerNumber) {
-            alert("Você só pode alterar a sua própria vida.");
-            return;
-        }
-
-        socket.emit("change-life", {
-            roomId,
-            playerNumber: myPlayerNumber,
-            amount
-        });
+        changeOfficialLife(playerNumber, amount);
     });
 });
 
-window.setManualLife = function(playerNumber) {
-    if (selectedRole === "spectator" || selectedRole === "camera") return;
+window.changeMyLife = function(amount) {
+    if (selectedRole !== "player") return;
 
-    if (myPlayerNumber !== playerNumber) {
-        alert("Você só pode alterar a sua própria vida.");
+    socket.emit("change-life", {
+        roomId,
+        playerNumber: myPlayerNumber,
+        amount: Number(amount)
+    });
+};
+
+window.setManualLife = function(playerNumber) {
+    if (selectedRole !== "player") return;
+
+    if (Number(myPlayerNumber) !== Number(playerNumber)) {
+        alert("Você só pode alterar a sua própria vida oficial.");
         return;
     }
 
@@ -532,10 +600,10 @@ window.setManualLife = function(playerNumber) {
 };
 
 window.resetLife = function(playerNumber) {
-    if (selectedRole === "spectator" || selectedRole === "camera") return;
+    if (selectedRole !== "player") return;
 
-    if (myPlayerNumber !== playerNumber) {
-        alert("Você só pode resetar a sua própria vida.");
+    if (Number(myPlayerNumber) !== Number(playerNumber)) {
+        alert("Você só pode resetar a sua própria vida oficial.");
         return;
     }
 
@@ -549,9 +617,32 @@ window.resetLife = function(playerNumber) {
    VIDA DO OPONENTE LOCAL
 ========================= */
 
+window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
+    if (selectedRole !== "player") return;
+
+    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
+        alert("Você só pode alterar a anotação do oponente no seu próprio painel.");
+        return;
+    }
+
+    const box = document.getElementById(`player${panelPlayerNumber}OpponentLife`);
+    if (!box) return;
+
+    const current = Number(box.innerText || 20);
+    box.innerText = current + Number(amount);
+};
+
 document.querySelectorAll(".opponent-life").forEach(lifeBox => {
     lifeBox.addEventListener("click", () => {
         if (selectedRole !== "player") return;
+
+        const id = lifeBox.id || "";
+        const panelPlayerNumber = Number(id.replace("player", "").replace("OpponentLife", ""));
+
+        if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
+            alert("Você só pode alterar a anotação do oponente no seu próprio painel.");
+            return;
+        }
 
         const current = Number(lifeBox.innerText || 20);
         const value = prompt("Digite a vida do oponente:", current);
@@ -570,7 +661,7 @@ document.querySelectorAll(".opponent-life").forEach(lifeBox => {
 });
 
 /* =========================
-   BOTÕES GERAIS
+   GERAIS
 ========================= */
 
 window.leaveRoom = function() {
@@ -654,7 +745,7 @@ if (fullscreenBtn) {
 }
 
 /* =========================
-   CRONÔMETRO
+   TIMER
 ========================= */
 
 function formatTimer(seconds) {
@@ -714,7 +805,7 @@ socket.on("timer-update", (timer) => {
 });
 
 /* =========================
-   HISTÓRICO
+   HISTÓRICO DE VIDA
 ========================= */
 
 window.togglePlayerHistory = function(playerNumber) {
@@ -764,6 +855,54 @@ window.clearLifeHistory = function() {
 };
 
 /* =========================
+   MARCADORES POR JOGADOR
+========================= */
+
+const playerMarkers = {
+    1: {
+        energy: 0,
+        poison: 0,
+        storm: 0
+    },
+
+    2: {
+        energy: 0,
+        poison: 0,
+        storm: 0
+    }
+};
+
+window.changePlayerMarker = function(playerNumber, type, amount) {
+
+    if (!playerMarkers[playerNumber]) return;
+
+    if (!playerMarkers[playerNumber].hasOwnProperty(type)) return;
+
+    playerMarkers[playerNumber][type] += Number(amount);
+
+    if (playerMarkers[playerNumber][type] < 0) {
+        playerMarkers[playerNumber][type] = 0;
+    }
+
+    const el = document.getElementById(`${type}Marker${playerNumber}`);
+
+    if (el) {
+        el.innerText = playerMarkers[playerNumber][type];
+    }
+};
+
+/* =========================
+   ANOTAÇÕES
+========================= */
+
+window.toggleNotesPanel = function() {
+    const panel = document.getElementById("tableNotesPanel");
+    if (!panel) return;
+
+    panel.classList.toggle("hidden");
+};
+
+/* =========================
    CHAT / EMOTES
 ========================= */
 
@@ -790,6 +929,8 @@ function injectChatEmotes() {
 
     emotes.forEach(item => {
         const button = document.createElement("button");
+
+        button.type = "button";
         button.className = "emoji-btn";
         button.innerText = item.emoji;
         button.title = item.label;
@@ -802,12 +943,16 @@ function injectChatEmotes() {
     });
 }
 
-injectChatEmotes();
+window.addEventListener("load", () => {
+    injectChatEmotes();
+});
 
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener("click", () => {
-        if (!chatContainer) return;
-        chatContainer.classList.toggle("hidden");
+        const container = document.getElementById("chatContainer");
+        if (!container) return;
+
+        container.classList.toggle("hidden");
     });
 }
 
@@ -832,22 +977,23 @@ function canSendChat() {
 }
 
 function sendChatMessage(message, type = "text") {
-    if (!message || !message.trim()) return;
+    if (!message || !String(message).trim()) return;
     if (!canSendChat()) return;
 
     socket.emit("chat-message", {
         roomId,
-        message: message.trim(),
+        message: String(message).trim(),
         type
     });
 }
 
 if (sendChatBtn) {
     sendChatBtn.addEventListener("click", () => {
-        if (!chatInput) return;
+        const input = document.getElementById("chatInput");
+        if (!input) return;
 
-        sendChatMessage(chatInput.value, "text");
-        chatInput.value = "";
+        sendChatMessage(input.value, "text");
+        input.value = "";
     });
 }
 
@@ -873,7 +1019,8 @@ socket.on("chat-cooldown", (data) => {
 });
 
 function renderChatMessage(data) {
-    if (!chatMessages) return;
+    const container = document.getElementById("chatMessages");
+    if (!container) return;
 
     const div = document.createElement("div");
     div.className = "chat-message";
@@ -883,8 +1030,8 @@ function renderChatMessage(data) {
         <span>${data.message}</span>
     `;
 
-    chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }
 
 function spawnFloatingEmoji(emoji) {
@@ -900,3 +1047,54 @@ function spawnFloatingEmoji(emoji) {
         el.remove();
     }, 5000);
 }
+
+renderDiceHistory();
+/* =========================
+   AJUSTE VIDA OPONENTE LOCAL
+========================= */
+
+window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
+
+    if (selectedRole !== "player") return;
+
+    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
+        alert("Você só pode alterar a anotação do oponente no seu painel.");
+        return;
+    }
+
+    const box = document.getElementById(`player${panelPlayerNumber}OpponentLife`);
+
+    if (!box) return;
+
+    const current = Number(box.innerText || 20);
+
+    box.innerText = current + Number(amount);
+};
+
+/* =========================
+   GARANTIR CHAT FUNCIONANDO
+========================= */
+
+window.addEventListener("load", () => {
+
+    injectChatEmotes();
+
+    const chatMessages = document.getElementById("chatMessages");
+
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+});
+
+/* =========================
+   GARANTIR HISTÓRICO DADOS
+========================= */
+
+renderDiceHistory();
+
+/* =========================
+   DEBUG MICROFONE
+========================= */
+
+console.log("Sala.js carregado com sucesso");
