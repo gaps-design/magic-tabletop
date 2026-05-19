@@ -202,9 +202,9 @@ io.on("connection", (socket) => {
 
     const room = ensureRoom(roomId);
 
-    if (data.format && !room.format) {
-      room.format = data.format;
-    }
+    if (data.format) {
+  room.format = data.format;
+}
 
     socket.join(roomId);
 
