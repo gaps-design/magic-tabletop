@@ -1888,3 +1888,27 @@ body.spectator-mode .bottom-toggle{
     border:none;
     font-weight:800;
 }
+body.spectator-mode .game-layout{
+    grid-template-rows:minmax(0, 1fr) 230px !important;
+}
+
+body.spectator-mode .video-area{
+    min-height:0 !important;
+}
+
+body.spectator-mode .camera-card{
+    min-height:0 !important;
+}
+
+body.spectator-mode .spectator-bottom-area{
+    height:230px !important;
+    min-height:230px !important;
+    max-height:230px !important;
+    overflow:hidden !important;
+}
+
+.spectator-chat-messages,
+.match-events-list{
+    max-height:135px !important;
+    overflow-y:auto !important;
+}

@@ -1212,3 +1212,25 @@ if (spectatorChatInput) {
         }
     });
 }
+function injectSpectatorEmotes() {
+    const bar = document.getElementById("spectatorEmojiBar");
+    if (!bar) return;
+
+    bar.innerHTML = "";
+
+    const emotes = ["🔥","😂","😱","👏","❤️","🤫","🙏","👍","😴","😈","🤨","🤔"];
+
+    emotes.forEach(emoji => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.innerText = emoji;
+
+        btn.addEventListener("click", () => {
+            sendChatMessage(emoji, "emoji");
+        });
+
+        bar.appendChild(btn);
+    });
+}
+
+injectSpectatorEmotes();
