@@ -137,6 +137,20 @@ if (forcedRole === "spectator") {
 
     showSpectatorFields();
 
+    if (playerRoleBtn) {
+    playerRoleBtn.style.display = "none";
+}
+
+if (spectatorRoleBtn) {
+    spectatorRoleBtn.style.width = "100%";
+    spectatorRoleBtn.style.pointerEvents = "none";
+}
+
+const roleOptions = document.querySelector(".role-options");
+if (roleOptions) {
+    roleOptions.style.gridTemplateColumns = "1fr";
+}
+
     if (entryError) {
         entryError.innerText = "Sala cheia. Entrando como espectador.";
     }
@@ -695,7 +709,11 @@ window.leaveRoom = function() {
     socket.emit("leave-room", { roomId });
 
     setTimeout(() => {
-        window.location.href = "/";
+        window.close();
+
+        setTimeout(() => {
+            window.location.href = "/";
+        }, 200);
     }, 300);
 };
 
