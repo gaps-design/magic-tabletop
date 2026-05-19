@@ -115,3 +115,88 @@ formatModal.addEventListener("click", (event) => {
 refreshRoomsButton.addEventListener("click", () => {
   window.location.reload();
 });
+
+/* =========================
+   SOCKET LOBBY
+========================= */
+
+const socket = io();
+
+socket.on("lobby-state", (tables) => {
+
+  if (!Array.isArray(tables)) return;
+
+  tables.forEach((table) => {
+
+    const card =
+      document.querySelector(`[data-room="${table.roomId}"]`);
+
+    if (!card) return;
+
+    /* =========================
+       FORMATO
+    ========================= */
+
+    const formatBadge =
+      card.querySelector(".format-badge");
+
+    if (formatBadge) {
+
+      formatBadge.innerText =
+        table.format || "Formato livre";
+    }
+
+    /* =========================
+       INFO
+    ========================= */
+
+    const strongs =
+      card.querySelectorAll(".room-info strong");
+
+    if (table.isResenha) {
+
+      if (strongs[0]) {
+        strongs[0].innerText =
+          `${table.cameras}/2`;
+      }
+
+      if (strongs[1]) {
+        strongs[1].innerText =
+          table.players;
+      }
+
+      if (strongs[2]) {
+        strongs[2].innerText =
+          table.spectators;
+      }
+
+    } else {
+
+      if (strongs[0]) {
+        strongs[0].innerText =
+          `${table.players}/2`;
+      }
+
+      if (strongs[1]) {
+        strongs[1].innerText =
+          table.spectators;
+      }
+    }
+
+    /* =========================
+       STATUS VISUAL
+    ========================= */
+
+    if (!table.isResenha) {
+
+      if (table.players >= 2) {
+
+        card.classList.add("table-full");
+
+      } else {
+
+        card.classList.remove("table-full");
+      }
+    }
+  });
+});

@@ -21,6 +21,30 @@ const clientProfiles = {};
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
 
+const PUBLIC_TABLES = [
+  "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
+  "mtg-1006", "mtg-1007", "mtg-1008", "mtg-1009", "mtg-1010", "mtg-1011"
+];
+
+function buildLobbyState() {
+  return PUBLIC_TABLES.map(roomId => {
+    const room = rooms[roomId];
+
+    return {
+      roomId,
+      format: room?.format || (roomId === "mtg-1002" ? "Mesa da Resenha" : "Formato livre"),
+      players: room?.players?.length || 0,
+      spectators: room?.spectators?.length || 0,
+      cameras: room?.cameraClients?.length || 0,
+      isResenha: roomId === "mtg-1002"
+    };
+  });
+}
+
+function broadcastLobbyState() {
+  io.emit("lobby-state", buildLobbyState());
+}
+
 /* =========================
    TIMER
 ========================= */
@@ -53,6 +77,7 @@ function ensureRoom(roomId) {
       spectators: [],
       cameraClients: [],
       lifeHistory: [],
+      format: roomId === "mtg-1002" ? "Mesa da Resenha" : "",
       timer: createDefaultTimer()
     };
   }
@@ -69,7 +94,8 @@ function sendRoomState(roomId) {
     spectators: room.spectators.length,
     cameraClients: room.cameraClients,
     lifeHistory: room.lifeHistory,
-    timer: publicTimer(room.timer)
+    timer: publicTimer(room.timer),
+    format: room.format
   });
 }
 
@@ -103,9 +129,9 @@ function isPlayerInRoom(room, socketId) {
 ========================= */
 
 function removeSocketFromAllRooms(socketId) {
+  let changedLobby = false;
 
   for (const roomId in rooms) {
-
     const room = rooms[roomId];
 
     const wasInside =
@@ -113,16 +139,12 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.includes(socketId) ||
       room.cameraClients.some(c => c.socketId === socketId);
 
-    room.players =
-      room.players.filter(p => p.socketId !== socketId);
-
-    room.spectators =
-      room.spectators.filter(id => id !== socketId);
-
-    room.cameraClients =
-      room.cameraClients.filter(c => c.socketId !== socketId);
+    room.players = room.players.filter(p => p.socketId !== socketId);
+    room.spectators = room.spectators.filter(id => id !== socketId);
+    room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
 
     if (wasInside) {
+      changedLobby = true;
 
       io.to(roomId).emit("user-disconnected", socketId);
 
@@ -134,17 +156,21 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.length === 0 &&
       room.cameraClients.length === 0
     ) {
-
       if (room.timer?.interval) {
         clearInterval(room.timer.interval);
       }
 
       delete rooms[roomId];
+      changedLobby = true;
     }
   }
 
   delete chatControl[socketId];
   delete clientProfiles[socketId];
+
+  if (changedLobby) {
+    broadcastLobbyState();
+  }
 }
 
 /* =========================
@@ -152,15 +178,15 @@ function removeSocketFromAllRooms(socketId) {
 ========================= */
 
 io.on("connection", (socket) => {
-
   console.log("Conectado:", socket.id);
+
+  socket.emit("lobby-state", buildLobbyState());
 
   /* =========================
      JOIN ROOM
   ========================= */
 
   socket.on("join-room", (data = {}) => {
-
     const roomId = data.roomId;
     if (!roomId) return;
 
@@ -168,30 +194,17 @@ io.on("connection", (socket) => {
 
     const user = data.user || {};
 
-    const role =
-      data.role ||
-      user.role ||
-      "player";
-
-    const name =
-      data.name ||
-      user.name ||
-      "Usuário";
-
-    const deck =
-      data.deck ||
-      user.deck ||
-      "---";
-
-    const guild =
-      data.guild ||
-      user.guild ||
-      "---";
-
-    const linkedPlayer =
-      Number(data.linkedPlayer || user.linkedPlayer || 0);
+    const role = data.role || user.role || "player";
+    const name = data.name || user.name || "Usuário";
+    const deck = data.deck || user.deck || "---";
+    const guild = data.guild || user.guild || "---";
+    const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || 0);
 
     const room = ensureRoom(roomId);
+
+    if (data.format && !room.format) {
+      room.format = data.format;
+    }
 
     socket.join(roomId);
 
@@ -200,7 +213,6 @@ io.on("connection", (socket) => {
     ========================= */
 
     if (role === "spectator") {
-
       room.spectators.push(socket.id);
 
       clientProfiles[socket.id] = {
@@ -235,6 +247,7 @@ io.on("connection", (socket) => {
       });
 
       sendRoomState(roomId);
+      broadcastLobbyState();
 
       return;
     }
@@ -244,16 +257,13 @@ io.on("connection", (socket) => {
     ========================= */
 
     if (role === "camera") {
-
       if (![1, 2].includes(linkedPlayer)) {
         socket.emit("camera-error", "Jogador inválido.");
         return;
       }
 
       room.cameraClients =
-        room.cameraClients.filter(
-          c => Number(c.linkedPlayer) !== linkedPlayer
-        );
+        room.cameraClients.filter(c => Number(c.linkedPlayer) !== linkedPlayer);
 
       room.cameraClients.push({
         socketId: socket.id,
@@ -289,6 +299,7 @@ io.on("connection", (socket) => {
       });
 
       sendRoomState(roomId);
+      broadcastLobbyState();
 
       return;
     }
@@ -302,11 +313,8 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const usedNumbers =
-      room.players.map(p => p.playerNumber);
-
-    const playerNumber =
-      usedNumbers.includes(1) ? 2 : 1;
+    const usedNumbers = room.players.map(p => p.playerNumber);
+    const playerNumber = usedNumbers.includes(1) ? 2 : 1;
 
     const player = {
       socketId: socket.id,
@@ -356,6 +364,7 @@ io.on("connection", (socket) => {
     });
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   /* =========================
@@ -363,7 +372,6 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("offer", ({ target, offer }) => {
-
     if (!target || !offer) return;
 
     io.to(target).emit("offer", {
@@ -374,7 +382,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("answer", ({ target, answer }) => {
-
     if (!target || !answer) return;
 
     io.to(target).emit("answer", {
@@ -384,7 +391,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("ice-candidate", ({ target, candidate }) => {
-
     if (!target || !candidate) return;
 
     io.to(target).emit("ice-candidate", {
@@ -398,7 +404,6 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("chat-message", ({ roomId, message, type }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
@@ -419,51 +424,29 @@ io.on("connection", (socket) => {
 
     const control = chatControl[socket.id];
 
-    if (
-      control.blockedUntil &&
-      now < control.blockedUntil
-    ) {
-
+    if (control.blockedUntil && now < control.blockedUntil) {
       socket.emit("chat-cooldown", {
-        remaining:
-          Math.ceil((control.blockedUntil - now) / 1000)
+        remaining: Math.ceil((control.blockedUntil - now) / 1000)
       });
 
       return;
     }
 
-    const safeMessage =
-      String(message || "")
-        .trim()
-        .slice(0, 120);
-
+    const safeMessage = String(message || "").trim().slice(0, 120);
     if (!safeMessage) return;
 
     control.count++;
 
     io.to(roomId).emit("chat-message", {
-      name:
-        clientProfiles[socket.id]?.name ||
-        "Usuário",
-
+      name: clientProfiles[socket.id]?.name || "Usuário",
       message: safeMessage,
-
-      type:
-        type === "emoji"
-          ? "emoji"
-          : "text",
-
-      time:
-        new Date()
-          .toLocaleTimeString("pt-BR")
+      type: type === "emoji" ? "emoji" : "text",
+      time: new Date().toLocaleTimeString("pt-BR")
     });
 
     if (control.count >= CHAT_LIMIT) {
-
       control.count = 0;
-
-      control.blockedUntil =
-        now + CHAT_BLOCK_MS;
+      control.blockedUntil = now + CHAT_BLOCK_MS;
     }
   });
 
@@ -472,21 +455,15 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("change-life", ({ roomId, playerNumber, amount }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
-    const player =
-      getPlayerBySocket(room, socket.id);
-
+    const player = getPlayerBySocket(room, socket.id);
     if (!player) return;
 
-    if (
-      player.playerNumber !== Number(playerNumber)
-    ) return;
+    if (player.playerNumber !== Number(playerNumber)) return;
 
     const change = Number(amount);
-
     if (isNaN(change)) return;
 
     const oldLife = player.life;
@@ -499,30 +476,23 @@ io.on("connection", (socket) => {
       oldLife,
       newLife: player.life,
       change,
-      time:
-        new Date()
-          .toLocaleTimeString("pt-BR")
+      time: new Date().toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   socket.on("set-life", ({ roomId, playerNumber, value }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
-    const player =
-      getPlayerBySocket(room, socket.id);
-
+    const player = getPlayerBySocket(room, socket.id);
     if (!player) return;
 
-    if (
-      player.playerNumber !== Number(playerNumber)
-    ) return;
+    if (player.playerNumber !== Number(playerNumber)) return;
 
     const newLife = Number(value);
-
     if (isNaN(newLife)) return;
 
     const oldLife = player.life;
@@ -535,27 +505,21 @@ io.on("connection", (socket) => {
       oldLife,
       newLife,
       change: "manual",
-      time:
-        new Date()
-          .toLocaleTimeString("pt-BR")
+      time: new Date().toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   socket.on("reset-life", ({ roomId, playerNumber }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
-    const player =
-      getPlayerBySocket(room, socket.id);
-
+    const player = getPlayerBySocket(room, socket.id);
     if (!player) return;
 
-    if (
-      player.playerNumber !== Number(playerNumber)
-    ) return;
+    if (player.playerNumber !== Number(playerNumber)) return;
 
     const oldLife = player.life;
 
@@ -567,12 +531,11 @@ io.on("connection", (socket) => {
       oldLife,
       newLife: 20,
       change: "reset",
-      time:
-        new Date()
-          .toLocaleTimeString("pt-BR")
+      time: new Date().toLocaleTimeString("pt-BR")
     });
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   /* =========================
@@ -580,15 +543,12 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("set-timer", ({ roomId, minutes }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
     if (!isPlayerInRoom(room, socket.id)) return;
 
-    const seconds =
-      Number(minutes) * 60;
-
+    const seconds = Number(minutes) * 60;
     if (isNaN(seconds) || seconds <= 0) return;
 
     room.timer.duration = seconds;
@@ -600,48 +560,35 @@ io.on("connection", (socket) => {
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit(
-      "timer-update",
-      publicTimer(room.timer)
-    );
+    io.to(roomId).emit("timer-update", publicTimer(room.timer));
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   socket.on("start-timer", ({ roomId }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
     if (!isPlayerInRoom(room, socket.id)) return;
-
     if (room.timer.running) return;
 
     room.timer.running = true;
 
     room.timer.interval = setInterval(() => {
-
       if (room.timer.remaining > 0) {
         room.timer.remaining--;
       } else {
-
         room.timer.running = false;
-
         clearInterval(room.timer.interval);
-
         room.timer.interval = null;
       }
 
-      io.to(roomId).emit(
-        "timer-update",
-        publicTimer(room.timer)
-      );
-
+      io.to(roomId).emit("timer-update", publicTimer(room.timer));
     }, 1000);
   });
 
   socket.on("pause-timer", ({ roomId }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
@@ -650,41 +597,28 @@ io.on("connection", (socket) => {
     room.timer.running = false;
 
     if (room.timer.interval) {
-
       clearInterval(room.timer.interval);
-
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit(
-      "timer-update",
-      publicTimer(room.timer)
-    );
+    io.to(roomId).emit("timer-update", publicTimer(room.timer));
   });
 
   socket.on("reset-timer", ({ roomId }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
     if (!isPlayerInRoom(room, socket.id)) return;
 
-    room.timer.remaining =
-      room.timer.duration;
-
+    room.timer.remaining = room.timer.duration;
     room.timer.running = false;
 
     if (room.timer.interval) {
-
       clearInterval(room.timer.interval);
-
       room.timer.interval = null;
     }
 
-    io.to(roomId).emit(
-      "timer-update",
-      publicTimer(room.timer)
-    );
+    io.to(roomId).emit("timer-update", publicTimer(room.timer));
   });
 
   /* =========================
@@ -692,7 +626,6 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("clear-life-history", ({ roomId }) => {
-
     const room = rooms[roomId];
     if (!room) return;
 
@@ -701,6 +634,7 @@ io.on("connection", (socket) => {
     room.lifeHistory = [];
 
     sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   /* =========================
@@ -708,25 +642,18 @@ io.on("connection", (socket) => {
   ========================= */
 
   socket.on("leave-room", ({ roomId }) => {
-
     removeSocketFromAllRooms(socket.id);
-
     socket.leave(roomId);
-
     socket.emit("left-room");
   });
 
   socket.on("disconnect", () => {
-
     console.log("Desconectado:", socket.id);
-
     removeSocketFromAllRooms(socket.id);
   });
-
 });
 
-const PORT =
-  process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);

@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 
 let roomId = params.get("room");
 const cameraFor = params.get("cameraFor");
+const roomFormat = params.get("format") || "Formato livre";
 
 /* =========================
    PROTEÇÃO DA SALA
@@ -154,12 +155,13 @@ if (cameraFor) {
     window.addEventListener("load", async () => {
         try {
             await safeJoinRoom(roomId, {
-                role: "camera",
-                linkedPlayer: Number(cameraFor),
-                name: `Câmera Jogador ${cameraFor}`,
-                deck: "Câmera auxiliar",
-                guild: "---"
-            });
+    role: "camera",
+    linkedPlayer: Number(cameraFor),
+    name: `Câmera Jogador ${cameraFor}`,
+    deck: "Câmera auxiliar",
+    guild: "---",
+    format: roomFormat
+});
         } catch (error) {
             alert("Erro ao iniciar câmera do celular: " + error.message);
         }
@@ -226,11 +228,12 @@ if (enterRoomBtn) {
 
         try {
             await safeJoinRoom(roomId, {
-                role: selectedRole,
-                name,
-                deck: selectedRole === "spectator" ? "---" : deck,
-                guild: selectedRole === "spectator" ? "---" : guild
-            });
+    role: selectedRole,
+    name,
+    deck: selectedRole === "spectator" ? "---" : deck,
+    guild: selectedRole === "spectator" ? "---" : guild,
+    format: roomFormat
+});
 
             if (entryModal) {
                 entryModal.style.display = "none";

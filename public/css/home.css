@@ -587,3 +587,14 @@ body{
         flex-direction:column;
     }
 }
+.table-full{
+    border:1px solid rgba(255,70,70,0.8) !important;
+
+    box-shadow:
+    0 0 25px rgba(255,70,70,0.18),
+    0 20px 40px rgba(0,0,0,0.45);
+}
+
+.table-full .enter-table-btn{
+    background:linear-gradient(135deg,#7a1010,#c22e2e);
+}
