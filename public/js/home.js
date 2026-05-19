@@ -21,8 +21,9 @@ function enterRoom(roomId, format = "casual") {
     return;
   }
 
-  window.location.href =
-    `/sala.html?room=${roomId}&format=${encodeURIComponent(format)}`;
+  const url = `/sala.html?room=${roomId}&format=${encodeURIComponent(format)}`;
+
+  window.open(url, "_blank");
 }
 
 function openFormatModal(roomId) {
