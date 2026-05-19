@@ -12,6 +12,10 @@ body{
     overflow:hidden;
 }
 
+.hidden{
+    display:none !important;
+}
+
 /* TOPO */
 
 .topbar{
@@ -50,6 +54,15 @@ body{
     gap:8px;
     font-size:13px;
     color:#cbd5e1;
+}
+
+.format-room-text{
+    margin-top:4px;
+    font-size:12px;
+    color:#f2c45b;
+    font-weight:bold;
+    text-transform:uppercase;
+    letter-spacing:1px;
 }
 
 .top-actions{
@@ -110,11 +123,11 @@ button:hover{
 
 .timer-box.compact-timer{
     position:relative;
-    min-width:180px;
+    min-width:220px;
     background:rgba(15,25,40,0.92);
     border:1px solid rgba(80,180,255,0.28);
     border-radius:16px;
-    padding:6px 44px 6px 16px;
+    padding:6px 78px 6px 16px;
     box-shadow:0 0 16px rgba(0,0,0,0.25);
 }
 
@@ -129,7 +142,6 @@ button:hover{
 
 .timer-toggle{
     position:absolute;
-    right:6px;
     top:50%;
     transform:translateY(-50%);
     width:32px;
@@ -137,6 +149,14 @@ button:hover{
     padding:0;
     border-radius:10px;
     font-size:14px;
+}
+
+#timerSettingsBtn{
+    right:6px;
+}
+
+.dice-top-btn{
+    right:42px;
 }
 
 .timer-controls{
@@ -171,10 +191,6 @@ button:hover{
     background:linear-gradient(135deg,#1e90ff,#00c2ff);
     color:white;
     font-weight:800;
-}
-
-.hidden{
-    display:none !important;
 }
 
 /* LAYOUT PRINCIPAL */
@@ -227,20 +243,37 @@ button:hover{
 }
 
 .life{
-    font-size:42px;
+    font-size:44px;
     font-weight:bold;
     text-align:center;
+    min-width:78px;
 }
 
-.life-buttons{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:8px;
+.life-control-box{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
 }
 
-.life-buttons button{
+.life-vertical-buttons{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.life-vertical-buttons button{
+    width:42px;
+    height:38px;
+    padding:0;
     font-size:24px;
-    padding:8px;
+    font-weight:900;
+    border-radius:10px;
+    background:#13253f;
+}
+
+.life-vertical-buttons button:hover{
+    background:#1e3a5f;
 }
 
 .manual-life-box{
@@ -260,6 +293,41 @@ button:hover{
 .manual-life-box button{
     padding:8px;
     font-size:13px;
+}
+
+.opponent-life-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.toggle-opponent-life{
+    width:100%;
+    background:linear-gradient(135deg,#17263d,#243d63);
+    border:1px solid rgba(255,255,255,0.08);
+    color:#8ecbff;
+    font-weight:700;
+}
+
+.opponent-life-box{
+    background:rgba(0,0,0,0.25);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    padding:10px;
+}
+
+.opponent-life{
+    font-size:32px;
+    color:#ffd166;
+}
+
+.opponent-local-control{
+    margin-top:8px;
+}
+
+.opponent-buttons button{
+    background:#3a2a08;
+    color:#ffd166;
 }
 
 .player-history-box{
@@ -322,18 +390,6 @@ button:hover{
     font-size:14px;
 }
 
-.notes textarea{
-    width:100%;
-    height:70px;
-    resize:none;
-    background:#071421;
-    color:white;
-    border:1px solid rgba(255,255,255,0.12);
-    border-radius:8px;
-    padding:10px;
-    outline:none;
-}
-
 /* ÁREA DAS CÂMERAS */
 
 .video-area{
@@ -348,6 +404,7 @@ button:hover{
 
 .camera-card{
     position:relative;
+    overflow:hidden;
     background:#030b15;
     border:1px solid rgba(255,255,255,0.1);
     border-radius:14px;
@@ -377,6 +434,9 @@ video{
     border:4px solid #2563eb;
     background:#020617;
     transition:0.3s;
+    box-shadow:
+        inset 0 0 20px rgba(0,0,0,0.5),
+        0 0 25px rgba(37,99,235,0.18);
 }
 
 .camera-status{
@@ -404,6 +464,247 @@ video{
     padding:8px 12px;
     border-radius:8px;
     font-size:13px;
+}
+
+/* MICROFONE MUTADO */
+
+.muted-icon{
+    position:absolute;
+    right:16px;
+    top:54px;
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    background:rgba(180,0,0,0.92);
+    color:white;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:22px;
+    z-index:15;
+    box-shadow:0 0 14px rgba(255,0,0,0.65);
+}
+
+/* DADOS */
+
+.dice-overlay{
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:430px;
+    max-width:92vw;
+    padding:24px;
+    border-radius:24px;
+    background:rgba(5,8,18,0.96);
+    border:1px solid rgba(255,215,120,0.5);
+    box-shadow:0 0 45px rgba(0,0,0,0.8);
+    color:white;
+    text-align:center;
+    z-index:9999;
+    backdrop-filter:blur(12px);
+}
+
+.dice-close-btn{
+    position:absolute;
+    right:12px;
+    top:10px;
+    width:34px;
+    height:34px;
+    padding:0;
+    border-radius:50%;
+    background:rgba(255,255,255,0.1);
+    font-size:22px;
+}
+
+.dice-title{
+    font-weight:900;
+    font-size:22px;
+    color:#f6d06f;
+    margin-bottom:18px;
+}
+
+.dice-area{
+    display:flex;
+    justify-content:center;
+    gap:22px;
+    margin-bottom:18px;
+}
+
+.dice-face{
+    width:86px;
+    height:86px;
+    border-radius:20px;
+    background:linear-gradient(145deg,#ffffff,#d8d8d8);
+    color:#111;
+    font-size:58px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:
+        inset 0 0 10px rgba(0,0,0,0.25),
+        0 8px 18px rgba(0,0,0,0.5);
+}
+
+.dice-face.rolling{
+    animation:diceRoll 0.16s linear infinite;
+}
+
+@keyframes diceRoll{
+    0%{ transform:rotate(0deg) scale(1); }
+    50%{ transform:rotate(20deg) scale(1.12); }
+    100%{ transform:rotate(-20deg) scale(1); }
+}
+
+.roll-dice-btn,
+.reset-dice-btn{
+    width:100%;
+    border:none;
+    border-radius:14px;
+    padding:12px;
+    margin-top:8px;
+    cursor:pointer;
+    font-weight:900;
+    font-size:15px;
+}
+
+.roll-dice-btn{
+    background:linear-gradient(135deg,#f5c84b,#b88219);
+    color:#1b1300;
+}
+
+.reset-dice-btn{
+    background:rgba(255,255,255,0.12);
+    color:white;
+}
+
+.dice-result-text{
+    margin-top:14px;
+    font-size:14px;
+    line-height:1.4;
+    color:#eee;
+}
+
+.dice-history-box{
+    margin-top:14px;
+    padding:12px;
+    border-radius:14px;
+    background:rgba(0,0,0,0.32);
+    border:1px solid rgba(255,255,255,0.08);
+    text-align:left;
+}
+
+.dice-history-box strong{
+    display:block;
+    color:#f6d06f;
+    margin-bottom:8px;
+    text-align:center;
+}
+
+.dice-history-list{
+    font-size:13px;
+    line-height:1.5;
+    color:#ddd;
+}
+
+/* ANOTAÇÕES */
+
+.table-notes-panel{
+    position:fixed;
+    right:18px;
+    bottom:110px;
+    width:360px;
+    height:300px;
+    background:rgba(5,10,18,0.97);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:18px;
+    z-index:998;
+    box-shadow:0 0 35px rgba(0,0,0,0.55);
+    overflow:hidden;
+}
+
+.notes-header{
+    height:48px;
+    padding:0 14px;
+    background:#0f1d31;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-weight:900;
+}
+
+.notes-header button{
+    width:30px;
+    height:30px;
+    padding:0;
+    border-radius:50%;
+}
+
+#tableNotesInput{
+    width:100%;
+    height:calc(100% - 48px);
+    resize:none;
+    border:none;
+    outline:none;
+    background:#071421;
+    color:white;
+    padding:14px;
+    font-size:14px;
+}
+
+/* MARCADORES */
+
+.marker-bar{
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%);
+    display:flex;
+    gap:10px;
+    z-index:35;
+}
+
+.marker-card{
+    background:rgba(8,24,42,0.92);
+    border:1px solid rgba(255,255,255,0.12);
+    border-radius:14px;
+    padding:8px 10px;
+    min-width:118px;
+    text-align:center;
+    box-shadow:0 0 16px rgba(0,0,0,0.35);
+}
+
+.marker-card span{
+    display:block;
+    font-size:12px;
+    color:#cbd5e1;
+    margin-bottom:6px;
+    font-weight:800;
+}
+
+.marker-card div{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+}
+
+.marker-card button{
+    width:28px;
+    height:28px;
+    padding:0;
+    border-radius:8px;
+    font-size:18px;
+    font-weight:900;
+}
+
+.marker-card strong{
+    min-width:24px;
+    font-size:18px;
+}
+
+body:has(.bottom-bar:not(.collapsed)) .marker-bar{
+    bottom:104px;
 }
 
 /* BOTÕES DE LAYOUT */
@@ -443,7 +744,7 @@ body.focus-mode .camera-card:first-child{
     display:none;
 }
 
-/* BARRA INFERIOR RECOLHÍVEL */
+/* BARRA INFERIOR */
 
 .bottom-toggle{
     position:fixed;
@@ -606,7 +907,8 @@ body.focus-mode .camera-card:first-child{
     font-size:14px;
 }
 
-.player-fields input{
+.player-fields input,
+.player-fields select{
     background:#071421;
     border:1px solid rgba(255,255,255,0.1);
     color:white;
@@ -615,7 +917,8 @@ body.focus-mode .camera-card:first-child{
     outline:none;
 }
 
-.player-fields input:focus{
+.player-fields input:focus,
+.player-fields select:focus{
     border-color:#3b82f6;
 }
 
@@ -642,192 +945,7 @@ body.focus-mode .camera-card:first-child{
     min-height:20px;
 }
 
-/* MOBILE */
-
-@media(max-width:900px){
-    body{
-        overflow:auto;
-        height:auto;
-        min-height:100vh;
-    }
-
-    .topbar{
-        height:auto;
-        grid-template-columns:1fr;
-        padding:14px;
-        gap:12px;
-    }
-
-    .top-actions{
-        justify-content:center;
-        flex-wrap:wrap;
-    }
-
-    .timer-box.compact-timer{
-        width:100%;
-        max-width:260px;
-    }
-
-    .timer-controls{
-        flex-wrap:wrap;
-        width:300px;
-    }
-
-    .game-layout{
-        grid-template-columns:1fr;
-        height:auto;
-        padding-bottom:90px;
-    }
-
-    .video-area{
-        grid-template-columns:1fr;
-    }
-
-    video{
-        min-height:300px;
-    }
-
-    .player-panel{
-        order:2;
-    }
-
-    .bottom-bar{
-        height:auto;
-        flex-direction:column;
-        padding:16px;
-    }
-
-    .device-controls,
-    .main-controls{
-        flex-wrap:wrap;
-        justify-content:center;
-    }
-
-    #cameraSelect,
-    #microphoneSelect{
-        width:100%;
-        min-width:260px;
-    }
-
-    .layout-buttons{
-        position:relative;
-        bottom:auto;
-        left:auto;
-        transform:none;
-        margin:12px 0;
-    }
-}
-
-@media(max-width:700px){
-    .entry-box{
-        padding:24px;
-    }
-
-    .role-options{
-        grid-template-columns:1fr;
-    }
-}
-
-/* MODO CÂMERA CELULAR */
-
-body.camera-mode .topbar,
-body.camera-mode .match-tools,
-body.camera-mode .player-panel,
-body.camera-mode .layout-buttons,
-body.camera-mode .bottom-bar,
-body.camera-mode .bottom-toggle,
-body.camera-mode .camera-card:nth-child(2){
-    display:none !important;
-}
-
-body.camera-mode{
-    background:#000;
-    overflow:hidden;
-}
-
-body.camera-mode .game-layout{
-    display:block;
-    height:100vh;
-    padding:0;
-}
-
-body.camera-mode .video-area{
-    display:block;
-    height:100vh;
-}
-
-body.camera-mode .camera-card{
-    display:block;
-    height:100vh;
-    border:none;
-    border-radius:0;
-    padding:0;
-}
-
-body.camera-mode .camera-title,
-body.camera-mode .camera-status,
-body.camera-mode .rotate-btn{
-    display:none !important;
-}
-
-body.camera-mode video{
-    width:100vw;
-    height:100vh;
-    border:none;
-    border-radius:0;
-    object-fit:cover;
-}
-
-body.spectator-mode .video-area{
-    grid-template-columns:1fr;
-    grid-template-rows:1fr 1fr;
-}
-
-body.spectator-mode .camera-card{
-    min-height:0;
-}
-
-body.spectator-mode video{
-    object-fit:contain;
-    background:#000;
-}
-
-body.spectator-mode .camera-card:first-child video{
-    transform:rotate(180deg);
-}
-/* =========================
-   VIDA DO OPONENTE
-========================= */
-
-.opponent-life-wrapper{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-}
-
-.toggle-opponent-life{
-    width:100%;
-    background:linear-gradient(135deg,#17263d,#243d63);
-    border:1px solid rgba(255,255,255,0.08);
-    color:#8ecbff;
-    font-weight:700;
-}
-
-.opponent-life-box{
-    background:rgba(0,0,0,0.25);
-    border:1px solid rgba(255,255,255,0.08);
-    border-radius:12px;
-    padding:10px;
-}
-
-.opponent-life{
-    font-size:30px;
-    color:#ffd166;
-}
-
-/* =========================
-   CHAT
-========================= */
+/* CHAT */
 
 .chat-container{
     position:fixed;
@@ -902,6 +1020,7 @@ body.spectator-mode .camera-card:first-child video{
     gap:8px;
     padding:10px;
     border-top:1px solid rgba(255,255,255,0.06);
+    flex-wrap:wrap;
 }
 
 .emoji-btn{
@@ -913,10 +1032,6 @@ body.spectator-mode .camera-card:first-child video{
     padding:0;
 }
 
-/* =========================
-   EMOJIS FLUTUANTES
-========================= */
-
 .floating-emoji{
     position:fixed;
     bottom:0;
@@ -927,7 +1042,6 @@ body.spectator-mode .camera-card:first-child video{
 }
 
 @keyframes emojiFloat{
-
     0%{
         transform:translateY(0) scale(0.7);
         opacity:0;
@@ -941,12 +1055,63 @@ body.spectator-mode .camera-card:first-child video{
         transform:translateY(-700px) scale(1.3);
         opacity:0;
     }
-
 }
 
-/* =========================
-   MODO ESPECTADOR
-========================= */
+/* MODO CÂMERA CELULAR */
+
+body.camera-mode .topbar,
+body.camera-mode .match-tools,
+body.camera-mode .player-panel,
+body.camera-mode .layout-buttons,
+body.camera-mode .bottom-bar,
+body.camera-mode .bottom-toggle,
+body.camera-mode .marker-bar,
+body.camera-mode .table-notes-panel,
+body.camera-mode .dice-overlay,
+body.camera-mode .chat-container,
+body.camera-mode .camera-card:nth-child(2){
+    display:none !important;
+}
+
+body.camera-mode{
+    background:#000;
+    overflow:hidden;
+}
+
+body.camera-mode .game-layout{
+    display:block;
+    height:100vh;
+    padding:0;
+}
+
+body.camera-mode .video-area{
+    display:block;
+    height:100vh;
+}
+
+body.camera-mode .camera-card{
+    display:block;
+    height:100vh;
+    border:none;
+    border-radius:0;
+    padding:0;
+}
+
+body.camera-mode .camera-title,
+body.camera-mode .camera-status,
+body.camera-mode .rotate-btn{
+    display:none !important;
+}
+
+body.camera-mode video{
+    width:100vw;
+    height:100vh;
+    border:none;
+    border-radius:0;
+    object-fit:cover;
+}
+
+/* MODO ESPECTADOR */
 
 body.spectator-mode .player-panel textarea,
 body.spectator-mode .player-panel input,
@@ -993,42 +1158,118 @@ body.spectator-mode .life{
     font-size:56px;
 }
 
-/* =========================
-   MELHORIA CÂMERAS
-========================= */
+/* MOBILE */
 
-.camera-card{
-    overflow:hidden;
+@media(max-width:900px){
+    body{
+        overflow:auto;
+        height:auto;
+        min-height:100vh;
+    }
+
+    .topbar{
+        height:auto;
+        grid-template-columns:1fr;
+        padding:14px;
+        gap:12px;
+    }
+
+    .top-actions{
+        justify-content:center;
+        flex-wrap:wrap;
+    }
+
+    .timer-box.compact-timer{
+        width:100%;
+        max-width:280px;
+    }
+
+    .timer-controls{
+        flex-wrap:wrap;
+        width:300px;
+    }
+
+    .game-layout{
+        grid-template-columns:1fr;
+        height:auto;
+        padding-bottom:90px;
+    }
+
+    .video-area{
+        grid-template-columns:1fr;
+    }
+
+    video{
+        min-height:300px;
+    }
+
+    .player-panel{
+        order:2;
+    }
+
+    .bottom-bar{
+        height:auto;
+        flex-direction:column;
+        padding:16px;
+    }
+
+    .device-controls,
+    .main-controls{
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    #cameraSelect,
+    #microphoneSelect{
+        width:100%;
+        min-width:260px;
+    }
+
+    .layout-buttons{
+        position:relative;
+        bottom:auto;
+        left:auto;
+        transform:none;
+        margin:12px 0;
+    }
+
+    .dice-overlay{
+        width:92vw;
+        padding:20px;
+    }
+
+    .dice-face{
+        width:72px;
+        height:72px;
+        font-size:48px;
+    }
+
+    .marker-bar{
+        position:relative;
+        left:auto;
+        bottom:auto;
+        transform:none;
+        flex-wrap:wrap;
+        justify-content:center;
+        margin:10px 14px 90px;
+    }
+
+    .table-notes-panel{
+        width:94%;
+        right:3%;
+        left:3%;
+        bottom:90px;
+    }
 }
-
-video{
-    box-shadow:
-        inset 0 0 20px rgba(0,0,0,0.5),
-        0 0 25px rgba(37,99,235,0.18);
-}
-
-/* =========================
-   SELECTS MODAL
-========================= */
-
-.player-fields select{
-    background:#071421;
-    border:1px solid rgba(255,255,255,0.1);
-    color:white;
-    padding:14px;
-    border-radius:12px;
-    outline:none;
-}
-
-.player-fields select:focus{
-    border-color:#3b82f6;
-}
-
-/* =========================
-   MOBILE CHAT
-========================= */
 
 @media(max-width:700px){
+    .entry-box{
+        padding:24px;
+    }
+
+    .role-options{
+        grid-template-columns:1fr;
+    }
 
     .chat-container{
         width:95%;
@@ -1037,138 +1278,4 @@ video{
         bottom:90px;
         height:360px;
     }
-
-}
-
-.format-room-text{
-    margin-top:4px;
-    font-size:12px;
-    color:#f2c45b;
-    font-weight:bold;
-    text-transform:uppercase;
-    letter-spacing:1px;
-}
-/* =========================
-   DADOS DE INÍCIO
-========================= */
-
-.dice-overlay {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 260px;
-    padding: 14px;
-    border-radius: 18px;
-    background: rgba(5, 8, 18, 0.88);
-    border: 1px solid rgba(255, 215, 120, 0.45);
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.55);
-    color: white;
-    text-align: center;
-    z-index: 20;
-    backdrop-filter: blur(8px);
-}
-
-.dice-title {
-    font-weight: 800;
-    font-size: 15px;
-    color: #f6d06f;
-    margin-bottom: 10px;
-}
-
-.dice-area {
-    display: flex;
-    justify-content: center;
-    gap: 14px;
-    margin-bottom: 12px;
-}
-
-.dice-face {
-    width: 54px;
-    height: 54px;
-    border-radius: 14px;
-    background: linear-gradient(145deg, #ffffff, #d8d8d8);
-    color: #111;
-    font-size: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow:
-        inset 0 0 8px rgba(0, 0, 0, 0.25),
-        0 6px 14px rgba(0, 0, 0, 0.45);
-}
-
-.dice-face.rolling {
-    animation: diceRoll 0.18s linear infinite;
-}
-
-@keyframes diceRoll {
-    0% {
-        transform: rotate(0deg) scale(1);
-    }
-
-    50% {
-        transform: rotate(18deg) scale(1.12);
-    }
-
-    100% {
-        transform: rotate(-18deg) scale(1);
-    }
-}
-
-.roll-dice-btn,
-.reset-dice-btn {
-    width: 100%;
-    border: none;
-    border-radius: 12px;
-    padding: 9px;
-    margin-top: 6px;
-    cursor: pointer;
-    font-weight: 800;
-}
-
-.roll-dice-btn {
-    background: linear-gradient(135deg, #f5c84b, #b88219);
-    color: #1b1300;
-}
-
-.reset-dice-btn {
-    background: rgba(255, 255, 255, 0.12);
-    color: white;
-}
-
-.dice-result-text {
-    margin-top: 10px;
-    font-size: 12px;
-    line-height: 1.35;
-    color: #ddd;
-}
-
-/* =========================
-   ÍCONE MICROFONE MUTADO
-========================= */
-
-.camera-card {
-    position: relative;
-}
-
-.muted-icon {
-    position: absolute;
-    right: 16px;
-    top: 54px;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: rgba(180, 0, 0, 0.92);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    z-index: 15;
-    box-shadow: 0 0 14px rgba(255, 0, 0, 0.65);
-}
-
-.hidden {
-    display: none !important;
 }

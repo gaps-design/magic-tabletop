@@ -9,17 +9,12 @@
 
 <body>
 
-    <!-- MODAL ENTRADA -->
-
     <div id="entryModal" class="entry-modal">
         <div class="entry-box">
-
             <h2>Entrar na sala</h2>
-
             <p id="entryRoomText">Escolha como deseja entrar</p>
 
             <div class="role-options">
-
                 <button id="playerRoleBtn" class="role-card active">
                     🎮 Jogador
                     <span>Participa da partida com câmera.</span>
@@ -29,11 +24,9 @@
                     👀 Espectador
                     <span>Apenas assiste à partida.</span>
                 </button>
-
             </div>
 
             <div id="playerFields" class="player-fields">
-
                 <label>
                     Nome do jogador *
                     <input id="playerNameInput" type="text" placeholder="Ex: Guilherme">
@@ -139,19 +132,14 @@
                         <option>Temur</option>
                     </select>
                 </label>
-
             </div>
 
             <button id="enterRoomBtn" class="enter-btn">Entrar na sala</button>
             <p id="entryError" class="entry-error"></p>
-
         </div>
     </div>
 
-    <!-- TOPO -->
-
     <header class="topbar">
-
         <div class="logo-area">
             <div>
                 <div class="logo-title">
@@ -159,9 +147,7 @@
                     <strong id="tableTitle">Mesa PvP</strong>
                 </div>
 
-                <div id="formatText" class="format-room-text">
-                    Formato: Livre
-                </div>
+                <div id="formatText" class="format-room-text">Formato: Livre</div>
 
                 <div class="room-info under-logo">
                     <span id="roomText">Sala:</span>
@@ -173,12 +159,11 @@
 
         <section class="match-tools top-timer">
             <div class="timer-box compact-timer">
-
                 <div id="timerDisplay" class="timer-display">50:00</div>
 
-                <button id="timerSettingsBtn" class="timer-toggle" onclick="toggleTimerControls()">
-                    ⚙️
-                </button>
+                <button id="timerSettingsBtn" class="timer-toggle" onclick="toggleTimerControls()">⚙️</button>
+
+                <button id="openDiceBtn" class="timer-toggle dice-top-btn" onclick="toggleDiceOverlay()">🎲</button>
 
                 <div id="timerControls" class="timer-controls hidden">
                     <input id="timerMinutesInput" type="number" placeholder="Min" value="50">
@@ -187,7 +172,6 @@
                     <button onclick="pauseTimer()">Pause</button>
                     <button onclick="resetTimer()">Reset</button>
                 </div>
-
             </div>
         </section>
 
@@ -196,22 +180,24 @@
             <button id="usersCountBtn">👥 0</button>
             <button id="settingsBtn">⚙️</button>
         </div>
-
     </header>
-
-    <!-- LAYOUT -->
 
     <main class="game-layout">
 
-        <!-- PLAYER 1 -->
-
         <aside id="playerPanel1" class="player-panel player-one">
-
             <h2 id="player1Name">Jogador 1</h2>
 
             <div>
                 <span class="label">Vida</span>
-                <div id="player1Life" class="life life-blue">20</div>
+
+                <div class="life-control-box">
+                    <div class="life-vertical-buttons">
+                        <button data-player="1" data-amount="1">+</button>
+                        <button data-player="1" data-amount="-1">−</button>
+                    </div>
+
+                    <div id="player1Life" class="life life-blue">20</div>
+                </div>
             </div>
 
             <div class="opponent-life-wrapper">
@@ -221,29 +207,27 @@
 
                 <div id="opponentLifeBox1" class="opponent-life-box hidden">
                     <span class="label">Vida do oponente</span>
-                    <div id="player1OpponentLife" class="life opponent-life">20</div>
+
+                    <div class="life-control-box opponent-local-control">
+                        <div class="life-vertical-buttons opponent-buttons">
+                            <button onclick="changeOpponentLifeLocal(1, 1)">+</button>
+                            <button onclick="changeOpponentLifeLocal(1, -1)">−</button>
+                        </div>
+
+                        <div id="player1OpponentLife" class="life opponent-life">20</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="life-buttons">
-                <button data-player="1" data-amount="-1">-</button>
-                <button data-player="1" data-amount="1">+</button>
-            </div>
-
             <div class="manual-life-box">
-                <input id="manualLife1" type="number" placeholder="Ex: 3000">
+                <input id="manualLife1" type="number" placeholder="Ex: 20">
                 <button onclick="setManualLife(1)">Aplicar</button>
                 <button onclick="resetLife(1)">Reset</button>
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(1)" class="history-small-btn">
-                    📜 Histórico
-                </button>
-
-                <button onclick="clearLifeHistory()" class="history-clear-small">
-                    Limpar
-                </button>
+                <button onclick="togglePlayerHistory(1)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
                 <div id="lifeHistoryPanel1" class="player-life-history hidden">
                     <div id="lifeHistoryList1"></div>
@@ -261,17 +245,11 @@
                     <strong id="player1Guild" class="guild-blue">---</strong>
                 </div>
             </div>
-
         </aside>
-
-        <!-- VÍDEOS -->
 
         <section class="video-area">
 
-            <!-- CÂMERA LOCAL -->
-
             <div class="camera-card camera-player-1">
-
                 <div class="camera-title">
                     <span class="blue-dot"></span>
                     <strong id="localCameraTitle">Minha câmera</strong>
@@ -287,12 +265,10 @@
                     <span class="status-dot"></span>
                     Câmera ativa
                 </div>
-
             </div>
 
-            <!-- DADOS DE INÍCIO -->
-
-            <div id="diceOverlay" class="dice-overlay">
+            <div id="diceOverlay" class="dice-overlay hidden">
+                <button class="dice-close-btn" onclick="toggleDiceOverlay()">×</button>
 
                 <div class="dice-title">🎲 Disputa de início</div>
 
@@ -301,24 +277,22 @@
                     <div id="diceTwo" class="dice-face">⚀</div>
                 </div>
 
-                <button id="rollDiceBtn" class="roll-dice-btn">
-                    🎲 Lançar dados
-                </button>
-
-                <button id="resetDiceBtn" class="reset-dice-btn">
-                    🔄 Resetar dados
-                </button>
+                <button id="rollDiceBtn" class="roll-dice-btn">🎲 Lançar dados</button>
+                <button id="resetDiceBtn" class="reset-dice-btn">🔄 Resetar dados</button>
 
                 <div id="diceResultText" class="dice-result-text">
                     Cada jogador lança 2D6. Maior resultado escolhe se quer começar.
                 </div>
 
+                <div class="dice-history-box">
+                    <strong>Histórico dos dados</strong>
+                    <div id="diceHistoryList" class="dice-history-list">
+                        Aguardando lançamento...
+                    </div>
+                </div>
             </div>
 
-            <!-- CÂMERA REMOTA -->
-
             <div class="camera-card camera-player-2">
-
                 <div class="camera-title">
                     <span class="green-dot"></span>
                     <strong id="remoteCameraTitle">Outro jogador</strong>
@@ -334,20 +308,24 @@
                     <span class="status-dot"></span>
                     Câmera ativa
                 </div>
-
             </div>
 
         </section>
 
-        <!-- PLAYER 2 -->
-
         <aside id="playerPanel2" class="player-panel player-two">
-
             <h2 id="player2Name">Jogador 2</h2>
 
             <div>
                 <span class="label">Vida</span>
-                <div id="player2Life" class="life life-green">20</div>
+
+                <div class="life-control-box">
+                    <div class="life-vertical-buttons">
+                        <button data-player="2" data-amount="1">+</button>
+                        <button data-player="2" data-amount="-1">−</button>
+                    </div>
+
+                    <div id="player2Life" class="life life-green">20</div>
+                </div>
             </div>
 
             <div class="opponent-life-wrapper">
@@ -357,29 +335,27 @@
 
                 <div id="opponentLifeBox2" class="opponent-life-box hidden">
                     <span class="label">Vida do oponente</span>
-                    <div id="player2OpponentLife" class="life opponent-life">20</div>
+
+                    <div class="life-control-box opponent-local-control">
+                        <div class="life-vertical-buttons opponent-buttons">
+                            <button onclick="changeOpponentLifeLocal(2, 1)">+</button>
+                            <button onclick="changeOpponentLifeLocal(2, -1)">−</button>
+                        </div>
+
+                        <div id="player2OpponentLife" class="life opponent-life">20</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="life-buttons">
-                <button data-player="2" data-amount="-1">-</button>
-                <button data-player="2" data-amount="1">+</button>
-            </div>
-
             <div class="manual-life-box">
-                <input id="manualLife2" type="number" placeholder="Ex: 3000">
+                <input id="manualLife2" type="number" placeholder="Ex: 20">
                 <button onclick="setManualLife(2)">Aplicar</button>
                 <button onclick="resetLife(2)">Reset</button>
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(2)" class="history-small-btn">
-                    📜 Histórico
-                </button>
-
-                <button onclick="clearLifeHistory()" class="history-clear-small">
-                    Limpar
-                </button>
+                <button onclick="togglePlayerHistory(2)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
 
                 <div id="lifeHistoryPanel2" class="player-life-history hidden">
                     <div id="lifeHistoryList2"></div>
@@ -397,17 +373,50 @@
                     <strong id="player2Guild" class="guild-green">---</strong>
                 </div>
             </div>
-
         </aside>
 
     </main>
 
-    <!-- CHAT -->
+    <section id="tableNotesPanel" class="table-notes-panel hidden">
+        <div class="notes-header">
+            📝 Anotações da partida
+            <button onclick="toggleNotesPanel()">×</button>
+        </div>
+
+        <textarea id="tableNotesInput" placeholder="Anote informações da partida, sideboard, triggers, observações..."></textarea>
+    </section>
+
+    <section class="marker-bar">
+        <div class="marker-card">
+            <span>⚡ Energia</span>
+            <div>
+                <button onclick="changeMarker('energy', -1)">−</button>
+                <strong id="energyMarker">0</strong>
+                <button onclick="changeMarker('energy', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="marker-card">
+            <span>☠️ Veneno</span>
+            <div>
+                <button onclick="changeMarker('poison', -1)">−</button>
+                <strong id="poisonMarker">0</strong>
+                <button onclick="changeMarker('poison', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="marker-card">
+            <span>🌩 Storm</span>
+            <div>
+                <button onclick="changeMarker('storm', -1)">−</button>
+                <strong id="stormMarker">0</strong>
+                <button onclick="changeMarker('storm', 1)">+</button>
+            </div>
+        </div>
+    </section>
 
     <div id="chatContainer" class="chat-container hidden">
-
         <div class="chat-header">💬 Chat da mesa</div>
-
         <div id="chatMessages" class="chat-messages"></div>
 
         <div class="chat-input-area">
@@ -422,26 +431,17 @@
             <button class="emoji-btn">👏</button>
             <button class="emoji-btn">❤️</button>
         </div>
-
     </div>
-
-    <!-- BOTÕES DE LAYOUT -->
 
     <div class="layout-buttons">
         <button id="dualViewBtn">Dual View</button>
         <button id="focusViewBtn">Focus Mode</button>
     </div>
 
-    <!-- BOTTOM -->
-
-    <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">
-        ⌄
-    </button>
+    <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">⌄</button>
 
     <footer id="bottomBar" class="bottom-bar collapsed">
-
         <div class="device-controls">
-
             <button id="toggleMicBtn" class="control-item status-control">
                 🎙️
                 <div>
@@ -465,29 +465,21 @@
             <div class="control-item select-control">
                 <select id="microphoneSelect"></select>
             </div>
-
         </div>
 
         <div class="main-controls">
-
             <button id="fullscreenBtn">⛶ Tela cheia</button>
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
 
-            <button onclick="copyCameraLink()">
-                📷 Celular como câmera
-            </button>
+            <button onclick="copyCameraLink()">📷 Celular como câmera</button>
+
+            <button onclick="toggleNotesPanel()">📝 Anotações</button>
 
             <button id="toggleChatBtn">💬 Chat</button>
 
-            <button class="leave-btn" onclick="leaveRoom()">
-                📞 Sair da sala
-            </button>
-
+            <button class="leave-btn" onclick="leaveRoom()">📞 Sair da sala</button>
         </div>
-
     </footer>
-
-    <!-- SCRIPTS -->
 
     <script>
         function toggleBottomBar() {
@@ -497,12 +489,7 @@
             if (!bottomBar || !bottomToggleBtn) return;
 
             bottomBar.classList.toggle("collapsed");
-
-            if (bottomBar.classList.contains("collapsed")) {
-                bottomToggleBtn.innerText = "⌃";
-            } else {
-                bottomToggleBtn.innerText = "⌄";
-            }
+            bottomToggleBtn.innerText = bottomBar.classList.contains("collapsed") ? "⌃" : "⌄";
         }
 
         function toggleTimerControls() {
@@ -517,6 +504,40 @@
             if (!box) return;
 
             box.classList.toggle("hidden");
+        }
+
+        function changeOpponentLifeLocal(player, amount) {
+            const box = document.getElementById(`player${player}OpponentLife`);
+            if (!box) return;
+
+            const current = Number(box.innerText || 20);
+            box.innerText = current + Number(amount);
+        }
+
+        function toggleNotesPanel() {
+            const panel = document.getElementById("tableNotesPanel");
+            if (!panel) return;
+
+            panel.classList.toggle("hidden");
+        }
+
+        const markers = {
+            energy: 0,
+            poison: 0,
+            storm: 0
+        };
+
+        function changeMarker(type, amount) {
+            if (!markers.hasOwnProperty(type)) return;
+
+            markers[type] += Number(amount);
+
+            if (markers[type] < 0) {
+                markers[type] = 0;
+            }
+
+            const el = document.getElementById(`${type}Marker`);
+            if (el) el.innerText = markers[type];
         }
     </script>
 
