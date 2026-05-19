@@ -1419,14 +1419,38 @@ body.spectator-mode #settingsBtn{
 }
 
 body.spectator-mode .game-layout{
-    grid-template-columns:260px 1fr 260px;
+    display:grid;
+    grid-template-columns:220px 1fr 220px;
+    grid-template-rows:1fr auto;
+    grid-template-areas:
+        "left videos right"
+        "bottom bottom bottom";
+
+    gap:14px;
+    height:calc(100vh - 78px);
+}
+
+body.spectator-mode #playerPanel1{
+    grid-area:left;
+}
+
+body.spectator-mode .video-area{
+    grid-area:videos;
+}
+
+body.spectator-mode #playerPanel2{
+    grid-area:right;
+}
+
+body.spectator-mode #spectatorBottomArea{
+    grid-area:bottom;
 }
 
 body.spectator-mode .video-area{
     display:grid;
-    grid-template-columns:1fr;
-    grid-template-rows:1fr 1fr;
+    grid-template-columns:1fr 1fr;
     gap:16px;
+    align-items:stretch;
 }
 
 body.spectator-mode .camera-card{
