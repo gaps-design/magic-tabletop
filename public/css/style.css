@@ -1978,3 +1978,52 @@ body.spectator-mode.spectator-focus-p2 .video-area{
 body.spectator-mode.spectator-focus-p2 .camera-player-1{
     display:none !important;
 }
+.camera-qr-modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.75);
+    z-index:99999;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.camera-qr-box{
+    width:340px;
+    max-width:90%;
+    background:#08182a;
+    border:1px solid rgba(255,255,255,0.12);
+    border-radius:20px;
+    padding:24px;
+    text-align:center;
+    position:relative;
+    box-shadow:0 0 40px rgba(0,0,0,0.6);
+}
+
+.camera-qr-box h2{
+    margin-bottom:10px;
+}
+
+.camera-qr-box p{
+    color:#cbd5e1;
+    font-size:14px;
+    margin-bottom:18px;
+}
+
+#cameraQrCode{
+    background:white;
+    padding:12px;
+    border-radius:14px;
+    display:inline-block;
+    margin-bottom:18px;
+}
+
+.camera-qr-close{
+    position:absolute;
+    top:10px;
+    right:10px;
+    width:32px;
+    height:32px;
+    padding:0;
+    border-radius:50%;
+}

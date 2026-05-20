@@ -548,7 +548,20 @@
             box.classList.toggle("hidden");
         }
     </script>
+<div id="cameraQrModal" class="camera-qr-modal hidden">
+    <div class="camera-qr-box">
+        <button class="camera-qr-close" onclick="closeCameraQrModal()">×</button>
 
+        <h2>📷 Câmera do celular</h2>
+        <p>Escaneie o QR Code com o celular para usar como câmera auxiliar.</p>
+
+        <div id="cameraQrCode"></div>
+
+        <button onclick="copyCameraLink()">Copiar link novamente</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/webrtc.js"></script>
     <script src="js/sala.js"></script>

@@ -748,10 +748,33 @@ window.copyCameraLink = async function() {
 
     try {
         await navigator.clipboard.writeText(cameraUrl);
-        alert("Link da câmera copiado! Abra esse link no celular.");
     } catch (error) {
-        alert(cameraUrl);
+        console.warn("Não foi possível copiar automaticamente.", error);
     }
+
+    openCameraQrModal(cameraUrl);
+};
+
+window.openCameraQrModal = function(cameraUrl) {
+    const modal = document.getElementById("cameraQrModal");
+    const qrBox = document.getElementById("cameraQrCode");
+
+    if (!modal || !qrBox) return;
+
+    qrBox.innerHTML = "";
+
+    new QRCode(qrBox, {
+        text: cameraUrl,
+        width: 220,
+        height: 220
+    });
+
+    modal.classList.remove("hidden");
+};
+
+window.closeCameraQrModal = function() {
+    const modal = document.getElementById("cameraQrModal");
+    if (modal) modal.classList.add("hidden");
 };
 
 document.querySelectorAll(".rotate-btn").forEach(btn => {
