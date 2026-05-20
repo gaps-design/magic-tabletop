@@ -325,31 +325,64 @@ function routeStream(socketId, stream) {
         playerNumber: info.playerNumber
     });
 
-    if (currentRole === "spectator") {
-        if (info.role === "camera") {
-            if (Number(info.linkedPlayer) === 1) {
-                setVideoStream(localVideo, stream, false);
-            }
+   if (currentRole === "spectator") {
 
-            if (Number(info.linkedPlayer) === 2) {
-                setVideoStream(remoteVideo, stream, false);
-            }
+    /*
+    =========================
+    CÂMERA AUXILIAR TEM PRIORIDADE
+    =========================
+    */
 
-            return;
+    if (info.role === "camera") {
+
+        if (Number(info.linkedPlayer) === 1) {
+            setVideoStream(localVideo, stream, false);
         }
 
-        if (info.role === "player") {
-            if (Number(info.playerNumber) === 1) {
-                setVideoStream(localVideo, stream, false);
-            }
-
-            if (Number(info.playerNumber) === 2) {
-                setVideoStream(remoteVideo, stream, false);
-            }
-
-            return;
+        if (Number(info.linkedPlayer) === 2) {
+            setVideoStream(remoteVideo, stream, false);
         }
+
+        return;
     }
+
+    /*
+    =========================
+    PLAYER NORMAL
+    =========================
+    */
+
+    if (info.role === "player") {
+
+        // Só usa player se NÃO existir câmera auxiliar
+
+        const hasCameraP1 = Object.values(peerInfo).some(peer =>
+            peer.role === "camera" &&
+            Number(peer.linkedPlayer) === 1
+        );
+
+        const hasCameraP2 = Object.values(peerInfo).some(peer =>
+            peer.role === "camera" &&
+            Number(peer.linkedPlayer) === 2
+        );
+
+        if (
+            Number(info.playerNumber) === 1 &&
+            !hasCameraP1
+        ) {
+            setVideoStream(localVideo, stream, false);
+        }
+
+        if (
+            Number(info.playerNumber) === 2 &&
+            !hasCameraP2
+        ) {
+            setVideoStream(remoteVideo, stream, false);
+        }
+
+        return;
+    }
+}
 
     if (currentRole === "player") {
         if (info.role === "camera") {
@@ -447,6 +480,8 @@ function createPeerConnection(targetId) {
 }
 
 function cleanupPeer(socketId) {
+
+    const info = peerInfo[socketId] || {};
     const stream = remoteStreams[socketId];
 
     if (peerConnections[socketId]) {
@@ -457,46 +492,47 @@ function cleanupPeer(socketId) {
     clearVideoIfStream(remoteVideo, stream);
 
     delete peerConnections[socketId];
-    delete peerInfo[socketId];
     delete remoteStreams[socketId];
     delete pendingCandidates[socketId];
-}
 
-async function createOffer(targetId, data = {}) {
-    savePeerInfo(targetId, data);
+    /*
+    =========================
+    VOLTAR PARA CÂMERA PLAYER
+    =========================
+    */
 
-    const peer = createPeerConnection(targetId);
+    if (info.role === "camera") {
 
-    if (peer.signalingState !== "stable") {
-        return;
+        Object.entries(remoteStreams).forEach(([id, playerStream]) => {
+
+            const peer = peerInfo[id];
+
+            if (!peer) return;
+
+            if (peer.role !== "player") return;
+
+            // PLAYER 1
+            if (
+                Number(info.linkedPlayer) === 1 &&
+                Number(peer.playerNumber) === 1
+            ) {
+                setVideoStream(localVideo, playerStream, false);
+            }
+
+            // PLAYER 2
+            if (
+                Number(info.linkedPlayer) === 2 &&
+                Number(peer.playerNumber) === 2
+            ) {
+                setVideoStream(remoteVideo, playerStream, false);
+            }
+
+        });
+
     }
 
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-
-    socket.emit("offer", {
-        target: targetId,
-        offer
-    });
+    delete peerInfo[socketId];
 }
-
-async function flushPendingCandidates(sender) {
-    const peer = peerConnections[sender];
-    if (!peer) return;
-
-    if (!pendingCandidates[sender]) return;
-
-    for (const candidate of pendingCandidates[sender]) {
-        try {
-            await peer.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-            console.error("Erro ICE pendente:", err);
-        }
-    }
-
-    delete pendingCandidates[sender];
-}
-
 /* =========================
    ENTRAR NA SALA
 ========================= */
