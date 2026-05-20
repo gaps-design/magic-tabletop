@@ -574,27 +574,36 @@ socket.on("assigned-role", (data) => {
 });
 
 socket.on("existing-peers", async ({ peers }) => {
+
     for (const peerData of peers) {
+
         if (!peerData.socketId) continue;
 
         savePeerInfo(peerData.socketId, peerData);
 
-        if (peerData.role === "spectator") continue;
+        // espectador não transmite mídia
+        // então ninguém cria offer PARA ele
+        if (peerData.role === "spectator") {
+            continue;
+        }
+
+        // câmera auxiliar só conversa com player/espectador
+        // não precisa conectar com outra câmera
+        if (
+            currentRole === "camera" &&
+            peerData.role === "camera"
+        ) {
+            continue;
+        }
 
         await createOffer(peerData.socketId, peerData);
     }
 });
 
-socket.on("user-connected", async (data) => {
+socket.on("user-connected", (data) => {
     if (!data.socketId) return;
 
     savePeerInfo(data.socketId, data);
-
-    // Só o espectador cria conexão quando um jogador/câmera entra depois dele.
-    // Jogador x jogador continua sendo feito pelo existing-peers.
-    if (currentRole === "spectator" && data.role !== "spectator") {
-        await createOffer(data.socketId, data);
-    }
 });
 
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
