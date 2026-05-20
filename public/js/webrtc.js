@@ -63,6 +63,7 @@ const servers = {
 ========================= */
 
 async function getDevices() {
+
     if (!navigator.mediaDevices?.enumerateDevices) return;
 
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -71,11 +72,15 @@ async function getDevices() {
     const microphones = devices.filter(device => device.kind === "audioinput");
 
     if (cameraSelect) {
+
         const currentValue = selectedCameraId || cameraSelect.value;
+
         cameraSelect.innerHTML = "";
 
         cameras.forEach((camera, index) => {
+
             const option = document.createElement("option");
+
             option.value = camera.deviceId;
             option.text = camera.label || `Câmera ${index + 1}`;
 
@@ -84,21 +89,33 @@ async function getDevices() {
             }
 
             cameraSelect.appendChild(option);
+
         });
 
         if (!selectedCameraId && cameras[0]) {
+
             selectedCameraId = cameras[0].deviceId;
+
             cameraSelect.value = selectedCameraId;
-            localStorage.setItem("magicSelectedCamera", selectedCameraId);
+
+            localStorage.setItem(
+                "magicSelectedCamera",
+                selectedCameraId
+            );
         }
     }
 
     if (microphoneSelect) {
-        const currentValue = selectedMicrophoneId || microphoneSelect.value;
+
+        const currentValue =
+            selectedMicrophoneId || microphoneSelect.value;
+
         microphoneSelect.innerHTML = "";
 
         microphones.forEach((mic, index) => {
+
             const option = document.createElement("option");
+
             option.value = mic.deviceId;
             option.text = mic.label || `Microfone ${index + 1}`;
 
@@ -107,23 +124,33 @@ async function getDevices() {
             }
 
             microphoneSelect.appendChild(option);
+
         });
 
         if (!selectedMicrophoneId && microphones[0]) {
+
             selectedMicrophoneId = microphones[0].deviceId;
+
             microphoneSelect.value = selectedMicrophoneId;
-            localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
+
+            localStorage.setItem(
+                "magicSelectedMicrophone",
+                selectedMicrophoneId
+            );
         }
     }
 }
 
 function updateMediaStatus() {
+
     if (micStatusText) {
-        micStatusText.innerText = micEnabled ? "Ativado" : "Desativado";
+        micStatusText.innerText =
+            micEnabled ? "Ativado" : "Desativado";
     }
 
     if (cameraStatusText) {
-        cameraStatusText.innerText = cameraEnabled ? "Ativada" : "Desativada";
+        cameraStatusText.innerText =
+            cameraEnabled ? "Ativada" : "Desativada";
     }
 }
 
@@ -131,25 +158,45 @@ function updateMediaStatus() {
    WEBCAM
 ========================= */
 
-async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedMicrophoneId) {
+async function startWebcam(
+    cameraId = selectedCameraId,
+    microphoneId = selectedMicrophoneId
+) {
+
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
 
     const constraints = {
-        video: cameraId ? { deviceId: { exact: cameraId } } : true,
-        audio: microphoneId ? { deviceId: { exact: microphoneId } } : true
+
+        video: cameraId
+            ? { deviceId: { exact: cameraId } }
+            : true,
+
+        audio: microphoneId
+            ? { deviceId: { exact: microphoneId } }
+            : true
     };
 
     try {
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (err) {
-        console.warn("Falha com dispositivo salvo. Tentando padrão.", err);
 
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
-        });
+        localStream =
+            await navigator.mediaDevices.getUserMedia(
+                constraints
+            );
+
+    } catch (err) {
+
+        console.warn(
+            "Falha com dispositivo salvo. Tentando padrão.",
+            err
+        );
+
+        localStream =
+            await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+            });
     }
 
     localStream.getAudioTracks().forEach(track => {
@@ -161,9 +208,11 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     });
 
     if (localVideo) {
+
         localVideo.srcObject = localStream;
         localVideo.muted = true;
         localVideo.playsInline = true;
+
         await localVideo.play().catch(() => {});
     }
 
@@ -173,38 +222,70 @@ async function startWebcam(cameraId = selectedCameraId, microphoneId = selectedM
     const audioTrack = localStream.getAudioTracks()[0];
 
     if (videoTrack) {
+
         const settings = videoTrack.getSettings();
-        selectedCameraId = settings.deviceId || selectedCameraId;
-        localStorage.setItem("magicSelectedCamera", selectedCameraId);
-        if (cameraSelect) cameraSelect.value = selectedCameraId;
+
+        selectedCameraId =
+            settings.deviceId || selectedCameraId;
+
+        localStorage.setItem(
+            "magicSelectedCamera",
+            selectedCameraId
+        );
+
+        if (cameraSelect) {
+            cameraSelect.value = selectedCameraId;
+        }
     }
 
     if (audioTrack) {
+
         const settings = audioTrack.getSettings();
-        selectedMicrophoneId = settings.deviceId || selectedMicrophoneId;
-        localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
-        if (microphoneSelect) microphoneSelect.value = selectedMicrophoneId;
+
+        selectedMicrophoneId =
+            settings.deviceId || selectedMicrophoneId;
+
+        localStorage.setItem(
+            "magicSelectedMicrophone",
+            selectedMicrophoneId
+        );
+
+        if (microphoneSelect) {
+            microphoneSelect.value = selectedMicrophoneId;
+        }
     }
 
     updateMediaStatus();
 }
 
 /* =========================
-   TROCA CÂMERA / MICROFONE
+   TROCAR CÂMERA
 ========================= */
 
 async function switchCamera(cameraId) {
+
     if (!cameraId) return;
 
     selectedCameraId = cameraId;
-    localStorage.setItem("magicSelectedCamera", selectedCameraId);
 
-    const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: selectedCameraId } },
-        audio: false
-    });
+    localStorage.setItem(
+        "magicSelectedCamera",
+        selectedCameraId
+    );
 
-    const newVideoTrack = newStream.getVideoTracks()[0];
+    const newStream =
+        await navigator.mediaDevices.getUserMedia({
+
+            video: {
+                deviceId: { exact: selectedCameraId }
+            },
+
+            audio: false
+        });
+
+    const newVideoTrack =
+        newStream.getVideoTracks()[0];
+
     if (!newVideoTrack) return;
 
     newVideoTrack.enabled = cameraEnabled;
@@ -214,35 +295,56 @@ async function switchCamera(cameraId) {
     }
 
     localStream.getVideoTracks().forEach(track => {
+
         track.stop();
         localStream.removeTrack(track);
+
     });
 
     localStream.addTrack(newVideoTrack);
 
     if (localVideo) {
+
         localVideo.srcObject = localStream;
         localVideo.muted = true;
         localVideo.playsInline = true;
+
         await localVideo.play().catch(() => {});
     }
 
     replaceTrackOnPeers("video", newVideoTrack);
+
     updateMediaStatus();
 }
 
+/* =========================
+   TROCAR MICROFONE
+========================= */
+
 async function switchMicrophone(microphoneId) {
+
     if (!microphoneId) return;
 
     selectedMicrophoneId = microphoneId;
-    localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
 
-    const newStream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: { deviceId: { exact: selectedMicrophoneId } }
-    });
+    localStorage.setItem(
+        "magicSelectedMicrophone",
+        selectedMicrophoneId
+    );
 
-    const newAudioTrack = newStream.getAudioTracks()[0];
+    const newStream =
+        await navigator.mediaDevices.getUserMedia({
+
+            video: false,
+
+            audio: {
+                deviceId: { exact: selectedMicrophoneId }
+            }
+        });
+
+    const newAudioTrack =
+        newStream.getAudioTracks()[0];
+
     if (!newAudioTrack) return;
 
     newAudioTrack.enabled = micEnabled;
@@ -252,42 +354,55 @@ async function switchMicrophone(microphoneId) {
     }
 
     localStream.getAudioTracks().forEach(track => {
+
         track.stop();
         localStream.removeTrack(track);
+
     });
 
     localStream.addTrack(newAudioTrack);
 
     replaceTrackOnPeers("audio", newAudioTrack);
+
     updateMediaStatus();
 }
 
 function replaceTrackOnPeers(kind, newTrack) {
+
     Object.values(peerConnections).forEach(peer => {
-        const sender = peer.getSenders().find(s => s.track && s.track.kind === kind);
+
+        const sender =
+            peer.getSenders().find(
+                s => s.track && s.track.kind === kind
+            );
 
         if (sender) {
             sender.replaceTrack(newTrack);
         }
+
     });
 }
 
 /* =========================
-   ROTEAMENTO DE VÍDEO
+   ROTEAMENTO
 ========================= */
 
 function savePeerInfo(socketId, data = {}) {
+
     if (!socketId) return;
 
     peerInfo[socketId] = {
+
         ...(peerInfo[socketId] || {}),
         ...data
+
     };
 
     routeAllStreams();
 }
 
 function setVideoStream(videoElement, stream, muted = false) {
+
     if (!videoElement || !stream) return;
 
     if (videoElement.srcObject !== stream) {
@@ -296,10 +411,12 @@ function setVideoStream(videoElement, stream, muted = false) {
 
     videoElement.muted = muted;
     videoElement.playsInline = true;
+
     videoElement.play().catch(() => {});
 }
 
 function clearVideoIfStream(videoElement, stream) {
+
     if (!videoElement || !stream) return;
 
     if (videoElement.srcObject === stream) {
@@ -308,87 +425,26 @@ function clearVideoIfStream(videoElement, stream) {
 }
 
 function routeStream(socketId, stream) {
+
     if (!socketId || !stream) return;
 
-    if (currentRole === "camera") {
-        return;
-    }
+    if (currentRole === "camera") return;
 
     const info = peerInfo[socketId] || {};
 
-    console.log("Roteando stream:", {
-        socketId,
-        currentRole,
-        myPlayerNumberRTC,
-        peerRole: info.role,
-        linkedPlayer: info.linkedPlayer,
-        playerNumber: info.playerNumber
-    });
+    /* =========================
+       ESPECTADOR
+    ========================= */
 
-   if (currentRole === "spectator") {
+    if (currentRole === "spectator") {
 
-    /*
-    =========================
-    CÂMERA AUXILIAR TEM PRIORIDADE
-    =========================
-    */
-
-    if (info.role === "camera") {
-
-        if (Number(info.linkedPlayer) === 1) {
-            setVideoStream(localVideo, stream, false);
-        }
-
-        if (Number(info.linkedPlayer) === 2) {
-            setVideoStream(remoteVideo, stream, false);
-        }
-
-        return;
-    }
-
-    /*
-    =========================
-    PLAYER NORMAL
-    =========================
-    */
-
-    if (info.role === "player") {
-
-        // Só usa player se NÃO existir câmera auxiliar
-
-        const hasCameraP1 = Object.values(peerInfo).some(peer =>
-            peer.role === "camera" &&
-            Number(peer.linkedPlayer) === 1
-        );
-
-        const hasCameraP2 = Object.values(peerInfo).some(peer =>
-            peer.role === "camera" &&
-            Number(peer.linkedPlayer) === 2
-        );
-
-        if (
-            Number(info.playerNumber) === 1 &&
-            !hasCameraP1
-        ) {
-            setVideoStream(localVideo, stream, false);
-        }
-
-        if (
-            Number(info.playerNumber) === 2 &&
-            !hasCameraP2
-        ) {
-            setVideoStream(remoteVideo, stream, false);
-        }
-
-        return;
-    }
-}
-
-    if (currentRole === "player") {
         if (info.role === "camera") {
-            if (Number(info.linkedPlayer) === Number(myPlayerNumberRTC)) {
-                setVideoStream(localVideo, stream, true);
-            } else {
+
+            if (Number(info.linkedPlayer) === 1) {
+                setVideoStream(localVideo, stream, false);
+            }
+
+            if (Number(info.linkedPlayer) === 2) {
                 setVideoStream(remoteVideo, stream, false);
             }
 
@@ -396,7 +452,67 @@ function routeStream(socketId, stream) {
         }
 
         if (info.role === "player") {
-            if (Number(info.playerNumber) !== Number(myPlayerNumberRTC)) {
+
+            const hasCameraP1 =
+                Object.values(peerInfo).some(peer =>
+                    peer.role === "camera" &&
+                    Number(peer.linkedPlayer) === 1
+                );
+
+            const hasCameraP2 =
+                Object.values(peerInfo).some(peer =>
+                    peer.role === "camera" &&
+                    Number(peer.linkedPlayer) === 2
+                );
+
+            if (
+                Number(info.playerNumber) === 1 &&
+                !hasCameraP1
+            ) {
+                setVideoStream(localVideo, stream, false);
+            }
+
+            if (
+                Number(info.playerNumber) === 2 &&
+                !hasCameraP2
+            ) {
+                setVideoStream(remoteVideo, stream, false);
+            }
+
+            return;
+        }
+    }
+
+    /* =========================
+       PLAYER
+    ========================= */
+
+    if (currentRole === "player") {
+
+        if (info.role === "camera") {
+
+            if (
+                Number(info.linkedPlayer) ===
+                Number(myPlayerNumberRTC)
+            ) {
+
+                setVideoStream(localVideo, stream, true);
+
+            } else {
+
+                setVideoStream(remoteVideo, stream, false);
+            }
+
+            return;
+        }
+
+        if (info.role === "player") {
+
+            if (
+                Number(info.playerNumber) !==
+                Number(myPlayerNumberRTC)
+            ) {
+
                 setVideoStream(remoteVideo, stream, false);
             }
 
@@ -406,9 +522,14 @@ function routeStream(socketId, stream) {
 }
 
 function routeAllStreams() {
-    Object.entries(remoteStreams).forEach(([socketId, stream]) => {
-        routeStream(socketId, stream);
-    });
+
+    Object.entries(remoteStreams).forEach(
+        ([socketId, stream]) => {
+
+            routeStream(socketId, stream);
+
+        }
+    );
 }
 
 /* =========================
@@ -416,35 +537,49 @@ function routeAllStreams() {
 ========================= */
 
 function createPeerConnection(targetId) {
+
     if (peerConnections[targetId]) {
         return peerConnections[targetId];
     }
 
     const peer = new RTCPeerConnection(servers);
+
     peerConnections[targetId] = peer;
 
     if (localStream) {
+
         localStream.getTracks().forEach(track => {
             peer.addTrack(track, localStream);
         });
+
     } else {
-        peer.addTransceiver("video", { direction: "recvonly" });
-        peer.addTransceiver("audio", { direction: "recvonly" });
+
+        peer.addTransceiver("video", {
+            direction: "recvonly"
+        });
+
+        peer.addTransceiver("audio", {
+            direction: "recvonly"
+        });
     }
 
     peer.ontrack = (event) => {
-        console.log("Track recebida:", targetId, event.track.kind);
 
         let stream = event.streams[0];
 
         if (!stream) {
+
             if (!remoteStreams[targetId]) {
                 remoteStreams[targetId] = new MediaStream();
             }
 
-            remoteStreams[targetId].addTrack(event.track);
+            remoteStreams[targetId]
+                .addTrack(event.track);
+
             stream = remoteStreams[targetId];
+
         } else {
+
             remoteStreams[targetId] = stream;
         }
 
@@ -456,22 +591,29 @@ function createPeerConnection(targetId) {
     };
 
     peer.onicecandidate = (event) => {
+
         if (event.candidate) {
+
             socket.emit("ice-candidate", {
+
                 target: targetId,
                 candidate: event.candidate
+
             });
         }
     };
 
     peer.onconnectionstatechange = () => {
-        console.log("Estado WebRTC:", targetId, peer.connectionState);
 
         if (peer.connectionState === "connected") {
             routeAllStreams();
         }
 
-        if (peer.connectionState === "failed" || peer.connectionState === "closed") {
+        if (
+            peer.connectionState === "failed" ||
+            peer.connectionState === "closed"
+        ) {
+
             cleanupPeer(targetId);
         }
     };
@@ -495,59 +637,109 @@ function cleanupPeer(socketId) {
     delete remoteStreams[socketId];
     delete pendingCandidates[socketId];
 
-    /*
-    =========================
-    VOLTAR PARA CÂMERA PLAYER
-    =========================
-    */
-
     if (info.role === "camera") {
 
-        Object.entries(remoteStreams).forEach(([id, playerStream]) => {
+        Object.entries(remoteStreams).forEach(
+            ([id, playerStream]) => {
 
-            const peer = peerInfo[id];
+                const peer = peerInfo[id];
 
-            if (!peer) return;
+                if (!peer) return;
 
-            if (peer.role !== "player") return;
+                if (peer.role !== "player") return;
 
-            // PLAYER 1
-            if (
-                Number(info.linkedPlayer) === 1 &&
-                Number(peer.playerNumber) === 1
-            ) {
-                setVideoStream(localVideo, playerStream, false);
+                if (
+                    Number(info.linkedPlayer) === 1 &&
+                    Number(peer.playerNumber) === 1
+                ) {
+                    setVideoStream(localVideo, playerStream, false);
+                }
+
+                if (
+                    Number(info.linkedPlayer) === 2 &&
+                    Number(peer.playerNumber) === 2
+                ) {
+                    setVideoStream(remoteVideo, playerStream, false);
+                }
+
             }
-
-            // PLAYER 2
-            if (
-                Number(info.linkedPlayer) === 2 &&
-                Number(peer.playerNumber) === 2
-            ) {
-                setVideoStream(remoteVideo, playerStream, false);
-            }
-
-        });
-
+        );
     }
 
     delete peerInfo[socketId];
 }
+
+async function createOffer(targetId, data = {}) {
+
+    savePeerInfo(targetId, data);
+
+    const peer = createPeerConnection(targetId);
+
+    if (peer.signalingState !== "stable") {
+        return;
+    }
+
+    const offer = await peer.createOffer();
+
+    await peer.setLocalDescription(offer);
+
+    socket.emit("offer", {
+        target: targetId,
+        offer
+    });
+}
+
+async function flushPendingCandidates(sender) {
+
+    const peer = peerConnections[sender];
+
+    if (!peer) return;
+
+    if (!pendingCandidates[sender]) return;
+
+    for (const candidate of pendingCandidates[sender]) {
+
+        try {
+
+            await peer.addIceCandidate(
+                new RTCIceCandidate(candidate)
+            );
+
+        } catch (err) {
+
+            console.error(
+                "Erro ICE pendente:",
+                err
+            );
+        }
+    }
+
+    delete pendingCandidates[sender];
+}
+
 /* =========================
    ENTRAR NA SALA
 ========================= */
 
 async function joinRoom(roomId, user) {
+
     currentRoomId = roomId;
     currentRole = user.role;
 
-    if (user.role === "player" || user.role === "camera") {
+    if (
+        user.role === "player" ||
+        user.role === "camera"
+    ) {
+
         await startWebcam();
+
     } else {
+
         await getDevices();
     }
 
     socket.emit("join-room", {
+
         roomId,
 
         role: user.role,
@@ -564,10 +756,12 @@ async function joinRoom(roomId, user) {
 ========================= */
 
 socket.on("assigned-role", (data) => {
+
     currentRole = data.role;
 
     if (data.playerNumber) {
-        myPlayerNumberRTC = Number(data.playerNumber);
+        myPlayerNumberRTC =
+            Number(data.playerNumber);
     }
 
     routeAllStreams();
@@ -579,16 +773,15 @@ socket.on("existing-peers", async ({ peers }) => {
 
         if (!peerData.socketId) continue;
 
-        savePeerInfo(peerData.socketId, peerData);
+        savePeerInfo(
+            peerData.socketId,
+            peerData
+        );
 
-        // espectador não transmite mídia
-        // então ninguém cria offer PARA ele
         if (peerData.role === "spectator") {
             continue;
         }
 
-        // câmera auxiliar só conversa com player/espectador
-        // não precisa conectar com outra câmera
         if (
             currentRole === "camera" &&
             peerData.role === "camera"
@@ -596,156 +789,253 @@ socket.on("existing-peers", async ({ peers }) => {
             continue;
         }
 
-        await createOffer(peerData.socketId, peerData);
+        await createOffer(
+            peerData.socketId,
+            peerData
+        );
     }
 });
 
 socket.on("user-connected", (data) => {
+
     if (!data.socketId) return;
 
     savePeerInfo(data.socketId, data);
+
+    if (
+        currentRole === "spectator" &&
+        data.role !== "spectator"
+    ) {
+
+        createOffer(data.socketId, data);
+    }
 });
 
-socket.on("offer", async ({ offer, sender, senderInfo }) => {
-    if (!sender || !offer) return;
+socket.on(
+    "offer",
+    async ({ offer, sender, senderInfo }) => {
 
-    if (senderInfo) {
-        savePeerInfo(sender, senderInfo);
-    }
+        if (!sender || !offer) return;
 
-    let peer = peerConnections[sender];
-
-    if (!peer) {
-        peer = createPeerConnection(sender);
-    }
-
-    if (peer.signalingState !== "stable") {
-        peer.close();
-        delete peerConnections[sender];
-        peer = createPeerConnection(sender);
-    }
-
-    await peer.setRemoteDescription(new RTCSessionDescription(offer));
-
-    const answer = await peer.createAnswer();
-    await peer.setLocalDescription(answer);
-
-    socket.emit("answer", {
-        target: sender,
-        answer
-    });
-
-    await flushPendingCandidates(sender);
-});
-
-socket.on("answer", async ({ answer, sender }) => {
-    const peer = peerConnections[sender];
-    if (!peer || !answer) return;
-
-    if (peer.signalingState === "stable") return;
-
-    await peer.setRemoteDescription(new RTCSessionDescription(answer));
-    await flushPendingCandidates(sender);
-});
-
-socket.on("ice-candidate", async ({ candidate, sender }) => {
-    if (!candidate || !sender) return;
-
-    const peer = peerConnections[sender];
-
-    if (!peer || !peer.remoteDescription) {
-        if (!pendingCandidates[sender]) {
-            pendingCandidates[sender] = [];
+        if (senderInfo) {
+            savePeerInfo(sender, senderInfo);
         }
 
-        pendingCandidates[sender].push(candidate);
-        return;
-    }
+        let peer = peerConnections[sender];
 
-    try {
-        await peer.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (err) {
-        console.error("Erro ICE:", err);
+        if (!peer) {
+            peer = createPeerConnection(sender);
+        }
+
+        if (peer.signalingState !== "stable") {
+
+            peer.close();
+
+            delete peerConnections[sender];
+
+            peer = createPeerConnection(sender);
+        }
+
+        await peer.setRemoteDescription(
+            new RTCSessionDescription(offer)
+        );
+
+        const answer = await peer.createAnswer();
+
+        await peer.setLocalDescription(answer);
+
+        socket.emit("answer", {
+            target: sender,
+            answer
+        });
+
+        await flushPendingCandidates(sender);
     }
-});
+);
+
+socket.on(
+    "answer",
+    async ({ answer, sender }) => {
+
+        const peer = peerConnections[sender];
+
+        if (!peer || !answer) return;
+
+        if (peer.signalingState === "stable") return;
+
+        await peer.setRemoteDescription(
+            new RTCSessionDescription(answer)
+        );
+
+        await flushPendingCandidates(sender);
+    }
+);
+
+socket.on(
+    "ice-candidate",
+    async ({ candidate, sender }) => {
+
+        if (!candidate || !sender) return;
+
+        const peer = peerConnections[sender];
+
+        if (!peer || !peer.remoteDescription) {
+
+            if (!pendingCandidates[sender]) {
+                pendingCandidates[sender] = [];
+            }
+
+            pendingCandidates[sender].push(candidate);
+
+            return;
+        }
+
+        try {
+
+            await peer.addIceCandidate(
+                new RTCIceCandidate(candidate)
+            );
+
+        } catch (err) {
+
+            console.error("Erro ICE:", err);
+        }
+    }
+);
 
 socket.on("user-disconnected", (socketId) => {
     cleanupPeer(socketId);
 });
 
 /* =========================
-   TROCA DE DISPOSITIVOS
+   DISPOSITIVOS
 ========================= */
 
 if (cameraSelect) {
-    cameraSelect.addEventListener("change", async () => {
-        try {
-            await switchCamera(cameraSelect.value);
-        } catch (err) {
-            console.error("Erro ao trocar câmera:", err);
-            alert("Erro ao trocar câmera.");
+
+    cameraSelect.addEventListener(
+        "change",
+        async () => {
+
+            try {
+
+                await switchCamera(
+                    cameraSelect.value
+                );
+
+            } catch (err) {
+
+                console.error(
+                    "Erro ao trocar câmera:",
+                    err
+                );
+
+                alert("Erro ao trocar câmera.");
+            }
         }
-    });
+    );
 }
 
 if (microphoneSelect) {
-    microphoneSelect.addEventListener("change", async () => {
-        try {
-            await switchMicrophone(microphoneSelect.value);
-        } catch (err) {
-            console.error("Erro ao trocar microfone:", err);
-            alert("Erro ao trocar microfone.");
+
+    microphoneSelect.addEventListener(
+        "change",
+        async () => {
+
+            try {
+
+                await switchMicrophone(
+                    microphoneSelect.value
+                );
+
+            } catch (err) {
+
+                console.error(
+                    "Erro ao trocar microfone:",
+                    err
+                );
+
+                alert(
+                    "Erro ao trocar microfone."
+                );
+            }
         }
-    });
+    );
 }
 
 /* =========================
-   LIGAR / DESLIGAR
+   MICROFONE
 ========================= */
 
 window.toggleMicrophone = function() {
+
     if (!localStream) return;
 
     micEnabled = !micEnabled;
 
-    localStream.getAudioTracks().forEach(track => {
-        track.enabled = micEnabled;
-    });
+    localStream
+        .getAudioTracks()
+        .forEach(track => {
 
-    socket.emit("update-mic-status", {
-        roomId,
-        micEnabled
-    });
+            track.enabled = micEnabled;
+
+        });
 
     updateMediaStatus();
 };
 
+/* =========================
+   CÂMERA
+========================= */
+
 window.toggleCamera = function() {
+
     if (!localStream) return;
 
     cameraEnabled = !cameraEnabled;
 
-    localStream.getVideoTracks().forEach(track => {
-        track.enabled = cameraEnabled;
-    });
+    localStream
+        .getVideoTracks()
+        .forEach(track => {
+
+            track.enabled = cameraEnabled;
+
+        });
 
     updateMediaStatus();
 };
 
 if (toggleMicBtn) {
-    toggleMicBtn.addEventListener("click", () => {
-        window.toggleMicrophone();
-    });
+
+    toggleMicBtn.addEventListener(
+        "click",
+        () => {
+
+            window.toggleMicrophone();
+
+        }
+    );
 }
 
 if (toggleCameraBtn) {
-    toggleCameraBtn.addEventListener("click", () => {
-        window.toggleCamera();
-    });
+
+    toggleCameraBtn.addEventListener(
+        "click",
+        () => {
+
+            window.toggleCamera();
+
+        }
+    );
 }
 
-navigator.mediaDevices?.addEventListener?.("devicechange", async () => {
-    await getDevices();
-});
+navigator.mediaDevices?.addEventListener?.(
+    "devicechange",
+    async () => {
+
+        await getDevices();
+
+    }
+);
 
 updateMediaStatus();
