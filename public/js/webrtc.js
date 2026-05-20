@@ -590,7 +590,9 @@ socket.on("user-connected", async (data) => {
 
     savePeerInfo(data.socketId, data);
 
-    if (currentRole !== "spectator") {
+    // Só o espectador cria conexão quando um jogador/câmera entra depois dele.
+    // Jogador x jogador continua sendo feito pelo existing-peers.
+    if (currentRole === "spectator" && data.role !== "spectator") {
         await createOffer(data.socketId, data);
     }
 });
