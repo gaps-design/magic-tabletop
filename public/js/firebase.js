@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBc5Ds7KENtCR2rjW6CKV0CWpsgQVPfLs8",
+  apiKey: "AIzaSyBC5Ds7KENtCR2rjW6CKV0CWpsgQVPfLs8",
   authDomain: "resenhaon-746cb.firebaseapp.com",
   projectId: "resenhaon-746cb",
   storageBucket: "resenhaon-746cb.firebasestorage.app",
@@ -17,11 +17,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 const auth = getAuth(app);
+
 const provider = new GoogleAuthProvider();
 
 export {
-  app,
   auth,
   provider,
   signInWithPopup,
