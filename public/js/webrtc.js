@@ -585,14 +585,14 @@ socket.on("existing-peers", async ({ peers }) => {
     }
 });
 
-socket.on("user-connected", (data) => {
+socket.on("user-connected", async (data) => {
     if (!data.socketId) return;
 
     savePeerInfo(data.socketId, data);
 
-    // Quem já estava na sala NÃO cria offer.
-    // Quem entra cria offer pelo existing-peers.
-    // Isso evita conflito entre player/player e player/camera.
+    if (currentRole !== "spectator") {
+        await createOffer(data.socketId, data);
+    }
 });
 
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
