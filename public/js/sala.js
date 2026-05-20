@@ -873,24 +873,35 @@ function renderLifeHistory(history) {
     renderPlayerHistory(list2, history.filter(item => Number(item.playerNumber) === 2));
 }
 
-function renderPlayerHistory(list, history) {
-    if (!history || history.length === 0) {
-        list.innerHTML = `<p class="empty-history">Sem alterações.</p>`;
-        return;
+history.forEach((item) => {
+
+    const div = document.createElement("div");
+
+    div.className = "history-item";
+
+    div.innerHTML = `
+        ${item.oldLife} → ${item.newLife}
+    `;
+
+    const playerName = item.playerName || `Jogador ${item.playerNumber}`;
+    const diff = Number(item.newLife) - Number(item.oldLife);
+
+    if (diff < 0) {
+        addMatchEvent(`${playerName} perdeu ${Math.abs(diff)} de vida`);
     }
 
-    history.forEach(item => {
-        const div = document.createElement("div");
-        div.className = "history-item-small";
+    if (diff > 0) {
+        addMatchEvent(`${playerName} ganhou ${diff} de vida`);
+    }
 
-        div.innerHTML = `
-            <span>${item.oldLife} → ${item.newLife}</span>
-            <small>${item.time}</small>
-        `;
+    if (item.change === "reset") {
+        addMatchEvent(`${playerName} resetou a vida para 20`);
+    }
 
-        list.appendChild(div);
-    });
-}
+    list.appendChild(div);
+
+});
+
 
 window.clearLifeHistory = function() {
     if (selectedRole !== "player") return;
@@ -1234,3 +1245,28 @@ function injectSpectatorEmotes() {
 }
 
 injectSpectatorEmotes();
+window.setSpectatorFocus = function(mode) {
+    document.body.classList.remove("spectator-focus-p1", "spectator-focus-p2");
+
+    if (mode === "p1") {
+        document.body.classList.add("spectator-focus-p1");
+    }
+
+    if (mode === "p2") {
+        document.body.classList.add("spectator-focus-p2");
+    }
+};
+function addMatchEvent(text) {
+    const list = document.getElementById("matchEventsList");
+    if (!list || !text) return;
+
+    if (list.innerText.includes("Aguardando eventos")) {
+        list.innerHTML = "";
+    }
+
+    const div = document.createElement("div");
+    div.className = "event-item";
+    div.innerText = text;
+
+    list.prepend(div);
+}

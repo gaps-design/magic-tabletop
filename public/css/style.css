@@ -1747,10 +1747,6 @@ body.spectator-mode .rotate-btn{
     display:block !important;
 }
 
-body.spectator-mode .camera-card:first-child video{
-    transform:none !important;
-}
-
 body.spectator-mode .bottom-bar,
 body.spectator-mode .bottom-toggle,
 body.spectator-mode .layout-buttons,
@@ -1911,4 +1907,74 @@ body.spectator-mode .spectator-bottom-area{
 .match-events-list{
     max-height:135px !important;
     overflow-y:auto !important;
+}
+.spectator-emoji-bar{
+    display:flex;
+    gap:6px;
+    padding:8px 10px;
+    border-top:1px solid rgba(255,255,255,0.08);
+    overflow-x:auto;
+}
+
+.spectator-emoji-bar button{
+    min-width:34px;
+    height:34px;
+    padding:0;
+    border-radius:10px;
+    font-size:20px;
+}
+/* =========================
+   CORREÇÃO CHAT ESPECTADOR FIXO
+========================= */
+
+body.spectator-mode .spectator-bottom-area{
+    height:230px !important;
+    max-height:230px !important;
+    min-height:230px !important;
+    overflow:hidden !important;
+}
+
+body.spectator-mode .spectator-chat-box{
+    height:230px !important;
+    max-height:230px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    overflow:hidden !important;
+}
+
+body.spectator-mode .spectator-section-title{
+    flex-shrink:0 !important;
+}
+
+body.spectator-mode .spectator-chat-messages{
+    flex:1 !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow-y:auto !important;
+}
+
+body.spectator-mode .spectator-chat-input-area{
+    flex-shrink:0 !important;
+}
+
+body.spectator-mode .spectator-emoji-bar{
+    flex-shrink:0 !important;
+    max-height:46px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+}
+body.spectator-mode.spectator-focus-p1 .video-area{
+    grid-template-columns:1fr !important;
+}
+
+body.spectator-mode.spectator-focus-p1 .camera-player-2{
+    display:none !important;
+}
+
+body.spectator-mode.spectator-focus-p2 .video-area{
+    grid-template-columns:1fr !important;
+}
+
+body.spectator-mode.spectator-focus-p2 .camera-player-1{
+    display:none !important;
 }
