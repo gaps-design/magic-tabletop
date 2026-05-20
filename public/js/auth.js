@@ -2,7 +2,6 @@ import {
   auth,
   provider,
   signInWithPopup,
-  signOut,
   onAuthStateChanged
 } from "./firebase.js";
 
@@ -13,47 +12,27 @@ const loginBtn = document.getElementById("googleLoginBtn");
 console.log("BOTÃO LOGIN:", loginBtn);
 
 if (loginBtn) {
-
-  loginBtn.addEventListener("click", async () => {
-
+  loginBtn.onclick = async () => {
     console.log("CLICOU NO LOGIN");
 
     try {
-
       const result = await signInWithPopup(auth, provider);
-
       const user = result.user;
 
-      localStorage.setItem("userName", user.displayName);
-      localStorage.setItem("userPhoto", user.photoURL);
-      localStorage.setItem("userEmail", user.email);
+      localStorage.setItem("userName", user.displayName || "");
+      localStorage.setItem("userPhoto", user.photoURL || "");
+      localStorage.setItem("userEmail", user.email || "");
 
       alert(`Bem-vindo ${user.displayName}`);
-
       window.location.reload();
 
     } catch (error) {
-
       console.error("ERRO LOGIN:", error);
-
-      alert("Erro ao fazer login");
-
+      alert(error.message);
     }
-
-  });
-
+  };
 }
 
 onAuthStateChanged(auth, (user) => {
-
-  if (user) {
-
-    console.log("Usuário logado:", user.displayName);
-
-  } else {
-
-    console.log("Usuário não logado");
-
-  }
-
+  console.log(user ? "Usuário logado:" : "Usuário não logado", user);
 });
