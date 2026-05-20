@@ -525,6 +525,9 @@ socket.on("dice-rolled", (roll) => {
         }
 
         addDiceHistoryLine(line);
+
+        addMatchEvent(`🎲 ${line}`);
+
     }, 900);
 });
 
@@ -537,6 +540,7 @@ socket.on("dice-winner", (data) => {
         getPlayerNameByNumber(data.playerNumber);
 
     setTimeout(() => {
+
         const line = `🏆 ${winnerName} escolhe se vai começar.`;
 
         if (diceResultText) {
@@ -544,9 +548,11 @@ socket.on("dice-winner", (data) => {
         }
 
         addDiceHistoryLine(line);
+
+        addMatchEvent(line);
+
     }, 1100);
 });
-
 socket.on("dice-draw", (data) => {
     if (diceOverlay) diceOverlay.classList.remove("hidden");
 
@@ -848,8 +854,10 @@ socket.on("timer-update", (timer) => {
 });
 
 /* =========================
-   HISTÓRICO DE VIDA
+   HISTÓRICO DE VIDA / EVENTOS
 ========================= */
+
+const processedLifeEvents = new Set();
 
 window.togglePlayerHistory = function(playerNumber) {
     if (selectedRole === "spectator") return;
@@ -860,7 +868,7 @@ window.togglePlayerHistory = function(playerNumber) {
     panel.classList.toggle("hidden");
 };
 
-function renderLifeHistory(history) {
+function renderLifeHistory(history = []) {
     const list1 = document.getElementById("lifeHistoryList1");
     const list2 = document.getElementById("lifeHistoryList2");
 
@@ -871,37 +879,64 @@ function renderLifeHistory(history) {
 
     renderPlayerHistory(list1, history.filter(item => Number(item.playerNumber) === 1));
     renderPlayerHistory(list2, history.filter(item => Number(item.playerNumber) === 2));
+
+    history.forEach(item => {
+        const key = `${item.playerNumber}-${item.oldLife}-${item.newLife}-${item.time}-${item.change}`;
+
+        if (processedLifeEvents.has(key)) return;
+        processedLifeEvents.add(key);
+
+        const playerName = item.playerName || `Jogador ${item.playerNumber}`;
+        const diff = Number(item.newLife) - Number(item.oldLife);
+
+        if (item.change === "reset") {
+            addMatchEvent(`${playerName} resetou a vida para 20`);
+            return;
+        }
+
+        if (diff < 0) {
+            addMatchEvent(`${playerName} perdeu ${Math.abs(diff)} de vida`);
+        }
+
+        if (diff > 0) {
+            addMatchEvent(`${playerName} ganhou ${diff} de vida`);
+        }
+    });
 }
 
-history.forEach((item) => {
+function renderPlayerHistory(list, history = []) {
+    if (!history.length) {
+        list.innerHTML = `<p class="empty-history">Sem alterações.</p>`;
+        return;
+    }
+
+    history.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "history-item-small";
+
+        div.innerHTML = `
+            <span>${item.oldLife} → ${item.newLife}</span>
+            <small>${item.time || ""}</small>
+        `;
+
+        list.appendChild(div);
+    });
+}
+
+function addMatchEvent(text) {
+    const list = document.getElementById("matchEventsList");
+    if (!list || !text) return;
+
+    if (list.innerText.includes("Aguardando eventos")) {
+        list.innerHTML = "";
+    }
 
     const div = document.createElement("div");
+    div.className = "event-item";
+    div.innerText = text;
 
-    div.className = "history-item";
-
-    div.innerHTML = `
-        ${item.oldLife} → ${item.newLife}
-    `;
-
-    const playerName = item.playerName || `Jogador ${item.playerNumber}`;
-    const diff = Number(item.newLife) - Number(item.oldLife);
-
-    if (diff < 0) {
-        addMatchEvent(`${playerName} perdeu ${Math.abs(diff)} de vida`);
-    }
-
-    if (diff > 0) {
-        addMatchEvent(`${playerName} ganhou ${diff} de vida`);
-    }
-
-    if (item.change === "reset") {
-        addMatchEvent(`${playerName} resetou a vida para 20`);
-    }
-
-    list.appendChild(div);
-
-});
-
+    list.prepend(div);
+}
 
 window.clearLifeHistory = function() {
     if (selectedRole !== "player") return;
@@ -1172,7 +1207,7 @@ renderDiceHistory();
 console.log("Sala.js carregado com sucesso");
 const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
 
-if (currentRole === "spectator" && leaveSpectatorBtn) {
+if (selectedRole === "spectator" && leaveSpectatorBtn) {
     leaveSpectatorBtn.classList.remove("hidden");
 
     leaveSpectatorBtn.addEventListener("click", () => {
