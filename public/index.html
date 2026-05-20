@@ -16,7 +16,7 @@
 
     <header class="topbar">
       <img src="/assets/logo.png" class="logo" alt="Magic Tabletop">
-      <button class="login-btn">👤 Entrar</button>
+      <<button id="googleLoginBtn" class="login-btn">👤 Entrar com Google</button>
     </header>
 
     <section class="hero">
@@ -292,8 +292,24 @@
     </div>
   </div>
 
- <script src="/socket.io/socket.io.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 <script src="/js/home.js"></script>
+<script type="module" src="/js/auth.js"></script>
+<script>
+  console.log("TESTE DIRETO CARREGOU");
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("googleLoginBtn");
+
+    console.log("BOTÃO PEGO NO HTML:", btn);
+
+    if (btn) {
+      btn.addEventListener("click", () => {
+        alert("O botão está clicando!");
+      });
+    }
+  });
+</script>
 
 </body>
 </html>
