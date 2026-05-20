@@ -598,3 +598,45 @@ body{
 .table-full .enter-table-btn{
     background:linear-gradient(135deg,#7a1010,#c22e2e);
 }
+
+.footer-links {
+  margin-top: 10px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  color: #d6b46a;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+.legal-page {
+  max-width: 900px;
+  margin: 60px auto;
+  padding: 32px;
+  color: #fff;
+  line-height: 1.7;
+}
+
+.legal-page h1 {
+  color: #d6b46a;
+  margin-bottom: 24px;
+}
+
+.legal-page h2 {
+  margin-top: 28px;
+  color: #f0d58a;
+}
+
+.legal-page a {
+  display: inline-block;
+  margin-top: 30px;
+  color: #d6b46a;
+}
