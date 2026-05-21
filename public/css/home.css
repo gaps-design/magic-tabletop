@@ -926,3 +926,18 @@ body{
     height:48px;
     border-radius:50%;
 }
+.conves-modal {
+  display: none;
+}
+
+.conves-modal.active {
+  display: flex;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.conves-modal.active {
+  display: flex;
+}

@@ -265,12 +265,14 @@ const closeConves = document.getElementById("closeConves");
 if (convesCard) {
   convesCard.addEventListener("click", () => {
     convesModal.classList.add("active");
+convesModal.classList.remove("hidden");
   });
 }
 
 if (closeConves) {
   closeConves.addEventListener("click", () => {
     convesModal.classList.remove("active");
+convesModal.classList.add("hidden");
   });
 }
 
