@@ -640,3 +640,52 @@ body{
   margin-top: 30px;
   color: #d6b46a;
 }
+.topbar {
+  width: 100%;
+  padding: 24px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  position: relative;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  width: 170px;
+  height: auto;
+  object-fit: contain;
+}
+
+.top-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.top-links a {
+  color: #f0d58a;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.top-links a:hover {
+  text-decoration: underline;
+}
+
+.login-btn {
+  border: 1px solid #d6b46a;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
