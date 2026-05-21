@@ -89,6 +89,7 @@ window.location.href = "/";
 
       return;
     }
+    
 
     try {
 
@@ -124,4 +125,19 @@ window.requireLogin = function () {
   }
 
   return true;
+};
+window.waitForLogin = function () {
+  return new Promise((resolve) => {
+    const check = setInterval(() => {
+      if (window.currentUser) {
+        clearInterval(check);
+        resolve(window.currentUser);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(check);
+      resolve(null);
+    }, 3000);
+  });
 };
