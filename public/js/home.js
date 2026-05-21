@@ -283,16 +283,6 @@ if (convesModal) {
     }
   });
 }
-const convesButton = document.getElementById("convesButton");
-const convesModal = document.getElementById("convesModal");
-
-const onlineCount = document.getElementById("onlineCount");
-const tableCount = document.getElementById("tableCount");
-const spectatorCount = document.getElementById("spectatorCount");
-
-const playersDeck = document.getElementById("playersDeck");
-const spectatorsDeck = document.getElementById("spectatorsDeck");
-const idleDeck = document.getElementById("idleDeck");
 
 if (convesButton) {
 
