@@ -281,3 +281,119 @@ if (convesModal) {
     }
   });
 }
+const convesButton = document.getElementById("convesButton");
+const convesModal = document.getElementById("convesModal");
+
+const onlineCount = document.getElementById("onlineCount");
+const tableCount = document.getElementById("tableCount");
+const spectatorCount = document.getElementById("spectatorCount");
+
+const playersDeck = document.getElementById("playersDeck");
+const spectatorsDeck = document.getElementById("spectatorsDeck");
+const idleDeck = document.getElementById("idleDeck");
+
+if (convesButton) {
+
+    convesButton.addEventListener("click", () => {
+
+        convesModal.classList.remove("hidden");
+
+    });
+
+}
+
+if (convesModal) {
+
+    convesModal.addEventListener("click", (e) => {
+
+        if (e.target === convesModal) {
+
+            convesModal.classList.add("hidden");
+
+        }
+
+    });
+
+}
+
+socket.on("conves-state", (users) => {
+
+    if (!Array.isArray(users)) return;
+
+    onlineCount.innerText =
+        `${users.length} online`;
+
+    const players =
+        users.filter(u => u.role === "player");
+
+    const spectators =
+        users.filter(u => u.role === "spectator");
+
+    const idle =
+        users.filter(u => u.role === "idle");
+
+    const occupiedRooms =
+        [...new Set(players.map(p => p.roomId))];
+
+    tableCount.innerText =
+        `${occupiedRooms.length} mesas`;
+
+    spectatorCount.innerText =
+        `${spectators.length} espectadores`;
+
+    playersDeck.innerHTML = "";
+    spectatorsDeck.innerHTML = "";
+    idleDeck.innerHTML = "";
+
+    players.forEach(user => {
+
+        playersDeck.innerHTML += `
+            <div class="conves-user">
+
+                <img src="${user.photo}" />
+
+                <div>
+                    <strong>${user.name}</strong>
+                    <p>Mesa: ${user.roomId}</p>
+                </div>
+
+            </div>
+        `;
+
+    });
+
+    spectators.forEach(user => {
+
+        spectatorsDeck.innerHTML += `
+            <div class="conves-user">
+
+                <img src="${user.photo}" />
+
+                <div>
+                    <strong>${user.name}</strong>
+                    <p>Assistindo</p>
+                </div>
+
+            </div>
+        `;
+
+    });
+
+    idle.forEach(user => {
+
+        idleDeck.innerHTML += `
+            <div class="conves-user">
+
+                <img src="${user.photo}" />
+
+                <div>
+                    <strong>${user.name}</strong>
+                    <p>Online no lobby</p>
+                </div>
+
+            </div>
+        `;
+
+    });
+
+});

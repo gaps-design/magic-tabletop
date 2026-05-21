@@ -17,11 +17,50 @@
     <header class="topbar">
   <a href="/" class="brand">
     <img src="/assets/logo-resenhaon.png" class="logo" alt="ResenhaON">
-    <div id="convesCard" class="conves-card">
-  <strong>⚓ Convés</strong>
-  <span><b id="convesOnline">0</b> online</span>
-  <span><b id="convesTables">0</b> mesas</span>
-  <span><b id="convesSpectators">0</b> espectadores</span>
+    <div id="convesButton" class="conves-card">
+
+    ⚓ Convés
+
+    <span id="onlineCount">0 online</span>
+    <span id="tableCount">0 mesas</span>
+    <span id="spectatorCount">0 espectadores</span>
+
+</div>
+
+<div id="convesModal" class="conves-modal hidden">
+
+    <div class="conves-content">
+
+        <div class="conves-header">
+            ⚓ Convés ResenhaON
+        </div>
+
+        <div class="conves-section">
+
+            <h2>⚔️ Convés — Jogadores em partida</h2>
+
+            <div id="playersDeck"></div>
+
+        </div>
+
+        <div class="conves-section">
+
+            <h2>👁️ Proa — Espectadores</h2>
+
+            <div id="spectatorsDeck"></div>
+
+        </div>
+
+        <div class="conves-section">
+
+            <h2>⛓️ Calabouço — Fantasmas online</h2>
+
+            <div id="idleDeck"></div>
+
+        </div>
+
+    </div>
+
 </div>
   </a>
 
