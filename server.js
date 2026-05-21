@@ -17,6 +17,7 @@ app.use(express.static("public"));
 const rooms = {};
 const chatControl = {};
 const clientProfiles = {};
+const connectedUsers = {};
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
@@ -30,10 +31,13 @@ function isResenhaRoom(roomId) {
   return roomId === "mtg-1002";
 }
 
+function emitConvesState() {
+  io.emit("conves-state", Object.values(connectedUsers));
+}
+
 function buildLobbyState() {
   return PUBLIC_TABLES.map(roomId => {
     const room = rooms[roomId];
-
     const players = room?.players?.length || 0;
     const isResenha = isResenhaRoom(roomId);
 
@@ -124,6 +128,35 @@ function isPlayerInRoom(room, socketId) {
   return room.players.some(p => p.socketId === socketId);
 }
 
+function setConnectedUser(socketId, user, status = "idle", roomId = null, role = "idle", playerNumber = null) {
+  if (!user || !user.uid) return;
+
+  connectedUsers[socketId] = {
+    socketId,
+    uid: user.uid,
+    name: user.name || "Usuário",
+    email: user.email || "",
+    photo: user.photo || "",
+    status,
+    roomId,
+    role,
+    playerNumber
+  };
+
+  emitConvesState();
+}
+
+function updateConnectedUser(socketId, data = {}) {
+  if (!connectedUsers[socketId]) return;
+
+  connectedUsers[socketId] = {
+    ...connectedUsers[socketId],
+    ...data
+  };
+
+  emitConvesState();
+}
+
 function addSpectator(socket, roomId, name, reason = "") {
   const room = ensureRoom(roomId);
 
@@ -136,6 +169,13 @@ function addSpectator(socket, roomId, name, reason = "") {
     name,
     micEnabled: true
   };
+
+  updateConnectedUser(socket.id, {
+    status: "spectator",
+    role: "spectator",
+    roomId,
+    playerNumber: null
+  });
 
   socket.emit("assigned-role", {
     role: "spectator",
@@ -213,6 +253,11 @@ io.on("connection", (socket) => {
   console.log("Conectado:", socket.id);
 
   socket.emit("lobby-state", buildLobbyState());
+  socket.emit("conves-state", Object.values(connectedUsers));
+
+  socket.on("user-online", (user) => {
+    setConnectedUser(socket.id, user, "idle", null, "idle", null);
+  });
 
   socket.on("join-room", (data = {}) => {
     const roomId = data.roomId;
@@ -227,6 +272,10 @@ io.on("connection", (socket) => {
     const guild = data.guild || user.guild || "---";
     const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || 0);
     const incomingFormat = data.format || "";
+
+    if (user?.uid) {
+      setConnectedUser(socket.id, user, role, roomId, role, null);
+    }
 
     const room = ensureRoom(roomId);
 
@@ -264,6 +313,13 @@ io.on("connection", (socket) => {
         micEnabled: true
       };
 
+      updateConnectedUser(socket.id, {
+        status: "camera",
+        role: "camera",
+        roomId,
+        playerNumber: linkedPlayer
+      });
+
       room.micStatus[socket.id] = true;
 
       socket.emit("assigned-role", {
@@ -290,6 +346,7 @@ io.on("connection", (socket) => {
 
       sendRoomState(roomId);
       broadcastLobbyState();
+      emitConvesState();
       return;
     }
 
@@ -322,6 +379,13 @@ io.on("connection", (socket) => {
       name,
       micEnabled: true
     };
+
+    updateConnectedUser(socket.id, {
+      status: "player",
+      role: "player",
+      roomId,
+      playerNumber
+    });
 
     room.micStatus[socket.id] = true;
 
@@ -357,6 +421,7 @@ io.on("connection", (socket) => {
 
     sendRoomState(roomId);
     broadcastLobbyState();
+    emitConvesState();
   });
 
   socket.on("roll-dice", ({ roomId }) => {
@@ -384,7 +449,6 @@ io.on("connection", (socket) => {
     };
 
     room.diceRolls.push(roll);
-
     io.to(roomId).emit("dice-rolled", roll);
 
     const activePlayers = room.players.length;
@@ -683,13 +747,25 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leave-room", ({ roomId }) => {
+    updateConnectedUser(socket.id, {
+      status: "idle",
+      role: "idle",
+      roomId: null,
+      playerNumber: null
+    });
+
     removeSocketFromAllRooms(socket.id);
     socket.leave(roomId);
     socket.emit("left-room");
+    emitConvesState();
   });
 
   socket.on("disconnect", () => {
     console.log("Desconectado:", socket.id);
+
+    delete connectedUsers[socket.id];
+    emitConvesState();
+
     removeSocketFromAllRooms(socket.id);
   });
 });

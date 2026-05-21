@@ -184,3 +184,89 @@ socket.on("lobby-state", (tables) => {
     }
   });
 });
+function sendUserToConves() {
+  setTimeout(() => {
+    if (!window.getLoggedUserProfile) return;
+
+    const user = window.getLoggedUserProfile();
+    if (!user) return;
+
+    socket.emit("user-online", user);
+  }, 1200);
+}
+
+sendUserToConves();
+
+socket.on("conves-state", (users) => {
+  renderConves(users);
+});
+
+function renderConves(users = []) {
+  const totalOnline = document.getElementById("convesOnline");
+  const totalTables = document.getElementById("convesTables");
+  const totalSpectators = document.getElementById("convesSpectators");
+
+  const proaList = document.getElementById("proaList");
+  const convesList = document.getElementById("convesList");
+  const calaboucoList = document.getElementById("calaboucoList");
+
+  if (!totalOnline) return;
+
+  const players = users.filter(u => u.role === "player");
+  const spectators = users.filter(u => u.role === "spectator");
+  const idle = users.filter(u => u.role === "idle");
+
+  const occupiedRooms = new Set(
+    players
+      .filter(u => u.roomId)
+      .map(u => u.roomId)
+  );
+
+  totalOnline.innerText = users.length;
+  totalTables.innerText = occupiedRooms.size;
+  totalSpectators.innerText = spectators.length;
+
+  proaList.innerHTML = renderUserList(players, "⚔️");
+  convesList.innerHTML = renderUserList(spectators, "👁️");
+  calaboucoList.innerHTML = renderUserList(idle, "⛓️");
+}
+
+function renderUserList(list, icon) {
+  if (!list.length) {
+    return `<p class="empty-conves">Ninguém por aqui...</p>`;
+  }
+
+  return list.map(user => `
+    <div class="conves-user">
+      <img src="${user.photo || "assets/default-avatar.png"}" alt="Perfil">
+      <div>
+        <strong>${icon} ${user.name || "Usuário"}</strong>
+        <span>${user.roomId ? user.roomId.toUpperCase() : "No porto"}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+const convesCard = document.getElementById("convesCard");
+const convesModal = document.getElementById("convesModal");
+const closeConves = document.getElementById("closeConves");
+
+if (convesCard) {
+  convesCard.addEventListener("click", () => {
+    convesModal.classList.add("active");
+  });
+}
+
+if (closeConves) {
+  closeConves.addEventListener("click", () => {
+    convesModal.classList.remove("active");
+  });
+}
+
+if (convesModal) {
+  convesModal.addEventListener("click", (event) => {
+    if (event.target === convesModal) {
+      convesModal.classList.remove("active");
+    }
+  });
+}

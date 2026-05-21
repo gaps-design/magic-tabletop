@@ -17,6 +17,12 @@
     <header class="topbar">
   <a href="/" class="brand">
     <img src="/assets/logo-resenhaon.png" class="logo" alt="ResenhaON">
+    <div id="convesCard" class="conves-card">
+  <strong>⚓ Convés</strong>
+  <span><b id="convesOnline">0</b> online</span>
+  <span><b id="convesTables">0</b> mesas</span>
+  <span><b id="convesSpectators">0</b> espectadores</span>
+</div>
   </a>
 
   <nav class="top-links">
@@ -318,11 +324,34 @@ Todas as marcas citadas pertencem aos seus respectivos proprietários.
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/home.js"></script>
 <script type="module" src="/js/auth.js"></script>
-<script type="module" src="js/auth.js"></script>
+<script src="js/home.js"></script>
 
 </script>
+
+<div id="convesModal" class="conves-modal">
+  <div class="conves-ship">
+    <div class="conves-header">
+      <h2>⚓ Convés ResenhaON</h2>
+      <button id="closeConves">✕</button>
+    </div>
+
+    <div class="ship-section">
+      <h3>⚔️ Proa — Jogadores ativos nas mesas</h3>
+      <div id="proaList"></div>
+    </div>
+
+    <div class="ship-section">
+      <h3>👁️ Convés — Espectadores assistindo</h3>
+      <div id="convesList"></div>
+    </div>
+
+    <div class="ship-section">
+      <h3>⛓️ Calabouço — Logados sem mesa</h3>
+      <div id="calaboucoList"></div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
