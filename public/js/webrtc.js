@@ -737,11 +737,20 @@ async function joinRoom(roomId, user) {
 
         await getDevices();
     }
-
+if (!window.currentUser) {
+  alert("Você precisa entrar com Google.");
+  window.location.href = "/";
+  throw new Error("Usuário não autenticado");
+}
     socket.emit("join-room", {
 
         roomId,
-
+user: {
+  uid: window.currentUser.uid,
+  name: window.currentUser.displayName,
+  email: window.currentUser.email,
+  photo: window.currentUser.photoURL
+},
         role: user.role,
         name: user.name,
         deck: user.deck,

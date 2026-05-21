@@ -132,6 +132,17 @@ refreshRoomsButton.addEventListener("click", () => {
 
 const socket = io();
 
+auth.onAuthStateChanged((user) => {
+  if (!user) return;
+
+  socket.emit("user-online", {
+    uid: user.uid,
+    name: user.displayName,
+    email: user.email,
+    photo: user.photoURL
+  });
+});
+
 socket.on("lobby-state", (tables) => {
   if (!Array.isArray(tables)) return;
 

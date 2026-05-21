@@ -79,6 +79,12 @@ if (googleLoginBtn) {
 
       if (sair) {
         await signOut(auth);
+
+localStorage.clear();
+
+window.currentUser = null;
+
+window.location.href = "/";
       }
 
       return;
