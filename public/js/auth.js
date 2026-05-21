@@ -1,62 +1,68 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
-  auth,
-  provider,
+  getAuth,
+  GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
-} from "./firebase.js";
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-console.log("AUTH.JS CARREGOU");
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
 
-document.addEventListener("DOMContentLoaded", () => {
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
-  const loginBtn = document.getElementById("googleLoginBtn");
+const googleLoginBtn = document.getElementById("googleLoginBtn");
 
-  console.log("BOTÃO:", loginBtn);
-
-  if (!loginBtn) return;
-
-  loginBtn.addEventListener("click", async () => {
-
-    console.log("CLICOU LOGIN");
-
-    try {
-
-      const result = await signInWithPopup(auth, provider);
-
-      const user = result.user;
-
-      console.log("LOGADO:", user);
-
-      localStorage.setItem("userName", user.displayName || "");
-      localStorage.setItem("userPhoto", user.photoURL || "");
-      localStorage.setItem("userEmail", user.email || "");
-
-      alert(`Bem-vindo ${user.displayName}`);
-
-      window.location.reload();
-
-    } catch (error) {
-
-      console.error("ERRO FIREBASE:", error);
-
-      alert(error.message);
-
-    }
-
-  });
-
-});
+window.currentUser = null;
 
 onAuthStateChanged(auth, (user) => {
+  window.currentUser = user || null;
+
+  if (!googleLoginBtn) return;
 
   if (user) {
-
-    console.log("Usuário logado:", user.displayName);
-
+    googleLoginBtn.innerHTML = `
+      <img src="${user.photoURL}" alt="Foto do perfil" class="google-user-photo">
+      <span>Conectado: ${user.displayName}</span>
+    `;
+    googleLoginBtn.classList.add("connected");
   } else {
+    googleLoginBtn.innerHTML = `Entrar com Google`;
+    googleLoginBtn.classList.remove("connected");
+  }
+});
 
-    console.log("Usuário não logado");
+if (googleLoginBtn) {
+  googleLoginBtn.addEventListener("click", async () => {
+    if (window.currentUser) {
+      const sair = confirm("Você já está conectado. Deseja sair da conta?");
+      if (sair) await signOut(auth);
+      return;
+    }
 
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Erro ao fazer login com Google:", error);
+      alert("Não foi possível entrar com Google. Tente novamente.");
+    }
+  });
+}
+
+window.requireLogin = function () {
+  if (!window.currentUser) {
+    alert("Você precisa entrar com Google para acessar as mesas do ResenhaON.");
+    return false;
   }
 
-});
+  return true;
+};

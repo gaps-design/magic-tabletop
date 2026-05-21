@@ -659,10 +659,9 @@ body{
   align-items: center;
 }
 
-.logo {
-  width: 170px;
-  height: auto;
-  object-fit: contain;
+.logo{
+    width:240px;
+    filter: drop-shadow(0 0 10px rgba(255,215,120,.35));
 }
 
 .top-links{
@@ -730,4 +729,27 @@ body{
 
 .footer small {
     color: #777;
+}
+.google-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.google-login-btn.connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.5);
+}
+
+.google-user-photo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
 }

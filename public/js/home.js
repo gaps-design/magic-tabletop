@@ -17,6 +17,8 @@ function normalizeRoomCode(value) {
 }
 
 function enterRoom(roomId, format = "Formato livre", role = "player") {
+  if (!window.requireLogin || !window.requireLogin()) return;
+
   if (!roomId) {
     alert("Digite o código da mesa.");
     return;
@@ -39,6 +41,8 @@ function closeFormatModal() {
 }
 
 createPrivateRoomButton.addEventListener("click", () => {
+  if (!window.requireLogin || !window.requireLogin()) return;
+
   const randomCode =
     "private-" + Math.floor(100000 + Math.random() * 900000);
 

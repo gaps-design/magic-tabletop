@@ -562,34 +562,46 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/webrtc.js"></script>
-    <script src="js/sala.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 
-    <script>
-        const params = new URLSearchParams(window.location.search);
+<script type="module" src="js/auth.js"></script>
 
-        const roomIdFromUrl = params.get("room");
-        const formatFromUrl = params.get("format");
+<script>
+  setTimeout(() => {
+    if (!window.currentUser) {
+      alert("Você precisa entrar com Google para acessar esta sala.");
+      window.location.href = "index.html";
+    }
+  }, 1200);
+</script>
 
-        const tableTitle = document.getElementById("tableTitle");
-        const formatText = document.getElementById("formatText");
+<script src="js/webrtc.js"></script>
+<script src="js/sala.js"></script>
 
-        if (roomIdFromUrl === "mtg-1002") {
-            tableTitle.innerText = "Mesa 02 — Mesa da Resenha";
-        } else if (roomIdFromUrl) {
-            tableTitle.innerText = `Mesa ${roomIdFromUrl.toUpperCase()}`;
-        }
+<script>
+  const params = new URLSearchParams(window.location.search);
 
-        if (formatFromUrl) {
-            const cleanFormat =
-                decodeURIComponent(formatFromUrl)
-                    .replaceAll("-", " ")
-                    .toUpperCase();
+  const roomIdFromUrl = params.get("room");
+  const formatFromUrl = params.get("format");
 
-            formatText.innerText = `Formato: ${cleanFormat}`;
-        }
-    </script>
+  const tableTitle = document.getElementById("tableTitle");
+  const formatText = document.getElementById("formatText");
+
+  if (roomIdFromUrl === "mtg-1002") {
+    tableTitle.innerText = "Mesa 02 — Mesa da Resenha";
+  } else if (roomIdFromUrl) {
+    tableTitle.innerText = `Mesa ${roomIdFromUrl.toUpperCase()}`;
+  }
+
+  if (formatFromUrl) {
+    const cleanFormat =
+      decodeURIComponent(formatFromUrl)
+        .replaceAll("-", " ")
+        .toUpperCase();
+
+    formatText.innerText = `Formato: ${cleanFormat}`;
+  }
+</script>
 
 </body>
 </html>
