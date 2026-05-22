@@ -177,13 +177,13 @@
         <div class="top-actions">
             <button id="copyRoomBtn">🔗 Copiar link da sala</button>
             <button id="usersCountBtn">👥 0</button>
-            <button onclick="setSpectatorFocus('both')">▦ Dupla</button>
-            <button onclick="setSpectatorFocus('p1')">🔵 J1</button>
-            <button onclick="setSpectatorFocus('p2')">🟢 J2</button>
+            <button id="spectatorsCountBtn">👁️ 0</button>
+            <button class="spectator-view-btn" onclick="setSpectatorFocus('both')">▦ Dupla</button>
+            <button class="spectator-view-btn" onclick="setSpectatorFocus('p1')">🔵 J1</button>
+            <button class="spectator-view-btn" onclick="setSpectatorFocus('p2')">🟢 J2</button>
             <button id="leaveSpectatorBtn" class="leave-spectator-btn hidden">
     🚪 Sair
 </button>
-            <button id="settingsBtn">⚙️</button>
         </div>
     </header>
 
@@ -480,6 +480,14 @@
         <div class="emoji-bar"></div>
     </div>
 
+    <div id="roomUsersPanel" class="room-users-panel hidden">
+        <div class="room-users-box">
+            <button id="closeRoomUsersPanel" class="room-users-close">×</button>
+            <h2 id="roomUsersTitle">Pessoas na sala</h2>
+            <div id="roomUsersList" class="room-users-list"></div>
+        </div>
+    </div>
+
     <div class="layout-buttons">
         <button id="dualViewBtn">Dual View</button>
         <button id="focusViewBtn">Focus Mode</button>
@@ -571,35 +579,37 @@
 <script src="/js/sala.js"></script>
 
 <script>
-    const params = new URLSearchParams(window.location.search);
+    (() => {
+        const headerParams = new URLSearchParams(window.location.search);
 
-    const roomIdFromUrl = params.get("room");
-    const formatFromUrl = params.get("format");
+        const roomIdFromUrl = headerParams.get("room");
+        const formatFromUrl = headerParams.get("format");
 
-    const tableTitle = document.getElementById("tableTitle");
-    const formatText = document.getElementById("formatText");
+        const tableTitle = document.getElementById("tableTitle");
+        const formatText = document.getElementById("formatText");
 
-    if (roomIdFromUrl === "mtg-1002") {
+        if (roomIdFromUrl === "mtg-1002") {
 
-        tableTitle.innerText =
-            "Mesa 02 — Mesa da Resenha";
+            tableTitle.innerText =
+                "Mesa 02 — Mesa da Resenha";
 
-    } else if (roomIdFromUrl) {
+        } else if (roomIdFromUrl) {
 
-        tableTitle.innerText =
-            `Mesa ${roomIdFromUrl.toUpperCase()}`;
-    }
+            tableTitle.innerText =
+                `Mesa ${roomIdFromUrl.toUpperCase()}`;
+        }
 
-    if (formatFromUrl) {
+        if (formatFromUrl) {
 
-        const cleanFormat =
-            decodeURIComponent(formatFromUrl)
-                .replaceAll("-", " ")
-                .toUpperCase();
+            const cleanFormat =
+                decodeURIComponent(formatFromUrl)
+                    .replaceAll("-", " ")
+                    .toUpperCase();
 
-        formatText.innerText =
-            `Formato: ${cleanFormat}`;
-    }
+            formatText.innerText =
+                `Formato: ${cleanFormat}`;
+        }
+    })();
 </script>
 
 </body>

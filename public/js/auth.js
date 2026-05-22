@@ -20,6 +20,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
+window.auth = auth;
+window.onAuthStateChanged = (callback) => onAuthStateChanged(auth, callback);
+window.dispatchEvent(new CustomEvent("firebase-auth-ready", { detail: auth }));
 
 const provider = new GoogleAuthProvider();
 
@@ -140,4 +143,16 @@ window.waitForLogin = function () {
       resolve(null);
     }, 3000);
   });
+};
+
+window.getLoggedUserProfile = function () {
+  const user = window.currentUser;
+  if (!user) return null;
+
+  return {
+    uid: user.uid,
+    name: user.displayName || "Usuário",
+    email: user.email || "",
+    photo: user.photoURL || "assets/default-avatar.png"
+  };
 };

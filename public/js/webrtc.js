@@ -14,6 +14,7 @@ let localStream = null;
 let currentRoomId = null;
 let currentRole = null;
 let myPlayerNumberRTC = null;
+let lastJoinPayload = null;
 
 let micEnabled = true;
 let cameraEnabled = true;
@@ -25,6 +26,7 @@ const peerConnections = {};
 const peerInfo = {};
 const remoteStreams = {};
 const pendingCandidates = {};
+const reconnectAttempts = {};
 
 const servers = {
     iceServers: [
@@ -320,6 +322,32 @@ function clearVideoIfStream(videoElement, stream) {
     }
 }
 
+function getVideoElementForPlayer(playerNumber) {
+    const normalizedPlayer = Number(playerNumber);
+
+    if (![1, 2].includes(normalizedPlayer)) return null;
+
+    if (currentRole === "spectator") {
+        return normalizedPlayer === 1 ? localVideo : remoteVideo;
+    }
+
+    if (currentRole === "player") {
+        return normalizedPlayer === Number(myPlayerNumberRTC)
+            ? localVideo
+            : remoteVideo;
+    }
+
+    return null;
+}
+
+function hasActiveCameraForPlayer(playerNumber) {
+    return Object.entries(peerInfo).some(([socketId, peer]) =>
+        peer.role === "camera" &&
+        Number(peer.linkedPlayer) === Number(playerNumber) &&
+        !!remoteStreams[socketId]
+    );
+}
+
 function routeStream(socketId, stream) {
     if (!socketId || !stream) return;
     if (currentRole === "camera") return;
@@ -328,32 +356,22 @@ function routeStream(socketId, stream) {
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
-            if (Number(info.linkedPlayer) === 1) {
-                setVideoStream(localVideo, stream, false);
-            }
-
-            if (Number(info.linkedPlayer) === 2) {
-                setVideoStream(remoteVideo, stream, false);
-            }
+            setVideoStream(
+                getVideoElementForPlayer(info.linkedPlayer),
+                stream,
+                false
+            );
 
             return;
         }
 
         if (info.role === "player") {
-            const hasCameraP1 = Object.values(peerInfo).some(peer =>
-                peer.role === "camera" && Number(peer.linkedPlayer) === 1
-            );
-
-            const hasCameraP2 = Object.values(peerInfo).some(peer =>
-                peer.role === "camera" && Number(peer.linkedPlayer) === 2
-            );
-
-            if (Number(info.playerNumber) === 1 && !hasCameraP1) {
-                setVideoStream(localVideo, stream, false);
-            }
-
-            if (Number(info.playerNumber) === 2 && !hasCameraP2) {
-                setVideoStream(remoteVideo, stream, false);
+            if (!hasActiveCameraForPlayer(info.playerNumber)) {
+                setVideoStream(
+                    getVideoElementForPlayer(info.playerNumber),
+                    stream,
+                    false
+                );
             }
 
             return;
@@ -362,18 +380,25 @@ function routeStream(socketId, stream) {
 
     if (currentRole === "player") {
         if (info.role === "camera") {
-            if (Number(info.linkedPlayer) === Number(myPlayerNumberRTC)) {
-                setVideoStream(localVideo, stream, true);
-            } else {
-                setVideoStream(remoteVideo, stream, false);
-            }
+            setVideoStream(
+                getVideoElementForPlayer(info.linkedPlayer),
+                stream,
+                Number(info.linkedPlayer) === Number(myPlayerNumberRTC)
+            );
 
             return;
         }
 
         if (info.role === "player") {
-            if (Number(info.playerNumber) !== Number(myPlayerNumberRTC)) {
-                setVideoStream(remoteVideo, stream, false);
+            if (
+                Number(info.playerNumber) !== Number(myPlayerNumberRTC) &&
+                !hasActiveCameraForPlayer(info.playerNumber)
+            ) {
+                setVideoStream(
+                    getVideoElementForPlayer(info.playerNumber),
+                    stream,
+                    false
+                );
             }
 
             return;
@@ -440,18 +465,47 @@ function createPeerConnection(targetId) {
 
     peer.onconnectionstatechange = () => {
         if (peer.connectionState === "connected") {
+            reconnectAttempts[targetId] = 0;
             routeAllStreams();
         }
 
         if (
             peer.connectionState === "failed" ||
-            peer.connectionState === "closed"
+            peer.connectionState === "disconnected"
         ) {
+            schedulePeerReconnect(targetId);
+        }
+
+        if (peer.connectionState === "closed") {
             cleanupPeer(targetId);
         }
     };
 
     return peer;
+}
+
+function schedulePeerReconnect(targetId) {
+    const info = peerInfo[targetId];
+    if (!info || !currentRoomId) return;
+
+    reconnectAttempts[targetId] = (reconnectAttempts[targetId] || 0) + 1;
+    if (reconnectAttempts[targetId] > 3) return;
+
+    setTimeout(async () => {
+        if (!peerInfo[targetId]) return;
+
+        cleanupPeer(targetId);
+        savePeerInfo(targetId, info);
+
+        if (currentRole === "camera" && info.role === "camera") return;
+        if (info.role === "spectator") return;
+
+        try {
+            await createOffer(targetId, info);
+        } catch (error) {
+            console.warn("Falha ao renegociar WebRTC:", error);
+        }
+    }, 1200 * reconnectAttempts[targetId]);
 }
 
 function cleanupPeer(socketId) {
@@ -477,17 +531,14 @@ function cleanupPeer(socketId) {
             if (peer.role !== "player") return;
 
             if (
-                Number(info.linkedPlayer) === 1 &&
-                Number(peer.playerNumber) === 1
+                Number(info.linkedPlayer) ===
+                Number(peer.playerNumber)
             ) {
-                setVideoStream(localVideo, playerStream, false);
-            }
-
-            if (
-                Number(info.linkedPlayer) === 2 &&
-                Number(peer.playerNumber) === 2
-            ) {
-                setVideoStream(remoteVideo, playerStream, false);
+                setVideoStream(
+                    getVideoElementForPlayer(peer.playerNumber),
+                    playerStream,
+                    Number(peer.playerNumber) === Number(myPlayerNumberRTC)
+                );
             }
         });
     }
@@ -559,7 +610,7 @@ async function joinRoom(roomId, user) {
         }
     }
 
-    socket.emit("join-room", {
+    lastJoinPayload = {
         roomId,
 
         user: isCameraMode
@@ -580,22 +631,49 @@ async function joinRoom(roomId, user) {
         deck: user.deck,
         guild: user.guild,
         linkedPlayer: user.linkedPlayer,
+        cameraKey: user.cameraKey,
         format: user.format
-    });
+    };
+
+    socket.emit("join-room", lastJoinPayload);
 }
 
 /* =========================
    SOCKETS
 ========================= */
 
-socket.on("assigned-role", (data) => {
+socket.on("assigned-role", async (data) => {
     currentRole = data.role;
 
     if (data.playerNumber) {
         myPlayerNumberRTC = Number(data.playerNumber);
     }
 
+    if ((data.role === "player" || data.role === "camera") && !localStream) {
+        try {
+            await startWebcam();
+        } catch (error) {
+            console.warn("Falha ao iniciar mídia ao assumir papel:", error);
+        }
+    }
+
     routeAllStreams();
+});
+
+socket.on("connect", async () => {
+    if (!lastJoinPayload || !currentRoomId) return;
+
+    Object.keys(peerConnections).forEach(cleanupPeer);
+
+    try {
+        if ((currentRole === "player" || currentRole === "camera") && !localStream) {
+            await startWebcam();
+        }
+
+        socket.emit("join-room", lastJoinPayload);
+    } catch (error) {
+        console.warn("Falha ao restaurar sala após reconexão:", error);
+    }
 });
 
 socket.on("existing-peers", async ({ peers }) => {
@@ -703,6 +781,11 @@ socket.on("auth-required", (data) => {
 });
 
 socket.on("force-home", () => {
+    window.location.href = "/";
+});
+
+socket.on("camera-error", (message) => {
+    alert(message || "Não foi possível conectar a câmera.");
     window.location.href = "/";
 });
 

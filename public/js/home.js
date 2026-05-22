@@ -163,20 +163,29 @@ if (refreshRoomsButton) {
    LOGIN / USUÁRIO ONLINE
 ========================= */
 
-if (typeof auth !== "undefined") {
-  auth.onAuthStateChanged((user) => {
-    if (user) {
-      socket.emit("user-online", {
-        uid: user.uid,
-        name: user.displayName || "Usuário",
-        email: user.email || "",
-        photo: user.photoURL || "/assets/default-avatar.png"
-      });
-    } else {
-      socket.emit("user-logout");
-    }
-  });
+function bindAuthStateChanged(callback) {
+  if (window.onAuthStateChanged) {
+    window.onAuthStateChanged(callback);
+    return;
+  }
+
+  window.addEventListener("firebase-auth-ready", () => {
+    window.onAuthStateChanged?.(callback);
+  }, { once: true });
 }
+
+bindAuthStateChanged((user) => {
+  if (user) {
+    socket.emit("user-online", {
+      uid: user.uid,
+      name: user.displayName || "Usuário",
+      email: user.email || "",
+      photo: user.photoURL || "/assets/default-avatar.png"
+    });
+  } else {
+    socket.emit("user-logout");
+  }
+});
 
 function sendUserToConves() {
   setTimeout(() => {
@@ -232,7 +241,7 @@ socket.on("lobby-state", (tables) => {
     if (!table.isResenha && table.isFull) {
       card.classList.add("table-full");
       button.classList.add("full-btn");
-      button.innerText = "Mesa cheia — assistir 👁️";
+      button.innerText = "Assistir";
     } else {
       card.classList.remove("table-full");
       button.classList.remove("full-btn");

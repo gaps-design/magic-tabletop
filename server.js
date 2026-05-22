@@ -53,6 +53,10 @@ function createDefaultTimer() {
   };
 }
 
+function createCameraKey() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 function publicTimer(timer) {
   return {
     duration: timer.duration,
@@ -67,6 +71,7 @@ function ensureRoom(roomId) {
       players: [],
       spectators: [],
       cameraClients: [],
+      queue: [],
       lifeHistory: [],
       format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
       timer: createDefaultTimer(),
@@ -121,6 +126,7 @@ function buildLobbyState() {
     const players = room?.players?.length || 0;
     const spectators = room?.spectators?.length || 0;
     const cameras = room?.cameraClients?.length || 0;
+    const queue = room?.queue?.length || 0;
 
     return {
       roomId,
@@ -128,6 +134,7 @@ function buildLobbyState() {
       players,
       spectators,
       cameras,
+      queue,
       isResenha,
       isFull: !isResenha && players >= 2,
       playerList: room?.players || [],
@@ -162,7 +169,15 @@ function buildRoomUsers(room) {
     cameras: room.cameraClients.map(c => ({
       socketId: c.socketId,
       linkedPlayer: c.linkedPlayer,
-      name: c.name || "Câmera"
+      name: c.name || "Câmera",
+      photo: c.photo || "/assets/default-avatar.png"
+    })),
+    queue: (room.queue || []).map(item => ({
+      socketId: item.socketId,
+      name: item.name || "Jogador",
+      photo: item.photo || "/assets/default-avatar.png",
+      deck: item.deck || "---",
+      guild: item.guild || "---"
     }))
   };
 }
@@ -172,8 +187,32 @@ function sendRoomState(roomId) {
   if (!room) return;
 
   io.to(roomId).emit("room-state", {
-    players: room.players,
+    players: room.players.map(p => ({
+      socketId: p.socketId,
+      playerNumber: p.playerNumber,
+      name: p.name,
+      deck: p.deck,
+      guild: p.guild,
+      photo: p.photo || "/assets/default-avatar.png",
+      life: p.life
+    })),
     spectators: room.spectators.length,
+    spectatorList: room.spectators.map(id => {
+      const profile = clientProfiles[id] || {};
+      return {
+        socketId: id,
+        name: profile.name || "Espectador",
+        photo: profile.photo || "/assets/default-avatar.png",
+        micEnabled: profile.micEnabled !== false
+      };
+    }),
+    queueList: (room.queue || []).map(item => ({
+      socketId: item.socketId,
+      name: item.name || "Jogador",
+      photo: item.photo || "/assets/default-avatar.png",
+      deck: item.deck || "---",
+      guild: item.guild || "---"
+    })),
     cameraClients: room.cameraClients,
     lifeHistory: room.lifeHistory,
     timer: publicTimer(room.timer),
@@ -206,6 +245,35 @@ function isPlayerInRoom(room, socketId) {
   return room.players.some(p => p.socketId === socketId);
 }
 
+function buildPeerList(room, excludeSocketId = null) {
+  return [
+    ...room.players
+      .filter(p => p.socketId !== excludeSocketId)
+      .map(p => ({
+        socketId: p.socketId,
+        role: "player",
+        playerNumber: p.playerNumber,
+        name: p.name,
+        photo: p.photo
+      })),
+    ...room.cameraClients.map(c => ({
+      socketId: c.socketId,
+      role: "camera",
+      linkedPlayer: c.linkedPlayer,
+      name: c.name || "Câmera",
+      photo: c.photo || "/assets/default-avatar.png"
+    })),
+    ...room.spectators
+      .filter(id => id !== excludeSocketId)
+      .map(id => ({
+        socketId: id,
+        role: "spectator",
+        name: clientProfiles[id]?.name || "Espectador",
+        photo: clientProfiles[id]?.photo || "/assets/default-avatar.png"
+      }))
+  ];
+}
+
 function resetPublicRoomIfEmpty(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -213,7 +281,8 @@ function resetPublicRoomIfEmpty(roomId) {
   const empty =
     room.players.length === 0 &&
     room.spectators.length === 0 &&
-    room.cameraClients.length === 0;
+    room.cameraClients.length === 0 &&
+    (room.queue || []).length === 0;
 
   if (!empty) return;
 
@@ -226,6 +295,7 @@ function resetPublicRoomIfEmpty(roomId) {
       players: [],
       spectators: [],
       cameraClients: [],
+      queue: [],
       lifeHistory: [],
       format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
       timer: createDefaultTimer(),
@@ -300,6 +370,95 @@ function addSpectator(socket, roomId, user, reason = "") {
   broadcastLobbyState();
 }
 
+function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
+  const room = ensureRoom(roomId);
+  const profile = normalizeUser(user);
+
+  if (!room.queue.some(item => item.socketId === socket.id)) {
+    room.queue.push({
+      socketId: socket.id,
+      name: data.name || profile.name || "Jogador",
+      deck: data.deck || "---",
+      guild: data.guild || "---",
+      photo: profile.photo || "/assets/default-avatar.png"
+    });
+  }
+
+  addSpectator(socket, roomId, profile, "resenha-queue");
+
+  socket.emit("resenha-queue-update", {
+    position: room.queue.findIndex(item => item.socketId === socket.id) + 1,
+    queue: room.queue
+  });
+}
+
+function promoteNextResenhaPlayer(roomId) {
+  const room = rooms[roomId];
+  if (!room || !isResenhaRoom(roomId)) return;
+
+  while (room.players.length < 2 && room.queue?.length) {
+    const next = room.queue.shift();
+    const nextSocket = io.sockets.sockets.get(next.socketId);
+
+    if (!nextSocket) continue;
+
+    room.spectators = room.spectators.filter(id => id !== next.socketId);
+
+    const usedNumbers = room.players.map(p => Number(p.playerNumber));
+    let playerNumber = 1;
+    while (usedNumbers.includes(playerNumber)) playerNumber++;
+
+    const player = {
+      socketId: next.socketId,
+      playerNumber,
+      name: next.name,
+      deck: next.deck,
+      guild: next.guild,
+      photo: next.photo || "/assets/default-avatar.png",
+      cameraKey: createCameraKey(),
+      life: 20
+    };
+
+    room.players.push(player);
+    room.micStatus[next.socketId] = true;
+
+    clientProfiles[next.socketId] = {
+      ...(clientProfiles[next.socketId] || {}),
+      role: "player",
+      playerNumber,
+      name: next.name,
+      photo: next.photo || "/assets/default-avatar.png",
+      micEnabled: true
+    };
+
+    updateConnectedUser(next.socketId, {
+      status: "player",
+      role: "player",
+      roomId,
+      playerNumber
+    });
+
+    nextSocket.emit("assigned-role", {
+      role: "player",
+      playerNumber,
+      cameraKey: player.cameraKey,
+      reason: "resenha-promoted"
+    });
+
+    nextSocket.emit("existing-peers", {
+      peers: buildPeerList(room, next.socketId)
+    });
+
+    nextSocket.to(roomId).emit("user-connected", {
+      socketId: next.socketId,
+      role: "player",
+      playerNumber,
+      name: next.name,
+      photo: next.photo || "/assets/default-avatar.png"
+    });
+  }
+}
+
 function removeSocketFromAllRooms(socketId) {
   let changedLobby = false;
 
@@ -309,21 +468,47 @@ function removeSocketFromAllRooms(socketId) {
     const wasInside =
       room.players.some(p => p.socketId === socketId) ||
       room.spectators.includes(socketId) ||
-      room.cameraClients.some(c => c.socketId === socketId);
+      room.cameraClients.some(c => c.socketId === socketId) ||
+      room.queue?.some(item => item.socketId === socketId);
 
     if (!wasInside) continue;
 
+    const removedPlayerNumbers = room.players
+      .filter(p => p.socketId === socketId)
+      .map(p => Number(p.playerNumber));
+    const removedLinkedCameras = room.cameraClients
+      .filter(c => removedPlayerNumbers.includes(Number(c.linkedPlayer)))
+      .map(c => c.socketId);
+
     room.players = room.players.filter(p => p.socketId !== socketId);
     room.spectators = room.spectators.filter(id => id !== socketId);
-    room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
+    room.cameraClients = room.cameraClients.filter(c =>
+      c.socketId !== socketId &&
+      !removedPlayerNumbers.includes(Number(c.linkedPlayer))
+    );
+    room.queue = (room.queue || []).filter(item => item.socketId !== socketId);
     room.diceRolls = room.diceRolls.filter(r => r.socketId !== socketId);
 
     delete room.micStatus[socketId];
+    removedLinkedCameras.forEach(cameraSocketId => {
+      const cameraSocket = io.sockets.sockets.get(cameraSocketId);
+      if (cameraSocket) {
+        cameraSocket.leave(roomId);
+        cameraSocket.emit("camera-error", "Jogador vinculado saiu da mesa.");
+      }
+
+      delete room.micStatus[cameraSocketId];
+      delete clientProfiles[cameraSocketId];
+      io.to(roomId).emit("user-disconnected", cameraSocketId);
+    });
 
     io.to(roomId).emit("user-disconnected", socketId);
 
     sendRoomState(roomId);
     changedLobby = true;
+
+    promoteNextResenhaPlayer(roomId);
+    sendRoomState(roomId);
 
     resetPublicRoomIfEmpty(roomId);
   }
@@ -380,6 +565,7 @@ io.on("connection", (socket) => {
     const deck = data.deck || "---";
     const guild = data.guild || "---";
     const linkedPlayer = Number(data.linkedPlayer || data.cameraFor || 0);
+    const cameraKey = String(data.cameraKey || "");
     const incomingFormat = data.format || "";
 
     if (!isCamera) {
@@ -407,6 +593,12 @@ io.on("connection", (socket) => {
         return;
       }
 
+      const linkedPlayerData = room.players.find(p => Number(p.playerNumber) === linkedPlayer);
+      if (!linkedPlayerData || linkedPlayerData.cameraKey !== cameraKey) {
+        socket.emit("camera-error", "Link de câmera inválido ou expirado.");
+        return;
+      }
+
       const oldCameras = room.cameraClients.filter(c => Number(c.linkedPlayer) === linkedPlayer);
 
       oldCameras.forEach(oldCamera => {
@@ -428,7 +620,8 @@ io.on("connection", (socket) => {
       room.cameraClients.push({
         socketId: socket.id,
         linkedPlayer,
-        name: `Câmera Jogador ${linkedPlayer}`
+        name: `Câmera Jogador ${linkedPlayer}`,
+        photo: "/assets/default-avatar.png"
       });
 
       clientProfiles[socket.id] = {
@@ -476,6 +669,11 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (isResenhaRoom(roomId) && room.players.length >= 2) {
+      addToResenhaQueue(socket, roomId, { name, deck, guild }, user);
+      return;
+    }
+
     if (!isResenhaRoom(roomId) && room.players.length >= 2) {
       addSpectator(socket, roomId, user, "room-full");
       return;
@@ -497,6 +695,7 @@ io.on("connection", (socket) => {
       photo: user.photo,
       deck,
       guild,
+      cameraKey: createCameraKey(),
       life: 20
     };
 
@@ -522,7 +721,8 @@ io.on("connection", (socket) => {
 
     socket.emit("assigned-role", {
       role: "player",
-      playerNumber
+      playerNumber,
+      cameraKey: player.cameraKey
     });
 
     socket.emit("existing-peers", {

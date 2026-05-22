@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 
 let roomId = params.get("room");
 const cameraFor = params.get("cameraFor");
+const cameraKeyFromUrl = params.get("cameraKey");
 const forcedRole = params.get("role");
 const roomFormat = params.get("format") || "Formato livre";
 
@@ -45,6 +46,11 @@ const entryError = document.getElementById("entryError");
 
 const copyRoomBtn = document.getElementById("copyRoomBtn");
 const usersCountBtn = document.getElementById("usersCountBtn");
+const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
+const roomUsersPanel = document.getElementById("roomUsersPanel");
+const closeRoomUsersPanel = document.getElementById("closeRoomUsersPanel");
+const roomUsersTitle = document.getElementById("roomUsersTitle");
+const roomUsersList = document.getElementById("roomUsersList");
 
 const dualViewBtn = document.getElementById("dualViewBtn");
 const focusViewBtn = document.getElementById("focusViewBtn");
@@ -73,8 +79,12 @@ const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
 
 let selectedRole = forcedRole === "spectator" ? "spectator" : "player";
 let myPlayerNumber = null;
+let myCameraKey = "";
 let currentPlayersCount = 0;
 let currentPlayers = [];
+let currentCameraClients = [];
+let currentSpectators = [];
+let currentQueue = [];
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
@@ -85,6 +95,27 @@ const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+
+function bindAuthStateChanged(callback) {
+    if (window.onAuthStateChanged) {
+        window.onAuthStateChanged(callback);
+        return;
+    }
+
+    window.addEventListener("firebase-auth-ready", () => {
+        window.onAuthStateChanged?.(callback);
+    }, { once: true });
+}
+
+bindAuthStateChanged((user) => {
+        if (user || selectedRole === "camera" || cameraFor) return;
+
+        socket.emit("leave-room", { roomId });
+
+        setTimeout(() => {
+            window.location.href = "/";
+        }, 250);
+});
 
 /* =========================
    LOCAL STORAGE
@@ -209,6 +240,7 @@ if (cameraFor) {
             await safeJoinRoom(roomId, {
                 role: "camera",
                 linkedPlayer: Number(cameraFor),
+                cameraKey: cameraKeyFromUrl,
                 name: `Câmera Jogador ${cameraFor}`,
                 deck: "Câmera auxiliar",
                 guild: "---",
@@ -293,6 +325,7 @@ socket.on("assigned-role", (data) => {
 
     if (data.playerNumber) {
         myPlayerNumber = Number(data.playerNumber);
+        myCameraKey = data.cameraKey || "";
         selectedRole = "player";
 
         document.body.classList.remove("spectator-mode");
@@ -306,17 +339,37 @@ socket.on("room-full", () => {
     alert("Sala cheia. Você pode entrar como espectador.");
 });
 
+socket.on("resenha-queue-update", ({ position }) => {
+    const text = position
+        ? `Você entrou na fila da Mesa da Resenha. Posição ${position}.`
+        : "Você entrou na fila da Mesa da Resenha.";
+
+    if (entryError) entryError.innerText = text;
+    addMatchEvent(text);
+});
+
 socket.on("room-state", (state) => {
     const players = Array.isArray(state.players) ? state.players : [];
 
     currentPlayers = players;
+    currentCameraClients = Array.isArray(state.cameraClients) ? state.cameraClients : [];
+    currentSpectators = Array.isArray(state.spectatorList) ? state.spectatorList : [];
+    currentQueue = Array.isArray(state.queueList) ? state.queueList : [];
     currentPlayersCount = players.length;
 
-    if (usersCountBtn) {
-        const spectatorsCount = Number(state.spectators || 0);
-        const cameraCount = Array.isArray(state.cameraClients) ? state.cameraClients.length : 0;
+    const formatText = document.getElementById("formatText");
+    if (formatText && state.format) {
+        formatText.innerText = `Formato: ${state.format}`;
+    }
 
-        usersCountBtn.innerText = `👥 ${players.length + spectatorsCount + cameraCount}`;
+    if (usersCountBtn) {
+        const cameraCount = currentCameraClients.length;
+
+        usersCountBtn.innerText = `👥 ${players.length + cameraCount}`;
+    }
+
+    if (spectatorsCountBtn) {
+        spectatorsCountBtn.innerText = `👁️ ${currentSpectators.length}`;
     }
 
     const p1 = players.find(p => Number(p.playerNumber) === 1);
@@ -378,22 +431,32 @@ function updateRemoteMutedIcon(micEnabled) {
 
 function updateMicIconsFromState(state) {
     const players = Array.isArray(state.players) ? state.players : [];
+    const cameras = Array.isArray(state.cameraClients) ? state.cameraClients : [];
     const micStatus = state.micStatus || {};
 
     const me = players.find(p => Number(p.playerNumber) === myPlayerNumber);
     const remote = players.find(p => Number(p.playerNumber) !== myPlayerNumber);
+    const myCamera = cameras.find(c => Number(c.linkedPlayer) === Number(myPlayerNumber));
+    const remoteCamera = remote
+        ? cameras.find(c => Number(c.linkedPlayer) === Number(remote.playerNumber))
+        : null;
 
-    if (me && micStatus[me.socketId] !== undefined) {
-        updateLocalMutedIcon(micStatus[me.socketId]);
+    const localMicId = myCamera?.socketId || me?.socketId;
+    const remoteMicId = remoteCamera?.socketId || remote?.socketId;
+
+    if (localMicId && micStatus[localMicId] !== undefined) {
+        updateLocalMutedIcon(micStatus[localMicId]);
     }
 
-    if (remote && micStatus[remote.socketId] !== undefined) {
-        updateRemoteMutedIcon(micStatus[remote.socketId]);
+    if (remoteMicId && micStatus[remoteMicId] !== undefined) {
+        updateRemoteMutedIcon(micStatus[remoteMicId]);
     }
 }
 
-socket.on("mic-status-update", ({ socketId, micEnabled }) => {
-    if (socketId === socket.id) {
+socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
+    const linkedPlayer = Number(info?.linkedPlayer || info?.playerNumber || 0);
+
+    if (socketId === socket.id || (myPlayerNumber && linkedPlayer === Number(myPlayerNumber))) {
         updateLocalMutedIcon(micEnabled);
     } else {
         updateRemoteMutedIcon(micEnabled);
@@ -740,13 +803,109 @@ if (copyRoomBtn) {
     });
 }
 
+function openRoomUsersPanel(title, people = []) {
+    if (!roomUsersPanel || !roomUsersList || !roomUsersTitle) return;
+
+    roomUsersTitle.innerText = title;
+    roomUsersList.innerHTML = "";
+
+    if (!people.length) {
+        const empty = document.createElement("p");
+        empty.className = "room-users-empty";
+        empty.innerText = "Ninguém por aqui ainda.";
+        roomUsersList.appendChild(empty);
+    }
+
+    people.forEach(person => {
+        const item = document.createElement("div");
+        item.className = "room-user-item";
+
+        const img = document.createElement("img");
+        img.src = person.photo || "/assets/default-avatar.png";
+        img.alt = person.name || "Usuário";
+
+        const info = document.createElement("div");
+
+        const name = document.createElement("strong");
+        name.innerText = person.name || "Usuário";
+
+        const status = document.createElement("span");
+        status.innerText = person.status || "";
+
+        info.appendChild(name);
+        info.appendChild(status);
+        item.appendChild(img);
+        item.appendChild(info);
+
+        roomUsersList.appendChild(item);
+    });
+
+    roomUsersPanel.classList.remove("hidden");
+}
+
+if (usersCountBtn) {
+    usersCountBtn.addEventListener("click", () => {
+        const players = currentPlayers.map(p => ({
+            name: `J${p.playerNumber}: ${p.name || "Jogador"}`,
+            photo: p.photo || "",
+            status: [p.deck, p.guild].filter(Boolean).join(" • ") || "Jogador ativo"
+        }));
+
+        const cameras = currentCameraClients.map(c => ({
+            name: c.name || `Câmera J${c.linkedPlayer}`,
+            photo: c.photo || "",
+            status: `Câmera vinculada ao J${c.linkedPlayer}`
+        }));
+
+        const queue = currentQueue.map((q, index) => ({
+            name: `${index + 1}. ${q.name || "Jogador"}`,
+            photo: q.photo || "",
+            status: `Fila da Resenha • ${[q.deck, q.guild].filter(Boolean).join(" • ") || "Aguardando"}`
+        }));
+
+        openRoomUsersPanel("Jogadores, câmeras e fila", [...players, ...cameras, ...queue]);
+    });
+}
+
+if (spectatorsCountBtn) {
+    spectatorsCountBtn.addEventListener("click", () => {
+        openRoomUsersPanel(
+            "Espectadores",
+            currentSpectators.map(s => ({
+                name: s.name || "Espectador",
+                photo: s.photo || "",
+                status: s.micEnabled ? "Microfone ativo" : "Microfone mutado"
+            }))
+        );
+    });
+}
+
+if (closeRoomUsersPanel) {
+    closeRoomUsersPanel.addEventListener("click", () => {
+        roomUsersPanel?.classList.add("hidden");
+    });
+}
+
+if (roomUsersPanel) {
+    roomUsersPanel.addEventListener("click", event => {
+        if (event.target === roomUsersPanel) {
+            roomUsersPanel.classList.add("hidden");
+        }
+    });
+}
+
 window.copyCameraLink = async function() {
     if (!myPlayerNumber) {
         alert("Entre como jogador primeiro para gerar o link da câmera.");
         return;
     }
 
-    const cameraUrl = `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}`;
+    if (!myCameraKey) {
+        alert("A chave da câmera ainda não carregou. Aguarde um instante e tente novamente.");
+        return;
+    }
+
+    const cameraUrl = `${window.location.origin}/sala.html?room=${roomId}&cameraFor=${myPlayerNumber}&cameraKey=${encodeURIComponent(myCameraKey)}`;
 
     try {
         await navigator.clipboard.writeText(cameraUrl);
@@ -1019,10 +1178,10 @@ window.toggleNotesPanel = function() {
 
 function getEmotes() {
     return [
-        { emoji: "🙏", label: "Fé" },
-        { emoji: "👍", label: "Joinha" },
-        { emoji: "👎", label: "Joinha invertido" },
-        { emoji: "😢", label: "Choro" }
+        { emoji: "\u{1F64F}", label: "Fé" },
+        { emoji: "\u{1F44D}", label: "Joinha" },
+        { emoji: "\u{1F44E}", label: "Joinha invertido" },
+        { emoji: "\u{1F622}", label: "Choro" }
     ];
 }
 
@@ -1146,11 +1305,16 @@ if (spectatorChatInput) {
 }
 
 socket.on("chat-message", (data) => {
-    renderChatMessage(data);
-
     if (data.type === "emoji") {
         spawnFloatingEmoji(data.message);
+        return;
     }
+
+    renderChatMessage(data);
+});
+
+socket.on("spectator-joined", ({ name }) => {
+    addMatchEvent(`${name || "Um espectador"} entrou para assistir.`);
 });
 
 socket.on("chat-cooldown", (data) => {
