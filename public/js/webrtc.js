@@ -917,7 +917,19 @@ socket.on(
 socket.on("user-disconnected", (socketId) => {
     cleanupPeer(socketId);
 });
+socket.on("camera-replaced", () => {
+    alert("Essa câmera foi substituída por outra conexão.");
+    window.location.href = "/";
+});
 
+socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
+    if (info) {
+        savePeerInfo(socketId, {
+            ...info,
+            micEnabled
+        });
+    }
+});
 /* =========================
    DISPOSITIVOS
 ========================= */
@@ -987,12 +999,17 @@ window.toggleMicrophone = function() {
     localStream
         .getAudioTracks()
         .forEach(track => {
-
             track.enabled = micEnabled;
-
         });
 
     updateMediaStatus();
+
+    if (currentRoomId) {
+        socket.emit("update-mic-status", {
+            roomId: currentRoomId,
+            micEnabled
+        });
+    }
 };
 
 /* =========================
@@ -1008,9 +1025,7 @@ window.toggleCamera = function() {
     localStream
         .getVideoTracks()
         .forEach(track => {
-
             track.enabled = cameraEnabled;
-
         });
 
     updateMediaStatus();

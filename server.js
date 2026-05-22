@@ -31,32 +31,6 @@ function isResenhaRoom(roomId) {
   return roomId === "mtg-1002";
 }
 
-function emitConvesState() {
-  io.emit("conves-state", Object.values(connectedUsers));
-}
-
-function buildLobbyState() {
-  return PUBLIC_TABLES.map(roomId => {
-    const room = rooms[roomId];
-    const players = room?.players?.length || 0;
-    const isResenha = isResenhaRoom(roomId);
-
-    return {
-      roomId,
-      format: room?.format || (isResenha ? "Mesa da Resenha" : "Formato livre"),
-      players,
-      spectators: room?.spectators?.length || 0,
-      cameras: room?.cameraClients?.length || 0,
-      isResenha,
-      isFull: !isResenha && players >= 2
-    };
-  });
-}
-
-function broadcastLobbyState() {
-  io.emit("lobby-state", buildLobbyState());
-}
-
 function createDefaultTimer() {
   return {
     duration: 3000,
@@ -91,6 +65,34 @@ function ensureRoom(roomId) {
   return rooms[roomId];
 }
 
+function emitConvesState() {
+  io.emit("conves-state", Object.values(connectedUsers));
+}
+
+function buildLobbyState() {
+  return PUBLIC_TABLES.map(roomId => {
+    const room = rooms[roomId];
+    const players = room?.players?.length || 0;
+    const spectators = room?.spectators?.length || 0;
+    const cameras = room?.cameraClients?.length || 0;
+    const isResenha = isResenhaRoom(roomId);
+
+    return {
+      roomId,
+      format: room?.format || (isResenha ? "Mesa da Resenha" : "Formato livre"),
+      players,
+      spectators,
+      cameras,
+      isResenha,
+      isFull: !isResenha && players >= 2
+    };
+  });
+}
+
+function broadcastLobbyState() {
+  io.emit("lobby-state", buildLobbyState());
+}
+
 function sendRoomState(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -113,10 +115,10 @@ function getClientInfo(socketId) {
 
   return {
     role: profile.role,
-    playerNumber: profile.playerNumber,
-    linkedPlayer: profile.linkedPlayer,
-    name: profile.name,
-    micEnabled: profile.micEnabled
+    playerNumber: profile.playerNumber || null,
+    linkedPlayer: profile.linkedPlayer || null,
+    name: profile.name || "Usuário",
+    micEnabled: profile.micEnabled !== false
   };
 }
 
@@ -157,6 +159,37 @@ function updateConnectedUser(socketId, data = {}) {
   emitConvesState();
 }
 
+function resetPublicRoomIfEmpty(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  const empty =
+    room.players.length === 0 &&
+    room.spectators.length === 0 &&
+    room.cameraClients.length === 0;
+
+  if (!empty) return;
+
+  if (room.timer?.interval) {
+    clearInterval(room.timer.interval);
+  }
+
+  if (PUBLIC_TABLES.includes(roomId)) {
+    rooms[roomId] = {
+      players: [],
+      spectators: [],
+      cameraClients: [],
+      lifeHistory: [],
+      format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
+      timer: createDefaultTimer(),
+      diceRolls: [],
+      micStatus: {}
+    };
+  } else {
+    delete rooms[roomId];
+  }
+}
+
 function addSpectator(socket, roomId, name, reason = "") {
   const room = ensureRoom(roomId);
 
@@ -193,7 +226,8 @@ function addSpectator(socket, roomId, name, reason = "") {
       ...room.cameraClients.map(c => ({
         socketId: c.socketId,
         role: "camera",
-        linkedPlayer: c.linkedPlayer
+        linkedPlayer: c.linkedPlayer,
+        name: c.name || "Câmera"
       }))
     ]
   });
@@ -219,6 +253,8 @@ function removeSocketFromAllRooms(socketId) {
       room.spectators.includes(socketId) ||
       room.cameraClients.some(c => c.socketId === socketId);
 
+    if (!wasInside) continue;
+
     room.players = room.players.filter(p => p.socketId !== socketId);
     room.spectators = room.spectators.filter(id => id !== socketId);
     room.cameraClients = room.cameraClients.filter(c => c.socketId !== socketId);
@@ -226,27 +262,20 @@ function removeSocketFromAllRooms(socketId) {
 
     delete room.micStatus[socketId];
 
-    if (wasInside) {
-      changedLobby = true;
-      io.to(roomId).emit("user-disconnected", socketId);
-      sendRoomState(roomId);
-    }
+    io.to(roomId).emit("user-disconnected", socketId);
 
-    if (
-      room.players.length === 0 &&
-      room.spectators.length === 0 &&
-      room.cameraClients.length === 0
-    ) {
-      if (room.timer?.interval) clearInterval(room.timer.interval);
-      delete rooms[roomId];
-      changedLobby = true;
-    }
+    sendRoomState(roomId);
+    changedLobby = true;
+
+    resetPublicRoomIfEmpty(roomId);
   }
 
   delete chatControl[socketId];
   delete clientProfiles[socketId];
 
-  if (changedLobby) broadcastLobbyState();
+  if (changedLobby) {
+    broadcastLobbyState();
+  }
 }
 
 io.on("connection", (socket) => {
@@ -270,7 +299,7 @@ io.on("connection", (socket) => {
     const name = data.name || user.name || "Usuário";
     const deck = data.deck || user.deck || "---";
     const guild = data.guild || user.guild || "---";
-    const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || 0);
+    const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || data.cameraFor || user.cameraFor || 0);
     const incomingFormat = data.format || "";
 
     if (user?.uid) {
@@ -298,12 +327,28 @@ io.on("connection", (socket) => {
         return;
       }
 
-      room.cameraClients =
-        room.cameraClients.filter(c => Number(c.linkedPlayer) !== linkedPlayer);
+      const oldCameras = room.cameraClients.filter(c => Number(c.linkedPlayer) === linkedPlayer);
+
+      oldCameras.forEach(oldCamera => {
+        const oldSocket = io.sockets.sockets.get(oldCamera.socketId);
+
+        if (oldSocket) {
+          oldSocket.leave(roomId);
+          oldSocket.emit("camera-replaced");
+        }
+
+        delete clientProfiles[oldCamera.socketId];
+        delete room.micStatus[oldCamera.socketId];
+
+        io.to(roomId).emit("user-disconnected", oldCamera.socketId);
+      });
+
+      room.cameraClients = room.cameraClients.filter(c => Number(c.linkedPlayer) !== linkedPlayer);
 
       room.cameraClients.push({
         socketId: socket.id,
-        linkedPlayer
+        linkedPlayer,
+        name
       });
 
       clientProfiles[socket.id] = {
@@ -334,6 +379,11 @@ io.on("connection", (socket) => {
             role: "player",
             playerNumber: p.playerNumber,
             name: p.name
+          })),
+          ...room.spectators.map(id => ({
+            socketId: id,
+            role: "spectator",
+            name: clientProfiles[id]?.name || "Espectador"
           }))
         ]
       });
@@ -341,7 +391,8 @@ io.on("connection", (socket) => {
       socket.to(roomId).emit("user-connected", {
         socketId: socket.id,
         role: "camera",
-        linkedPlayer
+        linkedPlayer,
+        name
       });
 
       sendRoomState(roomId);
@@ -355,7 +406,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const usedNumbers = room.players.map(p => p.playerNumber);
+    const usedNumbers = room.players.map(p => Number(p.playerNumber));
     let playerNumber = 1;
 
     while (usedNumbers.includes(playerNumber)) {
@@ -407,7 +458,13 @@ io.on("connection", (socket) => {
         ...room.cameraClients.map(c => ({
           socketId: c.socketId,
           role: "camera",
-          linkedPlayer: c.linkedPlayer
+          linkedPlayer: c.linkedPlayer,
+          name: c.name || "Câmera"
+        })),
+        ...room.spectators.map(id => ({
+          socketId: id,
+          role: "spectator",
+          name: clientProfiles[id]?.name || "Espectador"
         }))
       ]
     });
@@ -451,9 +508,9 @@ io.on("connection", (socket) => {
     room.diceRolls.push(roll);
     io.to(roomId).emit("dice-rolled", roll);
 
-    const activePlayers = room.players.length;
+    const activePlayers = Math.min(room.players.length, 2);
 
-    if (room.diceRolls.length >= Math.min(activePlayers, 2)) {
+    if (room.diceRolls.length >= activePlayers) {
       const sorted = [...room.diceRolls].sort((a, b) => b.total - a.total);
       const top = sorted[0];
       const second = sorted[1];
@@ -485,7 +542,6 @@ io.on("connection", (socket) => {
     if (!isPlayerInRoom(room, socket.id)) return;
 
     room.diceRolls = [];
-
     io.to(roomId).emit("dice-reset");
     sendRoomState(roomId);
   });
@@ -755,9 +811,14 @@ io.on("connection", (socket) => {
     });
 
     removeSocketFromAllRooms(socket.id);
-    socket.leave(roomId);
+
+    if (roomId) {
+      socket.leave(roomId);
+    }
+
     socket.emit("left-room");
     emitConvesState();
+    broadcastLobbyState();
   });
 
   socket.on("disconnect", () => {

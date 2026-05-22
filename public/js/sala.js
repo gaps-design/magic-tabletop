@@ -51,7 +51,6 @@ const focusViewBtn = document.getElementById("focusViewBtn");
 const dualViewBtnBottom = document.getElementById("dualViewBtnBottom");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
-const chatContainer = document.getElementById("chatContainer");
 const toggleChatBtn = document.getElementById("toggleChatBtn");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
@@ -67,10 +66,12 @@ const diceHistoryList = document.getElementById("diceHistoryList");
 const localMutedIcon = document.getElementById("localMutedIcon");
 const remoteMutedIcon = document.getElementById("remoteMutedIcon");
 
-let selectedRole =
-    forcedRole === "spectator"
-        ? "spectator"
-        : "player";
+const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
+
+const spectatorChatInput = document.getElementById("spectatorChatInput");
+const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
+
+let selectedRole = forcedRole === "spectator" ? "spectator" : "player";
 let myPlayerNumber = null;
 let currentPlayersCount = 0;
 let currentPlayers = [];
@@ -120,43 +121,6 @@ function savePlayerData() {
 loadSavedPlayerData();
 
 /* =========================
-   ENTRADA FORÇADA ESPECTADOR
-========================= */
-
-if (forcedRole === "spectator") {
-
-    selectedRole = "spectator";
-
-    if (playerRoleBtn) {
-        playerRoleBtn.classList.remove("active");
-    }
-
-    if (spectatorRoleBtn) {
-        spectatorRoleBtn.classList.add("active");
-    }
-
-    showSpectatorFields();
-
-    if (playerRoleBtn) {
-    playerRoleBtn.style.display = "none";
-}
-
-if (spectatorRoleBtn) {
-    spectatorRoleBtn.style.width = "100%";
-    spectatorRoleBtn.style.pointerEvents = "none";
-}
-
-const roleOptions = document.querySelector(".role-options");
-if (roleOptions) {
-    roleOptions.style.gridTemplateColumns = "1fr";
-}
-
-    if (entryError) {
-        entryError.innerText = "Sala cheia. Entrando como espectador.";
-    }
-}
-
-/* =========================
    MODAL ENTRADA
 ========================= */
 
@@ -170,6 +134,16 @@ function showSpectatorFields() {
     if (playerFields) playerFields.style.display = "flex";
     if (deckNameInput?.closest("label")) deckNameInput.closest("label").style.display = "none";
     if (guildInput?.closest("label")) guildInput.closest("label").style.display = "none";
+}
+
+function showLeaveSpectatorButton() {
+    if (!leaveSpectatorBtn) return;
+
+    if (selectedRole === "spectator") {
+        leaveSpectatorBtn.classList.remove("hidden");
+    } else {
+        leaveSpectatorBtn.classList.add("hidden");
+    }
 }
 
 if (playerRoleBtn) {
@@ -188,6 +162,36 @@ if (spectatorRoleBtn) {
         playerRoleBtn?.classList.remove("active");
         showSpectatorFields();
     });
+}
+
+/* =========================
+   ENTRADA FORÇADA ESPECTADOR
+========================= */
+
+if (forcedRole === "spectator") {
+    selectedRole = "spectator";
+
+    if (playerRoleBtn) {
+        playerRoleBtn.classList.remove("active");
+        playerRoleBtn.style.display = "none";
+    }
+
+    if (spectatorRoleBtn) {
+        spectatorRoleBtn.classList.add("active");
+        spectatorRoleBtn.style.width = "100%";
+        spectatorRoleBtn.style.pointerEvents = "none";
+    }
+
+    const roleOptions = document.querySelector(".role-options");
+    if (roleOptions) {
+        roleOptions.style.gridTemplateColumns = "1fr";
+    }
+
+    showSpectatorFields();
+
+    if (entryError) {
+        entryError.innerText = "Sala cheia. Entrando como espectador.";
+    }
 }
 
 /* =========================
@@ -271,6 +275,8 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
+
+        showLeaveSpectatorButton();
         return;
     }
 
@@ -280,6 +286,8 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.add("camera-mode");
         document.body.classList.remove("spectator-mode");
+
+        showLeaveSpectatorButton();
         return;
     }
 
@@ -289,6 +297,8 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.remove("spectator-mode");
         document.body.classList.remove("camera-mode");
+
+        showLeaveSpectatorButton();
     }
 });
 
@@ -383,15 +393,6 @@ function updateMicIconsFromState(state) {
 }
 
 socket.on("mic-status-update", ({ socketId, micEnabled }) => {
-    if (socketId === socket.id) {
-        updateLocalMutedIcon(micEnabled);
-    } else {
-        updateRemoteMutedIcon(micEnabled);
-    }
-});
-
-/* reforço local caso o webrtc.js emita corretamente */
-socket.on("update-mic-status", ({ socketId, micEnabled }) => {
     if (socketId === socket.id) {
         updateLocalMutedIcon(micEnabled);
     } else {
@@ -525,9 +526,7 @@ socket.on("dice-rolled", (roll) => {
         }
 
         addDiceHistoryLine(line);
-
         addMatchEvent(`🎲 ${line}`);
-
     }, 900);
 });
 
@@ -540,7 +539,6 @@ socket.on("dice-winner", (data) => {
         getPlayerNameByNumber(data.playerNumber);
 
     setTimeout(() => {
-
         const line = `🏆 ${winnerName} escolhe se vai começar.`;
 
         if (diceResultText) {
@@ -548,11 +546,10 @@ socket.on("dice-winner", (data) => {
         }
 
         addDiceHistoryLine(line);
-
         addMatchEvent(line);
-
     }, 1100);
 });
+
 socket.on("dice-draw", (data) => {
     if (diceOverlay) diceOverlay.classList.remove("hidden");
 
@@ -599,7 +596,6 @@ function changeOfficialLife(playerNumber, amount) {
     });
 }
 
-/* funciona com HTML antigo e novo */
 document.querySelectorAll("[data-player][data-amount]").forEach(button => {
     button.addEventListener("click", () => {
         const playerNumber = Number(button.dataset.player);
@@ -668,7 +664,7 @@ window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
     if (selectedRole !== "player") return;
 
     if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
-        alert("Você só pode alterar a anotação do oponente no seu próprio painel.");
+        alert("Você só pode alterar a anotação do oponente no seu painel.");
         return;
     }
 
@@ -715,17 +711,23 @@ window.leaveRoom = function() {
     socket.emit("leave-room", { roomId });
 
     setTimeout(() => {
-        window.close();
-
-        setTimeout(() => {
-            window.location.href = "/";
-        }, 200);
+        window.location.href = "/";
     }, 300);
 };
 
 socket.on("left-room", () => {
     window.location.href = "/";
 });
+
+if (leaveSpectatorBtn) {
+    leaveSpectatorBtn.addEventListener("click", () => {
+        socket.emit("leave-room", { roomId });
+
+        setTimeout(() => {
+            window.location.href = "/";
+        }, 300);
+    });
+}
 
 if (copyRoomBtn) {
     copyRoomBtn.addEventListener("click", async () => {
@@ -965,7 +967,6 @@ window.clearLifeHistory = function() {
     if (selectedRole !== "player") return;
     socket.emit("clear-life-history", { roomId });
 };
-
 /* =========================
    MARCADORES POR JOGADOR
 ========================= */
@@ -985,9 +986,7 @@ const playerMarkers = {
 };
 
 window.changePlayerMarker = function(playerNumber, type, amount) {
-
     if (!playerMarkers[playerNumber]) return;
-
     if (!playerMarkers[playerNumber].hasOwnProperty(type)) return;
 
     playerMarkers[playerNumber][type] += Number(amount);
@@ -1018,28 +1017,22 @@ window.toggleNotesPanel = function() {
    CHAT / EMOTES
 ========================= */
 
+function getEmotes() {
+    return [
+        { emoji: "🙏", label: "Fé" },
+        { emoji: "👍", label: "Joinha" },
+        { emoji: "👎", label: "Joinha invertido" },
+        { emoji: "😢", label: "Choro" }
+    ];
+}
+
 function injectChatEmotes() {
     const emojiBar = document.querySelector(".emoji-bar");
     if (!emojiBar) return;
 
     emojiBar.innerHTML = "";
 
-    const emotes = [
-        { emoji: "🔥", label: "Fogo" },
-        { emoji: "😂", label: "Rindo" },
-        { emoji: "😱", label: "Surpreso" },
-        { emoji: "👏", label: "Palmas" },
-        { emoji: "❤️", label: "Coração" },
-        { emoji: "🤫", label: "Silêncio" },
-        { emoji: "🙏", label: "Fé" },
-        { emoji: "👍", label: "Joinha" },
-        { emoji: "😴", label: "Dormindo" },
-        { emoji: "😈", label: "Capetinha" },
-        { emoji: "🤨", label: "Duvidando" },
-        { emoji: "🤔", label: "Pensativo" }
-    ];
-
-    emotes.forEach(item => {
+    getEmotes().forEach(item => {
         const button = document.createElement("button");
 
         button.type = "button";
@@ -1055,9 +1048,25 @@ function injectChatEmotes() {
     });
 }
 
-window.addEventListener("load", () => {
-    injectChatEmotes();
-});
+function injectSpectatorEmotes() {
+    const bar = document.getElementById("spectatorEmojiBar");
+    if (!bar) return;
+
+    bar.innerHTML = "";
+
+    getEmotes().forEach(item => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.innerText = item.emoji;
+        btn.title = item.label;
+
+        btn.addEventListener("click", () => {
+            sendChatMessage(item.emoji, "emoji");
+        });
+
+        bar.appendChild(btn);
+    });
+}
 
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener("click", () => {
@@ -1118,6 +1127,24 @@ if (chatInput) {
     });
 }
 
+if (sendSpectatorChatBtn) {
+    sendSpectatorChatBtn.addEventListener("click", () => {
+        if (!spectatorChatInput) return;
+
+        sendChatMessage(spectatorChatInput.value, "text");
+        spectatorChatInput.value = "";
+    });
+}
+
+if (spectatorChatInput) {
+    spectatorChatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            sendChatMessage(spectatorChatInput.value, "text");
+            spectatorChatInput.value = "";
+        }
+    });
+}
+
 socket.on("chat-message", (data) => {
     renderChatMessage(data);
 
@@ -1131,17 +1158,14 @@ socket.on("chat-cooldown", (data) => {
 });
 
 function renderChatMessage(data) {
-
     const messageHtml = `
         <strong>${data.name || "Usuário"}:</strong>
         <span>${data.message}</span>
     `;
 
-    // CHAT NORMAL
     const container = document.getElementById("chatMessages");
 
     if (container) {
-
         const div = document.createElement("div");
         div.className = "chat-message";
         div.innerHTML = messageHtml;
@@ -1150,11 +1174,9 @@ function renderChatMessage(data) {
         container.scrollTop = container.scrollHeight;
     }
 
-    // CHAT ESPECTADOR
     const spectatorContainer = document.getElementById("spectatorChatMessages");
 
     if (spectatorContainer) {
-
         const spectatorDiv = document.createElement("div");
         spectatorDiv.className = "chat-message";
         spectatorDiv.innerHTML = messageHtml;
@@ -1178,131 +1200,10 @@ function spawnFloatingEmoji(emoji) {
     }, 5000);
 }
 
-renderDiceHistory();
 /* =========================
-   AJUSTE VIDA OPONENTE LOCAL
+   ESPECTADOR
 ========================= */
 
-window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
-
-    if (selectedRole !== "player") return;
-
-    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
-        alert("Você só pode alterar a anotação do oponente no seu painel.");
-        return;
-    }
-
-    const box = document.getElementById(`player${panelPlayerNumber}OpponentLife`);
-
-    if (!box) return;
-
-    const current = Number(box.innerText || 20);
-
-    box.innerText = current + Number(amount);
-};
-
-/* =========================
-   GARANTIR CHAT FUNCIONANDO
-========================= */
-
-window.addEventListener("load", () => {
-
-    injectChatEmotes();
-
-    const chatMessages = document.getElementById("chatMessages");
-
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-});
-
-/* =========================
-   GARANTIR HISTÓRICO DADOS
-========================= */
-
-renderDiceHistory();
-
-/* =========================
-   DEBUG MICROFONE
-========================= */
-
-console.log("Sala.js carregado com sucesso");
-const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
-
-if (selectedRole === "spectator" && leaveSpectatorBtn) {
-    leaveSpectatorBtn.classList.remove("hidden");
-
-    leaveSpectatorBtn.addEventListener("click", () => {
-
-        if (window.opener && !window.opener.closed) {
-            window.close();
-        } else {
-            window.location.href = "/";
-        }
-
-    });
-}
-
-if (leaveSpectatorBtn) {
-    if (selectedRole === "spectator") {
-        leaveSpectatorBtn.classList.remove("hidden");
-    }
-
-    leaveSpectatorBtn.addEventListener("click", () => {
-        socket.emit("leave-room", { roomId });
-
-        setTimeout(() => {
-            window.close();
-
-            setTimeout(() => {
-                window.location.href = "/";
-            }, 200);
-        }, 300);
-    });
-}
-const spectatorChatInput = document.getElementById("spectatorChatInput");
-const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
-
-if (sendSpectatorChatBtn) {
-    sendSpectatorChatBtn.addEventListener("click", () => {
-        if (!spectatorChatInput) return;
-
-        sendChatMessage(spectatorChatInput.value, "text");
-        spectatorChatInput.value = "";
-    });
-}
-
-if (spectatorChatInput) {
-    spectatorChatInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            sendChatMessage(spectatorChatInput.value, "text");
-            spectatorChatInput.value = "";
-        }
-    });
-}
-function injectSpectatorEmotes() {
-    const bar = document.getElementById("spectatorEmojiBar");
-    if (!bar) return;
-
-    bar.innerHTML = "";
-
-    const emotes = ["🔥","😂","😱","👏","❤️","🤫","🙏","👍","😴","😈","🤨","🤔"];
-
-    emotes.forEach(emoji => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.innerText = emoji;
-
-        btn.addEventListener("click", () => {
-            sendChatMessage(emoji, "emoji");
-        });
-
-        bar.appendChild(btn);
-    });
-}
-
-injectSpectatorEmotes();
 window.setSpectatorFocus = function(mode) {
     document.body.classList.remove("spectator-focus-p1", "spectator-focus-p2");
 
@@ -1314,17 +1215,24 @@ window.setSpectatorFocus = function(mode) {
         document.body.classList.add("spectator-focus-p2");
     }
 };
-function addMatchEvent(text) {
-    const list = document.getElementById("matchEventsList");
-    if (!list || !text) return;
 
-    if (list.innerText.includes("Aguardando eventos")) {
-        list.innerHTML = "";
+/* =========================
+   INICIALIZAÇÃO
+========================= */
+
+window.addEventListener("load", () => {
+    injectChatEmotes();
+    injectSpectatorEmotes();
+
+    const chatMessages = document.getElementById("chatMessages");
+
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    const div = document.createElement("div");
-    div.className = "event-item";
-    div.innerText = text;
+    showLeaveSpectatorButton();
+});
 
-    list.prepend(div);
-}
+renderDiceHistory();
+
+console.log("Sala.js carregado com sucesso");
