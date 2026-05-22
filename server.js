@@ -31,6 +31,19 @@ function isResenhaRoom(roomId) {
   return roomId === "mtg-1002";
 }
 
+function normalizeUser(user = {}) {
+  return {
+    uid: user.uid || "",
+    name: user.name || user.displayName || "Usuário",
+    email: user.email || "",
+    photo: user.photo || user.photoURL || "/assets/default-avatar.png"
+  };
+}
+
+function isLoggedUser(user = {}) {
+  return !!(user.uid || user.email);
+}
+
 function createDefaultTimer() {
   return {
     duration: 3000,
@@ -65,80 +78,17 @@ function ensureRoom(roomId) {
   return rooms[roomId];
 }
 
-function emitConvesState() {
-  io.emit("conves-state", Object.values(connectedUsers));
-}
-
-function buildLobbyState() {
-  return PUBLIC_TABLES.map(roomId => {
-    const room = rooms[roomId];
-    const players = room?.players?.length || 0;
-    const spectators = room?.spectators?.length || 0;
-    const cameras = room?.cameraClients?.length || 0;
-    const isResenha = isResenhaRoom(roomId);
-
-    return {
-      roomId,
-      format: room?.format || (isResenha ? "Mesa da Resenha" : "Formato livre"),
-      players,
-      spectators,
-      cameras,
-      isResenha,
-      isFull: !isResenha && players >= 2
-    };
-  });
-}
-
-function broadcastLobbyState() {
-  io.emit("lobby-state", buildLobbyState());
-}
-
-function sendRoomState(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-
-  io.to(roomId).emit("room-state", {
-    players: room.players,
-    spectators: room.spectators.length,
-    cameraClients: room.cameraClients,
-    lifeHistory: room.lifeHistory,
-    timer: publicTimer(room.timer),
-    format: room.format,
-    diceRolls: room.diceRolls,
-    micStatus: room.micStatus
-  });
-}
-
-function getClientInfo(socketId) {
-  const profile = clientProfiles[socketId];
-  if (!profile) return null;
-
-  return {
-    role: profile.role,
-    playerNumber: profile.playerNumber || null,
-    linkedPlayer: profile.linkedPlayer || null,
-    name: profile.name || "Usuário",
-    micEnabled: profile.micEnabled !== false
-  };
-}
-
-function getPlayerBySocket(room, socketId) {
-  return room.players.find(p => p.socketId === socketId);
-}
-
-function isPlayerInRoom(room, socketId) {
-  return room.players.some(p => p.socketId === socketId);
-}
-
 function setConnectedUser(socketId, user, status = "idle", roomId = null, role = "idle", playerNumber = null) {
-  if (!user || !user.uid) return;
+  const profile = normalizeUser(user);
+
+  if (!profile.uid && !profile.email) return;
 
   connectedUsers[socketId] = {
     socketId,
-    uid: user.uid,
-    name: user.name || "Usuário",
-    email: user.email || "",
-    photo: user.photo || "",
+    uid: profile.uid,
+    name: profile.name,
+    email: profile.email,
+    photo: profile.photo,
     status,
     roomId,
     role,
@@ -157,6 +107,103 @@ function updateConnectedUser(socketId, data = {}) {
   };
 
   emitConvesState();
+}
+
+function emitConvesState() {
+  io.emit("conves-state", Object.values(connectedUsers));
+}
+
+function buildLobbyState() {
+  return PUBLIC_TABLES.map(roomId => {
+    const room = rooms[roomId];
+    const isResenha = isResenhaRoom(roomId);
+
+    const players = room?.players?.length || 0;
+    const spectators = room?.spectators?.length || 0;
+    const cameras = room?.cameraClients?.length || 0;
+
+    return {
+      roomId,
+      format: room?.format || (isResenha ? "Mesa da Resenha" : "Formato livre"),
+      players,
+      spectators,
+      cameras,
+      isResenha,
+      isFull: !isResenha && players >= 2,
+      playerList: room?.players || [],
+      spectatorList: room?.spectators?.map(id => clientProfiles[id]).filter(Boolean) || []
+    };
+  });
+}
+
+function broadcastLobbyState() {
+  io.emit("lobby-state", buildLobbyState());
+  emitConvesState();
+}
+
+function buildRoomUsers(room) {
+  return {
+    players: room.players.map(p => ({
+      socketId: p.socketId,
+      playerNumber: p.playerNumber,
+      name: p.name,
+      deck: p.deck,
+      guild: p.guild,
+      photo: p.photo || "/assets/default-avatar.png"
+    })),
+    spectators: room.spectators.map(id => {
+      const profile = clientProfiles[id] || {};
+      return {
+        socketId: id,
+        name: profile.name || "Espectador",
+        photo: profile.photo || "/assets/default-avatar.png"
+      };
+    }),
+    cameras: room.cameraClients.map(c => ({
+      socketId: c.socketId,
+      linkedPlayer: c.linkedPlayer,
+      name: c.name || "Câmera"
+    }))
+  };
+}
+
+function sendRoomState(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  io.to(roomId).emit("room-state", {
+    players: room.players,
+    spectators: room.spectators.length,
+    cameraClients: room.cameraClients,
+    lifeHistory: room.lifeHistory,
+    timer: publicTimer(room.timer),
+    format: room.format || "Formato livre",
+    diceRolls: room.diceRolls,
+    micStatus: room.micStatus,
+    users: buildRoomUsers(room)
+  });
+}
+
+function getClientInfo(socketId) {
+  const profile = clientProfiles[socketId];
+  if (!profile) return null;
+
+  return {
+    role: profile.role,
+    playerNumber: profile.playerNumber || null,
+    linkedPlayer: profile.linkedPlayer || null,
+    name: profile.name || "Usuário",
+    photo: profile.photo || "/assets/default-avatar.png",
+    micEnabled: profile.micEnabled !== false
+  };
+}
+
+function getPlayerBySocket(room, socketId) {
+  return room.players.find(p => p.socketId === socketId);
+}
+
+function isPlayerInRoom(room, socketId) {
+  return room.players.some(p => p.socketId === socketId);
 }
 
 function resetPublicRoomIfEmpty(roomId) {
@@ -190,8 +237,9 @@ function resetPublicRoomIfEmpty(roomId) {
   }
 }
 
-function addSpectator(socket, roomId, name, reason = "") {
+function addSpectator(socket, roomId, user, reason = "") {
   const room = ensureRoom(roomId);
+  const profile = normalizeUser(user);
 
   if (!room.spectators.includes(socket.id)) {
     room.spectators.push(socket.id);
@@ -199,7 +247,9 @@ function addSpectator(socket, roomId, name, reason = "") {
 
   clientProfiles[socket.id] = {
     role: "spectator",
-    name,
+    name: profile.name,
+    email: profile.email,
+    photo: profile.photo,
     micEnabled: true
   };
 
@@ -221,7 +271,8 @@ function addSpectator(socket, roomId, name, reason = "") {
         socketId: p.socketId,
         role: "player",
         playerNumber: p.playerNumber,
-        name: p.name
+        name: p.name,
+        photo: p.photo
       })),
       ...room.cameraClients.map(c => ({
         socketId: c.socketId,
@@ -235,7 +286,14 @@ function addSpectator(socket, roomId, name, reason = "") {
   socket.to(roomId).emit("user-connected", {
     socketId: socket.id,
     role: "spectator",
-    name
+    name: profile.name,
+    photo: profile.photo
+  });
+
+  io.to(roomId).emit("system-event", {
+    type: "spectator-joined",
+    message: `👁️ ${profile.name} entrou como espectador.`,
+    time: new Date().toLocaleTimeString("pt-BR")
   });
 
   sendRoomState(roomId);
@@ -284,25 +342,47 @@ io.on("connection", (socket) => {
   socket.emit("lobby-state", buildLobbyState());
   socket.emit("conves-state", Object.values(connectedUsers));
 
-  socket.on("user-online", (user) => {
-    setConnectedUser(socket.id, user, "idle", null, "idle", null);
+  socket.on("user-online", (user = {}) => {
+    const profile = normalizeUser(user);
+    setConnectedUser(socket.id, profile, "idle", null, "idle", null);
+    broadcastLobbyState();
+  });
+
+  socket.on("user-logout", () => {
+    removeSocketFromAllRooms(socket.id);
+    delete connectedUsers[socket.id];
+
+    socket.emit("force-home", {
+      reason: "logout"
+    });
+
+    broadcastLobbyState();
   });
 
   socket.on("join-room", (data = {}) => {
     const roomId = data.roomId;
     if (!roomId) return;
 
+    const role = data.role || "player";
+    const isCamera = role === "camera";
+    const user = normalizeUser(data.user || {});
+
+    if (!isCamera && !isLoggedUser(user)) {
+      socket.emit("auth-required", {
+        message: "Você precisa entrar com Google para acessar a sala."
+      });
+      return;
+    }
+
     removeSocketFromAllRooms(socket.id);
 
-    const user = data.user || {};
-    const role = data.role || user.role || "player";
     const name = data.name || user.name || "Usuário";
-    const deck = data.deck || user.deck || "---";
-    const guild = data.guild || user.guild || "---";
-    const linkedPlayer = Number(data.linkedPlayer || user.linkedPlayer || data.cameraFor || user.cameraFor || 0);
+    const deck = data.deck || "---";
+    const guild = data.guild || "---";
+    const linkedPlayer = Number(data.linkedPlayer || data.cameraFor || 0);
     const incomingFormat = data.format || "";
 
-    if (user?.uid) {
+    if (!isCamera) {
       setConnectedUser(socket.id, user, role, roomId, role, null);
     }
 
@@ -317,7 +397,7 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     if (role === "spectator") {
-      addSpectator(socket, roomId, name, "spectator-choice");
+      addSpectator(socket, roomId, user, "spectator-choice");
       return;
     }
 
@@ -348,22 +428,16 @@ io.on("connection", (socket) => {
       room.cameraClients.push({
         socketId: socket.id,
         linkedPlayer,
-        name
+        name: `Câmera Jogador ${linkedPlayer}`
       });
 
       clientProfiles[socket.id] = {
         role: "camera",
         linkedPlayer,
-        name,
+        name: `Câmera Jogador ${linkedPlayer}`,
+        photo: "/assets/default-avatar.png",
         micEnabled: true
       };
-
-      updateConnectedUser(socket.id, {
-        status: "camera",
-        role: "camera",
-        roomId,
-        playerNumber: linkedPlayer
-      });
 
       room.micStatus[socket.id] = true;
 
@@ -378,12 +452,14 @@ io.on("connection", (socket) => {
             socketId: p.socketId,
             role: "player",
             playerNumber: p.playerNumber,
-            name: p.name
+            name: p.name,
+            photo: p.photo
           })),
           ...room.spectators.map(id => ({
             socketId: id,
             role: "spectator",
-            name: clientProfiles[id]?.name || "Espectador"
+            name: clientProfiles[id]?.name || "Espectador",
+            photo: clientProfiles[id]?.photo || "/assets/default-avatar.png"
           }))
         ]
       });
@@ -392,17 +468,16 @@ io.on("connection", (socket) => {
         socketId: socket.id,
         role: "camera",
         linkedPlayer,
-        name
+        name: `Câmera Jogador ${linkedPlayer}`
       });
 
       sendRoomState(roomId);
       broadcastLobbyState();
-      emitConvesState();
       return;
     }
 
     if (!isResenhaRoom(roomId) && room.players.length >= 2) {
-      addSpectator(socket, roomId, name, "room-full");
+      addSpectator(socket, roomId, user, "room-full");
       return;
     }
 
@@ -415,8 +490,11 @@ io.on("connection", (socket) => {
 
     const player = {
       socketId: socket.id,
+      uid: user.uid,
       playerNumber,
       name,
+      email: user.email,
+      photo: user.photo,
       deck,
       guild,
       life: 20
@@ -428,6 +506,8 @@ io.on("connection", (socket) => {
       role: "player",
       playerNumber,
       name,
+      email: user.email,
+      photo: user.photo,
       micEnabled: true
     };
 
@@ -453,7 +533,8 @@ io.on("connection", (socket) => {
             socketId: p.socketId,
             role: "player",
             playerNumber: p.playerNumber,
-            name: p.name
+            name: p.name,
+            photo: p.photo
           })),
         ...room.cameraClients.map(c => ({
           socketId: c.socketId,
@@ -464,7 +545,8 @@ io.on("connection", (socket) => {
         ...room.spectators.map(id => ({
           socketId: id,
           role: "spectator",
-          name: clientProfiles[id]?.name || "Espectador"
+          name: clientProfiles[id]?.name || "Espectador",
+          photo: clientProfiles[id]?.photo || "/assets/default-avatar.png"
         }))
       ]
     });
@@ -473,12 +555,12 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       role: "player",
       playerNumber,
-      name
+      name,
+      photo: user.photo
     });
 
     sendRoomState(roomId);
     broadcastLobbyState();
-    emitConvesState();
   });
 
   socket.on("roll-dice", ({ roomId }) => {
@@ -626,12 +708,20 @@ io.on("connection", (socket) => {
 
     control.count++;
 
-    io.to(roomId).emit("chat-message", {
-      name: clientProfiles[socket.id]?.name || "Usuário",
-      message: safeMessage,
-      type: type === "emoji" ? "emoji" : "text",
-      time: new Date().toLocaleTimeString("pt-BR")
-    });
+    if (type === "emoji") {
+      io.to(roomId).emit("floating-emoji", {
+        name: clientProfiles[socket.id]?.name || "Usuário",
+        message: safeMessage,
+        time: new Date().toLocaleTimeString("pt-BR")
+      });
+    } else {
+      io.to(roomId).emit("chat-message", {
+        name: clientProfiles[socket.id]?.name || "Usuário",
+        message: safeMessage,
+        type: "text",
+        time: new Date().toLocaleTimeString("pt-BR")
+      });
+    }
 
     if (control.count >= CHAT_LIMIT) {
       control.count = 0;
@@ -817,7 +907,6 @@ io.on("connection", (socket) => {
     }
 
     socket.emit("left-room");
-    emitConvesState();
     broadcastLobbyState();
   });
 
@@ -825,9 +914,8 @@ io.on("connection", (socket) => {
     console.log("Desconectado:", socket.id);
 
     delete connectedUsers[socket.id];
-    emitConvesState();
-
     removeSocketFromAllRooms(socket.id);
+    broadcastLobbyState();
   });
 });
 

@@ -22,8 +22,16 @@ function normalizeRoomCode(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
 }
 
+function checkLoginBeforeAction() {
+  if (!window.requireLogin || !window.requireLogin()) {
+    return false;
+  }
+
+  return true;
+}
+
 function enterRoom(roomId, format = "Formato livre", role = "player") {
-  if (!window.requireLogin || !window.requireLogin()) return;
+  if (!checkLoginBeforeAction()) return;
 
   if (!roomId) {
     alert("Digite o código da mesa.");
@@ -35,6 +43,8 @@ function enterRoom(roomId, format = "Formato livre", role = "player") {
 }
 
 function openFormatModal(roomId) {
+  if (!checkLoginBeforeAction()) return;
+
   selectedRoomId = roomId;
 
   if (formatModal) {
@@ -53,6 +63,8 @@ function closeFormatModal() {
 }
 
 function handleEnterTable(roomId, isResenha = false) {
+  if (!checkLoginBeforeAction()) return;
+
   const table = lobbyTables[roomId];
 
   if (isResenha) {
@@ -75,7 +87,7 @@ function handleEnterTable(roomId, isResenha = false) {
 
 if (createPrivateRoomButton) {
   createPrivateRoomButton.addEventListener("click", () => {
-    if (!window.requireLogin || !window.requireLogin()) return;
+    if (!checkLoginBeforeAction()) return;
 
     const randomCode = "private-" + Math.floor(100000 + Math.random() * 900000);
     openFormatModal(randomCode);
@@ -84,6 +96,8 @@ if (createPrivateRoomButton) {
 
 if (joinRoomBtn) {
   joinRoomBtn.addEventListener("click", () => {
+    if (!checkLoginBeforeAction()) return;
+
     const roomId = normalizeRoomCode(roomCodeInput?.value);
 
     if (!roomId) {
@@ -105,6 +119,8 @@ if (roomCodeInput) {
 
 enterTableButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    if (!checkLoginBeforeAction()) return;
+
     const card = button.closest(".room-card");
     if (!card) return;
 
@@ -118,6 +134,7 @@ enterTableButtons.forEach((button) => {
 if (confirmFormat) {
   confirmFormat.addEventListener("click", () => {
     if (!selectedRoomId) return;
+    if (!checkLoginBeforeAction()) return;
 
     const selectedFormat = formatSelect?.value || "Formato livre";
     enterRoom(selectedRoomId, selectedFormat, "player");
@@ -148,14 +165,16 @@ if (refreshRoomsButton) {
 
 if (typeof auth !== "undefined") {
   auth.onAuthStateChanged((user) => {
-    if (!user) return;
-
-    socket.emit("user-online", {
-      uid: user.uid,
-      name: user.displayName || "Usuário",
-      email: user.email || "",
-      photo: user.photoURL || "assets/default-avatar.png"
-    });
+    if (user) {
+      socket.emit("user-online", {
+        uid: user.uid,
+        name: user.displayName || "Usuário",
+        email: user.email || "",
+        photo: user.photoURL || "/assets/default-avatar.png"
+      });
+    } else {
+      socket.emit("user-logout");
+    }
   });
 }
 
@@ -166,7 +185,12 @@ function sendUserToConves() {
     const user = window.getLoggedUserProfile();
     if (!user) return;
 
-    socket.emit("user-online", user);
+    socket.emit("user-online", {
+      uid: user.uid,
+      name: user.displayName || user.name || "Usuário",
+      email: user.email || "",
+      photo: user.photoURL || user.photo || "/assets/default-avatar.png"
+    });
   }, 1200);
 }
 
@@ -208,7 +232,7 @@ socket.on("lobby-state", (tables) => {
     if (!table.isResenha && table.isFull) {
       card.classList.add("table-full");
       button.classList.add("full-btn");
-      button.innerText = "Sala cheia — assistir 👁️";
+      button.innerText = "Mesa cheia — assistir 👁️";
     } else {
       card.classList.remove("table-full");
       button.classList.remove("full-btn");
@@ -240,8 +264,8 @@ function renderConves(users = []) {
   const idle = users.filter(u => u.role === "idle");
 
   const occupiedRooms = new Set(
-    players
-      .filter(u => u.roomId)
+    users
+      .filter(u => u.roomId && (u.role === "player" || u.role === "spectator"))
       .map(u => u.roomId)
   );
 
@@ -261,7 +285,7 @@ function renderUserList(list, icon) {
 
   return list.map(user => `
     <div class="conves-user">
-      <img src="${user.photo || "assets/default-avatar.png"}" alt="Perfil">
+      <img src="${user.photo || "/assets/default-avatar.png"}" alt="Perfil">
       <div>
         <strong>${icon} ${user.name || "Usuário"}</strong>
         <span>${user.roomId ? user.roomId.toUpperCase() : "No porto"}</span>
@@ -292,3 +316,7 @@ if (convesModal) {
     }
   });
 }
+
+socket.on("force-home", () => {
+  window.location.href = "/";
+});
