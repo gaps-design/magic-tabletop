@@ -114,11 +114,15 @@ async function getDevices() {
 
 function updateMediaStatus() {
     if (micStatusText) {
-        micStatusText.innerText = micEnabled ? "Ativado" : "Desativado";
+        micStatusText.innerText = localStream?.getAudioTracks().length
+            ? (micEnabled ? "Ativado" : "Desativado")
+            : "Sem microfone";
     }
 
     if (cameraStatusText) {
-        cameraStatusText.innerText = cameraEnabled ? "Ativada" : "Desativada";
+        cameraStatusText.innerText = localStream?.getVideoTracks().length
+            ? (cameraEnabled ? "Ativada" : "Desativada")
+            : "Sem câmera";
     }
 }
 
@@ -171,6 +175,42 @@ async function getUserMediaWithDeviceFallback(constraints, fallbackConstraints, 
     }
 }
 
+async function getOptionalRoomMedia(constraints, resetOptions) {
+    try {
+        return await getUserMediaWithDeviceFallback(
+            constraints,
+            {
+                video: true,
+                audio: true
+            },
+            resetOptions
+        );
+    } catch (videoError) {
+        console.warn("Falha ao acessar câmera. Tentando somente áudio.", videoError);
+        clearSavedMediaDevices({ camera: true });
+
+        try {
+            return await getUserMediaWithDeviceFallback(
+                {
+                    video: false,
+                    audio: selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true
+                },
+                {
+                    video: false,
+                    audio: true
+                },
+                {
+                    microphone: !!selectedMicrophoneId
+                }
+            );
+        } catch (audioError) {
+            console.warn("Falha ao acessar áudio. Entrando sem câmera/microfone.", audioError);
+            clearSavedMediaDevices({ camera: true, microphone: true });
+            return null;
+        }
+    }
+}
+
 /* =========================
    WEBCAM
 ========================= */
@@ -188,17 +228,23 @@ async function startWebcam(
         audio: microphoneId ? { deviceId: { exact: microphoneId } } : true
     };
 
-    localStream = await getUserMediaWithDeviceFallback(
+    localStream = await getOptionalRoomMedia(
         constraints,
-        {
-            video: true,
-            audio: true
-        },
         {
             camera: !!cameraId,
             microphone: !!microphoneId
         }
     );
+
+    if (!localStream) {
+        if (localVideo) {
+            localVideo.srcObject = null;
+        }
+
+        await getDevices();
+        updateMediaStatus();
+        return;
+    }
 
     localStream.getAudioTracks().forEach(track => {
         track.enabled = micEnabled;
@@ -959,7 +1005,10 @@ if (microphoneSelect) {
 ========================= */
 
 window.toggleMicrophone = function() {
-    if (!localStream) return;
+    if (!localStream?.getAudioTracks().length) {
+        alert("Nenhum microfone disponível.");
+        return;
+    }
 
     micEnabled = !micEnabled;
 
@@ -1066,7 +1115,10 @@ window.disableSpectatorMicrophone = async function() {
 ========================= */
 
 window.toggleCamera = function() {
-    if (!localStream) return;
+    if (!localStream?.getVideoTracks().length) {
+        alert("Nenhuma câmera disponível.");
+        return;
+    }
 
     cameraEnabled = !cameraEnabled;
 
