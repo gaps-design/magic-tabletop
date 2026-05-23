@@ -47,6 +47,8 @@ const entryError = document.getElementById("entryError");
 const copyRoomBtn = document.getElementById("copyRoomBtn");
 const usersCountBtn = document.getElementById("usersCountBtn");
 const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
+const resenhaBecomeSpectatorBtn = document.getElementById("resenhaBecomeSpectatorBtn");
+const resenhaBecomePlayerBtn = document.getElementById("resenhaBecomePlayerBtn");
 const roomUsersPanel = document.getElementById("roomUsersPanel");
 const closeRoomUsersPanel = document.getElementById("closeRoomUsersPanel");
 const roomUsersTitle = document.getElementById("roomUsersTitle");
@@ -88,6 +90,7 @@ let currentPlayers = [];
 let currentCameraClients = [];
 let currentSpectators = [];
 let currentQueue = [];
+let isQueuedInResenha = false;
 let hasSeenLoggedUser = false;
 let hasHandledLogout = false;
 let isRedirectingHome = false;
@@ -410,6 +413,9 @@ socket.on("resenha-queue-update", ({ position }) => {
         ? `Você entrou na fila da Mesa da Resenha. Posição ${position}.`
         : "Você entrou na fila da Mesa da Resenha.";
 
+    isQueuedInResenha = position > 0;
+    updateResenhaRoleButtons();
+
     if (entryError) entryError.innerText = text;
     addMatchEvent(text);
 });
@@ -421,6 +427,7 @@ socket.on("room-state", (state) => {
     currentCameraClients = Array.isArray(state.cameraClients) ? state.cameraClients : [];
     currentSpectators = Array.isArray(state.spectatorList) ? state.spectatorList : [];
     currentQueue = Array.isArray(state.queueList) ? state.queueList : [];
+    isQueuedInResenha = roomId === "mtg-1002" && currentQueue.some(item => item.socketId === socket.id);
     currentPlayersCount = players.length;
 
     const formatText = document.getElementById("formatText");
@@ -448,6 +455,7 @@ socket.on("room-state", (state) => {
     renderLifeHistory(state.lifeHistory || []);
     renderSpectatorMarkerSummary(state.markerState || {});
     updateTimerDisplay(state.timer);
+    updateResenhaRoleButtons();
 
     if (state.micStatus) {
         updateMicIconsFromState(state);
@@ -1049,6 +1057,33 @@ if (roomUsersPanel) {
         if (event.target === roomUsersPanel) {
             roomUsersPanel.classList.add("hidden");
         }
+    });
+}
+
+function updateResenhaRoleButtons() {
+    if (roomId !== "mtg-1002") {
+        resenhaBecomeSpectatorBtn?.classList.add("hidden");
+        resenhaBecomePlayerBtn?.classList.add("hidden");
+        return;
+    }
+
+    const isActivePlayer = selectedRole === "player";
+    const isSpectatorOnly = selectedRole === "spectator" && !isQueuedInResenha;
+    const canBecomeSpectator = isActivePlayer || isQueuedInResenha;
+
+    resenhaBecomeSpectatorBtn?.classList.toggle("hidden", !canBecomeSpectator);
+    resenhaBecomePlayerBtn?.classList.toggle("hidden", !isSpectatorOnly);
+}
+
+if (resenhaBecomeSpectatorBtn) {
+    resenhaBecomeSpectatorBtn.addEventListener("click", () => {
+        socket.emit("resenha-become-spectator", { roomId });
+    });
+}
+
+if (resenhaBecomePlayerBtn) {
+    resenhaBecomePlayerBtn.addEventListener("click", () => {
+        socket.emit("resenha-become-player", { roomId });
     });
 }
 

@@ -2249,6 +2249,13 @@ body.spectator-mode .bottom-toggle{
     font-weight:800;
 }
 
+.resenha-role-btn{
+    background:linear-gradient(135deg,#172554,#2563eb);
+    border:1px solid rgba(255,255,255,0.12);
+    color:white;
+    font-weight:900;
+}
+
 .leave-spectator-btn:hover{
     background:linear-gradient(135deg,#991b1b,#ef4444);
 }

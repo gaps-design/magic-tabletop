@@ -1117,6 +1117,15 @@ window.toggleCamera = function() {
         return;
     }
 
+    if (
+        currentRoomId === "mtg-1002" &&
+        currentRole === "player" &&
+        cameraEnabled
+    ) {
+        socket.emit("resenha-yield-seat", { roomId: currentRoomId });
+        return;
+    }
+
     cameraEnabled = !cameraEnabled;
 
     localStream.getVideoTracks().forEach(track => {

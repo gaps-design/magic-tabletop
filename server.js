@@ -343,6 +343,8 @@ function addSpectator(socket, roomId, user, reason = "") {
   const room = ensureRoom(roomId);
   const profile = normalizeUser(user);
 
+  room.queue = (room.queue || []).filter(item => item.socketId !== socket.id);
+
   if (!room.spectators.includes(socket.id)) {
     room.spectators.push(socket.id);
   }
@@ -409,6 +411,8 @@ function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
   const room = ensureRoom(roomId);
   const profile = normalizeUser(user);
 
+  room.spectators = room.spectators.filter(id => id !== socket.id);
+
   if (!room.queue.some(item => item.socketId === socket.id)) {
     room.queue.push({
       socketId: socket.id,
@@ -419,12 +423,39 @@ function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
     });
   }
 
-  addSpectator(socket, roomId, profile, "resenha-queue");
+  clientProfiles[socket.id] = {
+    role: "queued",
+    name: data.name || profile.name || "Jogador",
+    email: profile.email,
+    photo: profile.photo || "/assets/default-avatar.png",
+    deck: data.deck || "---",
+    guild: data.guild || "---",
+    micEnabled: false
+  };
+
+  updateConnectedUser(socket.id, {
+    status: "queued",
+    role: "queued",
+    roomId,
+    playerNumber: null
+  });
+
+  socket.emit("assigned-role", {
+    role: "spectator",
+    reason: "resenha-queue"
+  });
+
+  socket.emit("existing-peers", {
+    peers: buildPeerList(room, socket.id)
+  });
 
   socket.emit("resenha-queue-update", {
     position: room.queue.findIndex(item => item.socketId === socket.id) + 1,
     queue: room.queue
   });
+
+  sendRoomState(roomId);
+  broadcastLobbyState();
 }
 
 function promoteNextResenhaPlayer(roomId) {
@@ -492,6 +523,99 @@ function promoteNextResenhaPlayer(roomId) {
       photo: next.photo || "/assets/default-avatar.png"
     });
   }
+}
+
+function removeLinkedCamerasForPlayer(room, roomId, playerNumber) {
+  const removedLinkedCameras = room.cameraClients
+    .filter(c => Number(c.linkedPlayer) === Number(playerNumber))
+    .map(c => c.socketId);
+
+  room.cameraClients = room.cameraClients.filter(c => Number(c.linkedPlayer) !== Number(playerNumber));
+
+  removedLinkedCameras.forEach(cameraSocketId => {
+    const cameraSocket = io.sockets.sockets.get(cameraSocketId);
+    if (cameraSocket) {
+      cameraSocket.leave(roomId);
+      cameraSocket.emit("camera-error", "Jogador saiu do slot ativo da mesa.");
+    }
+
+    delete room.micStatus[cameraSocketId];
+    delete clientProfiles[cameraSocketId];
+    io.to(roomId).emit("user-disconnected", cameraSocketId);
+  });
+}
+
+function moveActiveResenhaPlayerToQueue(socket, roomId) {
+  const room = rooms[roomId];
+  if (!room || !isResenhaRoom(roomId)) return false;
+
+  const player = getPlayerBySocket(room, socket.id);
+  if (!player) return false;
+
+  room.players = room.players.filter(p => p.socketId !== socket.id);
+  removeLinkedCamerasForPlayer(room, roomId, player.playerNumber);
+
+  if (!room.queue.some(item => item.socketId === socket.id)) {
+    room.queue.push({
+      socketId: socket.id,
+      name: player.name || "Jogador",
+      deck: player.deck || "---",
+      guild: player.guild || "---",
+      photo: player.photo || "/assets/default-avatar.png"
+    });
+  }
+
+  delete room.micStatus[socket.id];
+  io.to(roomId).emit("user-disconnected", socket.id);
+
+  clientProfiles[socket.id] = {
+    ...(clientProfiles[socket.id] || {}),
+    role: "queued",
+    playerNumber: null,
+    name: player.name || "Jogador",
+    photo: player.photo || "/assets/default-avatar.png",
+    deck: player.deck || "---",
+    guild: player.guild || "---",
+    micEnabled: false
+  };
+
+  updateConnectedUser(socket.id, {
+    status: "queued",
+    role: "queued",
+    roomId,
+    playerNumber: null
+  });
+
+  socket.emit("assigned-role", {
+    role: "spectator",
+    reason: "resenha-queue"
+  });
+
+  promoteNextResenhaPlayer(roomId);
+  sendRoomState(roomId);
+  broadcastLobbyState();
+  return true;
+}
+
+function moveResenhaUserToSpectator(socket, roomId) {
+  const room = rooms[roomId];
+  if (!room || !isResenhaRoom(roomId)) return false;
+
+  const player = getPlayerBySocket(room, socket.id);
+
+  if (player) {
+    room.players = room.players.filter(p => p.socketId !== socket.id);
+    removeLinkedCamerasForPlayer(room, roomId, player.playerNumber);
+    delete room.micStatus[socket.id];
+    io.to(roomId).emit("user-disconnected", socket.id);
+  }
+
+  room.queue = (room.queue || []).filter(item => item.socketId !== socket.id);
+  addSpectator(socket, roomId, clientProfiles[socket.id] || {}, "resenha-spectator");
+  promoteNextResenhaPlayer(roomId);
+  sendRoomState(roomId);
+  broadcastLobbyState();
+  return true;
 }
 
 function removeSocketFromAllRooms(socketId) {
@@ -877,6 +1001,38 @@ io.on("connection", (socket) => {
     });
 
     sendRoomState(roomId);
+  });
+
+  socket.on("resenha-yield-seat", ({ roomId }) => {
+    moveActiveResenhaPlayerToQueue(socket, roomId);
+  });
+
+  socket.on("resenha-become-spectator", ({ roomId }) => {
+    moveResenhaUserToSpectator(socket, roomId);
+  });
+
+  socket.on("resenha-become-player", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room || !isResenhaRoom(roomId)) return;
+    if (room.players.some(p => p.socketId === socket.id)) return;
+
+    const profile = clientProfiles[socket.id] || {};
+    room.spectators = room.spectators.filter(id => id !== socket.id);
+
+    addToResenhaQueue(
+      socket,
+      roomId,
+      {
+        name: profile.name || "Jogador",
+        deck: profile.deck || "---",
+        guild: profile.guild || "---"
+      },
+      profile
+    );
+
+    promoteNextResenhaPlayer(roomId);
+    sendRoomState(roomId);
+    broadcastLobbyState();
   });
 
   socket.on("spectator-mic-request", ({ roomId }) => {
