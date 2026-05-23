@@ -15,6 +15,8 @@ const closeConves = document.getElementById("closeConves");
 
 let selectedRoomId = null;
 let lobbyTables = {};
+let lastOnlineUid = null;
+let hasHandledHomeLogout = false;
 
 const socket = io();
 
@@ -176,6 +178,9 @@ function bindAuthStateChanged(callback) {
 
 bindAuthStateChanged((user) => {
   if (user) {
+    lastOnlineUid = user.uid;
+    hasHandledHomeLogout = false;
+
     socket.emit("user-online", {
       uid: user.uid,
       name: user.displayName || "Usuário",
@@ -183,6 +188,11 @@ bindAuthStateChanged((user) => {
       photo: user.photoURL || "/assets/default-avatar.png"
     });
   } else {
+    if (!lastOnlineUid && !window.authHadUser && !window.isSigningOut) return;
+    if (hasHandledHomeLogout) return;
+
+    hasHandledHomeLogout = true;
+    lastOnlineUid = null;
     socket.emit("user-logout");
   }
 });
@@ -325,7 +335,3 @@ if (convesModal) {
     }
   });
 }
-
-socket.on("force-home", () => {
-  window.location.href = "/";
-});

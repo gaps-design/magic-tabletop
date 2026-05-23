@@ -537,10 +537,6 @@ io.on("connection", (socket) => {
     removeSocketFromAllRooms(socket.id);
     delete connectedUsers[socket.id];
 
-    socket.emit("force-home", {
-      reason: "logout"
-    });
-
     broadcastLobbyState();
   });
 

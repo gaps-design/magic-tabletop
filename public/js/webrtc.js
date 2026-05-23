@@ -15,6 +15,7 @@ let currentRoomId = null;
 let currentRole = null;
 let myPlayerNumberRTC = null;
 let lastJoinPayload = null;
+let allowRoomReconnect = true;
 
 let micEnabled = true;
 let cameraEnabled = true;
@@ -511,15 +512,17 @@ function schedulePeerReconnect(targetId) {
 function cleanupPeer(socketId) {
     const info = peerInfo[socketId] || {};
     const stream = remoteStreams[socketId];
+    const peerConnection = peerConnections[socketId];
 
-    if (peerConnections[socketId]) {
-        peerConnections[socketId].close();
+    delete peerConnections[socketId];
+
+    if (peerConnection) {
+        peerConnection.close();
     }
 
     clearVideoIfStream(localVideo, stream);
     clearVideoIfStream(remoteVideo, stream);
 
-    delete peerConnections[socketId];
     delete remoteStreams[socketId];
     delete pendingCandidates[socketId];
 
@@ -545,6 +548,40 @@ function cleanupPeer(socketId) {
 
     delete peerInfo[socketId];
 }
+
+window.shutdownRoomConnection = function() {
+    allowRoomReconnect = false;
+    lastJoinPayload = null;
+    currentRoomId = null;
+    currentRole = null;
+    myPlayerNumberRTC = null;
+
+    Object.keys(peerConnections).forEach(cleanupPeer);
+
+    Object.keys(peerInfo).forEach(socketId => {
+        delete peerInfo[socketId];
+    });
+
+    Object.keys(remoteStreams).forEach(socketId => {
+        delete remoteStreams[socketId];
+    });
+
+    Object.keys(pendingCandidates).forEach(socketId => {
+        delete pendingCandidates[socketId];
+    });
+
+    Object.keys(reconnectAttempts).forEach(socketId => {
+        delete reconnectAttempts[socketId];
+    });
+
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+
+    if (localVideo) localVideo.srcObject = null;
+    if (remoteVideo) remoteVideo.srcObject = null;
+};
 
 async function createOffer(targetId, data = {}) {
     savePeerInfo(targetId, data);
@@ -587,6 +624,7 @@ async function flushPendingCandidates(sender) {
 ========================= */
 
 async function joinRoom(roomId, user) {
+    allowRoomReconnect = true;
     currentRoomId = roomId;
     currentRole = user.role;
 
@@ -661,6 +699,7 @@ socket.on("assigned-role", async (data) => {
 });
 
 socket.on("connect", async () => {
+    if (!allowRoomReconnect) return;
     if (!lastJoinPayload || !currentRoomId) return;
 
     Object.keys(peerConnections).forEach(cleanupPeer);
@@ -781,6 +820,7 @@ socket.on("auth-required", (data) => {
 });
 
 socket.on("force-home", () => {
+    window.shutdownRoomConnection?.();
     window.location.href = "/";
 });
 

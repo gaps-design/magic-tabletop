@@ -85,6 +85,9 @@ let currentPlayers = [];
 let currentCameraClients = [];
 let currentSpectators = [];
 let currentQueue = [];
+let hasSeenLoggedUser = false;
+let hasHandledLogout = false;
+let isRedirectingHome = false;
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
@@ -95,6 +98,29 @@ const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+
+function redirectHomeOnce(delay = 250) {
+    if (isRedirectingHome) return;
+
+    isRedirectingHome = true;
+
+    setTimeout(() => {
+        window.location.href = "/";
+    }, delay);
+}
+
+function leaveRoomForLogoutOnce() {
+    if (hasHandledLogout) return;
+
+    hasHandledLogout = true;
+
+    if (typeof window.shutdownRoomConnection === "function") {
+        window.shutdownRoomConnection();
+    }
+
+    socket.emit("leave-room", { roomId });
+    redirectHomeOnce(250);
+}
 
 function bindAuthStateChanged(callback) {
     if (window.onAuthStateChanged) {
@@ -108,13 +134,17 @@ function bindAuthStateChanged(callback) {
 }
 
 bindAuthStateChanged((user) => {
-        if (user || selectedRole === "camera" || cameraFor) return;
+        if (selectedRole === "camera" || cameraFor) return;
 
-        socket.emit("leave-room", { roomId });
+        if (user) {
+            hasSeenLoggedUser = true;
+            hasHandledLogout = false;
+            return;
+        }
 
-        setTimeout(() => {
-            window.location.href = "/";
-        }, 250);
+        if (!hasSeenLoggedUser && !window.authHadUser && !window.isSigningOut) return;
+
+        leaveRoomForLogoutOnce();
 });
 
 /* =========================
@@ -771,24 +801,26 @@ document.querySelectorAll(".opponent-life").forEach(lifeBox => {
 ========================= */
 
 window.leaveRoom = function() {
-    socket.emit("leave-room", { roomId });
+    if (typeof window.shutdownRoomConnection === "function") {
+        window.shutdownRoomConnection();
+    }
 
-    setTimeout(() => {
-        window.location.href = "/";
-    }, 300);
+    socket.emit("leave-room", { roomId });
+    redirectHomeOnce(300);
 };
 
 socket.on("left-room", () => {
-    window.location.href = "/";
+    redirectHomeOnce(0);
 });
 
 if (leaveSpectatorBtn) {
     leaveSpectatorBtn.addEventListener("click", () => {
-        socket.emit("leave-room", { roomId });
+        if (typeof window.shutdownRoomConnection === "function") {
+            window.shutdownRoomConnection();
+        }
 
-        setTimeout(() => {
-            window.location.href = "/";
-        }, 300);
+        socket.emit("leave-room", { roomId });
+        redirectHomeOnce(300);
     });
 }
 

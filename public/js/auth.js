@@ -29,6 +29,9 @@ const provider = new GoogleAuthProvider();
 const googleLoginBtn = document.getElementById("googleLoginBtn");
 
 window.currentUser = null;
+window.authHasResolved = false;
+window.authHadUser = false;
+window.isSigningOut = false;
 
 /* =========================
    LOGIN STATE
@@ -37,6 +40,12 @@ window.currentUser = null;
 onAuthStateChanged(auth, (user) => {
 
   window.currentUser = user || null;
+  window.authHasResolved = true;
+
+  if (user) {
+    window.authHadUser = true;
+    window.isSigningOut = false;
+  }
 
   if (!googleLoginBtn) return;
 
@@ -81,13 +90,10 @@ if (googleLoginBtn) {
       );
 
       if (sair) {
+        window.isSigningOut = true;
         await signOut(auth);
 
-localStorage.clear();
-
-window.currentUser = null;
-
-window.location.href = "/";
+        window.currentUser = null;
       }
 
       return;
