@@ -122,6 +122,55 @@ function updateMediaStatus() {
     }
 }
 
+function isMissingMediaDeviceError(error) {
+    const name = error?.name || "";
+    const message = String(error?.message || "").toLowerCase();
+
+    return (
+        name === "NotFoundError" ||
+        name === "DevicesNotFoundError" ||
+        name === "OverconstrainedError" ||
+        message.includes("requested device not found") ||
+        message.includes("device not found") ||
+        message.includes("not found")
+    );
+}
+
+function clearSavedMediaDevices({ camera = false, microphone = false } = {}) {
+    if (camera) {
+        selectedCameraId = "";
+        localStorage.removeItem("magicSelectedCamera");
+
+        if (cameraSelect) {
+            cameraSelect.value = "";
+        }
+    }
+
+    if (microphone) {
+        selectedMicrophoneId = "";
+        localStorage.removeItem("magicSelectedMicrophone");
+
+        if (microphoneSelect) {
+            microphoneSelect.value = "";
+        }
+    }
+}
+
+async function getUserMediaWithDeviceFallback(constraints, fallbackConstraints, resetOptions) {
+    try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+        if (!isMissingMediaDeviceError(error)) {
+            throw error;
+        }
+
+        console.warn("Dispositivo salvo não encontrado. Tentando dispositivo padrão.", error);
+        clearSavedMediaDevices(resetOptions);
+
+        return await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+    }
+}
+
 /* =========================
    WEBCAM
 ========================= */
@@ -139,16 +188,17 @@ async function startWebcam(
         audio: microphoneId ? { deviceId: { exact: microphoneId } } : true
     };
 
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (err) {
-        console.warn("Falha com dispositivo salvo. Tentando padrão.", err);
-
-        localStream = await navigator.mediaDevices.getUserMedia({
+    localStream = await getUserMediaWithDeviceFallback(
+        constraints,
+        {
             video: true,
             audio: true
-        });
-    }
+        },
+        {
+            camera: !!cameraId,
+            microphone: !!microphoneId
+        }
+    );
 
     localStream.getAudioTracks().forEach(track => {
         track.enabled = micEnabled;
@@ -204,15 +254,35 @@ async function switchCamera(cameraId) {
     selectedCameraId = cameraId;
     localStorage.setItem("magicSelectedCamera", selectedCameraId);
 
-    const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-            deviceId: { exact: selectedCameraId }
+    const newStream = await getUserMediaWithDeviceFallback(
+        {
+            video: {
+                deviceId: { exact: selectedCameraId }
+            },
+            audio: false
         },
-        audio: false
-    });
+        {
+            video: true,
+            audio: false
+        },
+        {
+            camera: true
+        }
+    );
 
     const newVideoTrack = newStream.getVideoTracks()[0];
     if (!newVideoTrack) return;
+
+    const videoSettings = newVideoTrack.getSettings();
+    selectedCameraId = videoSettings.deviceId || selectedCameraId;
+
+    if (selectedCameraId) {
+        localStorage.setItem("magicSelectedCamera", selectedCameraId);
+    }
+
+    if (cameraSelect && selectedCameraId) {
+        cameraSelect.value = selectedCameraId;
+    }
 
     newVideoTrack.enabled = cameraEnabled;
 
@@ -249,15 +319,35 @@ async function switchMicrophone(microphoneId) {
     selectedMicrophoneId = microphoneId;
     localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
 
-    const newStream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: {
-            deviceId: { exact: selectedMicrophoneId }
+    const newStream = await getUserMediaWithDeviceFallback(
+        {
+            video: false,
+            audio: {
+                deviceId: { exact: selectedMicrophoneId }
+            }
+        },
+        {
+            video: false,
+            audio: true
+        },
+        {
+            microphone: true
         }
-    });
+    );
 
     const newAudioTrack = newStream.getAudioTracks()[0];
     if (!newAudioTrack) return;
+
+    const audioSettings = newAudioTrack.getSettings();
+    selectedMicrophoneId = audioSettings.deviceId || selectedMicrophoneId;
+
+    if (selectedMicrophoneId) {
+        localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
+    }
+
+    if (microphoneSelect && selectedMicrophoneId) {
+        microphoneSelect.value = selectedMicrophoneId;
+    }
 
     newAudioTrack.enabled = micEnabled;
 
@@ -890,10 +980,19 @@ window.toggleMicrophone = function() {
 window.enableSpectatorMicrophone = async function() {
     if (currentRole !== "spectator") return;
 
-    const audioStream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true
-    });
+    const audioStream = await getUserMediaWithDeviceFallback(
+        {
+            video: false,
+            audio: selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true
+        },
+        {
+            video: false,
+            audio: true
+        },
+        {
+            microphone: !!selectedMicrophoneId
+        }
+    );
 
     const audioTrack = audioStream.getAudioTracks()[0];
     if (!audioTrack) return;
