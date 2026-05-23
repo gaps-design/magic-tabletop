@@ -339,6 +339,7 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
+        document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
@@ -351,6 +352,7 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.add("camera-mode");
         document.body.classList.remove("spectator-mode");
+        document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
@@ -364,6 +366,8 @@ socket.on("assigned-role", (data) => {
 
         document.body.classList.remove("spectator-mode");
         document.body.classList.remove("camera-mode");
+        document.body.classList.toggle("player-one-active", myPlayerNumber === 1);
+        document.body.classList.toggle("player-two-active", myPlayerNumber === 2);
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
@@ -713,6 +717,20 @@ window.changeMyLife = function(amount) {
     });
 };
 
+window.toggleManualLifePanel = function(playerNumber) {
+    if (selectedRole !== "player") return;
+
+    if (Number(myPlayerNumber) !== Number(playerNumber)) {
+        alert("Você só pode editar a sua própria vida oficial.");
+        return;
+    }
+
+    const box = document.getElementById(`manualLifeBox${playerNumber}`);
+    if (!box) return;
+
+    box.classList.toggle("hidden");
+};
+
 window.setManualLife = function(playerNumber) {
     if (selectedRole !== "player") return;
 
@@ -758,6 +776,20 @@ window.resetLife = function(playerNumber) {
    VIDA DO OPONENTE LOCAL
 ========================= */
 
+window.toggleOpponentLife = function(panelPlayerNumber) {
+    if (selectedRole !== "player") return;
+
+    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
+        alert("Você só pode abrir a vida do oponente no seu painel.");
+        return;
+    }
+
+    const box = document.getElementById(`opponentLifeBox${panelPlayerNumber}`);
+    if (!box) return;
+
+    box.classList.toggle("hidden");
+};
+
 window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
     if (selectedRole !== "player") return;
 
@@ -771,6 +803,30 @@ window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
 
     const current = Number(box.innerText || 20);
     box.innerText = current + Number(amount);
+};
+
+window.setOpponentLifeLocal = function(panelPlayerNumber) {
+    if (selectedRole !== "player") return;
+
+    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
+        alert("Você só pode alterar a anotação do oponente no seu painel.");
+        return;
+    }
+
+    const input = document.getElementById(`opponentManualLife${panelPlayerNumber}`);
+    const box = document.getElementById(`player${panelPlayerNumber}OpponentLife`);
+
+    if (!input || !box) return;
+
+    const value = Number(input.value);
+
+    if (isNaN(value) || input.value === "") {
+        alert("Digite um valor válido para a vida do oponente.");
+        return;
+    }
+
+    box.innerText = value;
+    input.value = "";
 };
 
 document.querySelectorAll(".opponent-life").forEach(lifeBox => {
@@ -1396,8 +1452,11 @@ function renderFloatingMarkers() {
     if (!root) return;
 
     root.innerHTML = "";
+    root.parentElement?.classList.remove("has-floating-markers");
 
     if (!isMarkerUiVisible()) return;
+
+    let floatingCount = 0;
 
     [1, 2].forEach(playerNumber => {
         getActiveMarkers(playerNumber)
@@ -1406,8 +1465,13 @@ function renderFloatingMarkers() {
                 const card = createActiveMarkerCard(playerNumber, marker);
                 card.classList.add(`floating-marker-player-${playerNumber}`);
                 root.appendChild(card);
+                floatingCount++;
             });
     });
+
+    if (floatingCount > 0) {
+        root.parentElement?.classList.add("has-floating-markers");
+    }
 }
 
 function addPlayerMarker(playerNumber, markerId) {
@@ -1467,23 +1531,20 @@ window.toggleNotesPanel = function() {
 
 function getEmotes() {
     return [
+        { emoji: "\u{1F525}", label: "Fogo" },
+        { emoji: "\u{1F602}", label: "Rindo" },
+        { emoji: "\u{1F631}", label: "Surpreso" },
+        { emoji: "\u{1F44F}", label: "Aplausos" },
+        { emoji: "\u{2764}\u{FE0F}", label: "Coração" },
+        { emoji: "\u{1F92B}", label: "Segredo" },
         { emoji: "\u{1F64F}", label: "Fé" },
         { emoji: "\u{1F44D}", label: "Joinha" },
         { emoji: "\u{1F44E}", label: "Joinha invertido" },
         { emoji: "\u{1F622}", label: "Choro" },
-        { emoji: "\u{1F602}", label: "Rindo" },
-        { emoji: "\u{1F631}", label: "Surpreso" },
-        { emoji: "\u{1F525}", label: "Fogo" },
-        { emoji: "\u{1F480}", label: "Morreu" },
-        { emoji: "\u{2764}\u{FE0F}", label: "Coração" },
-        { emoji: "\u{1F44F}", label: "Aplausos" },
-        { emoji: "\u{1F914}", label: "Pensando" },
-        { emoji: "\u{1F60E}", label: "Estiloso" },
-        { emoji: "\u{1F621}", label: "Bravo" },
-        { emoji: "\u{1F3B2}", label: "Dado" },
-        { emoji: "\u{2694}\u{FE0F}", label: "Combate" },
-        { emoji: "\u{1F9E0}", label: "Jogada inteligente" },
-        { emoji: "\u{1FA84}", label: "Mágica" }
+        { emoji: "\u{1F634}", label: "Dormindo" },
+        { emoji: "\u{1F608}", label: "Maligno" },
+        { emoji: "\u{1F928}", label: "Desconfiado" },
+        { emoji: "\u{1F914}", label: "Pensando" }
     ];
 }
 

@@ -22,23 +22,20 @@ const connectedUsers = {};
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
 const FLOATING_EMOJIS = new Set([
+  "\u{1F525}",
+  "\u{1F602}",
+  "\u{1F631}",
+  "\u{1F44F}",
+  "\u{2764}\u{FE0F}",
+  "\u{1F92B}",
   "\u{1F64F}",
   "\u{1F44D}",
   "\u{1F44E}",
   "\u{1F622}",
-  "\u{1F602}",
-  "\u{1F631}",
-  "\u{1F525}",
-  "\u{1F480}",
-  "\u{2764}\u{FE0F}",
-  "\u{1F44F}",
-  "\u{1F914}",
-  "\u{1F60E}",
-  "\u{1F621}",
-  "\u{1F3B2}",
-  "\u{2694}\u{FE0F}",
-  "\u{1F9E0}",
-  "\u{1FA84}"
+  "\u{1F634}",
+  "\u{1F608}",
+  "\u{1F928}",
+  "\u{1F914}"
 ]);
 
 const PUBLIC_TABLES = [

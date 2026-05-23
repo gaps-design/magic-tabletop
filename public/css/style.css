@@ -264,6 +264,18 @@ button:hover{
     gap:10px;
 }
 
+.life-panel-toggle{
+    width:34px;
+    height:34px;
+    padding:0;
+    border-radius:10px;
+    background:#0f1d31;
+    color:#bae6fd;
+    border:1px solid rgba(255,255,255,0.08);
+    font-size:16px;
+    font-weight:900;
+}
+
 .life-vertical-buttons{
     display:flex;
     flex-direction:column;
@@ -288,6 +300,11 @@ button:hover{
     display:flex;
     flex-direction:column;
     gap:6px;
+    padding:10px;
+    background:rgba(3,7,18,0.7);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    animation:markerPanelIn .16s ease-out;
 }
 
 .manual-life-box input{
@@ -296,6 +313,8 @@ button:hover{
     border-radius:8px;
     border:none;
     outline:none;
+    background:#071421;
+    color:white;
 }
 
 .manual-life-box button{
@@ -322,6 +341,27 @@ button:hover{
     border:1px solid rgba(255,255,255,0.08);
     border-radius:12px;
     padding:10px;
+    animation:markerPanelIn .16s ease-out;
+}
+
+.opponent-life-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    color:#ffd166;
+    font-size:13px;
+    font-weight:900;
+}
+
+.opponent-life-header button{
+    width:26px;
+    height:26px;
+    padding:0;
+    border-radius:8px;
+    background:#1f2937;
+    color:#cbd5e1;
+    border:1px solid rgba(255,255,255,0.08);
 }
 
 .opponent-life{
@@ -336,6 +376,30 @@ button:hover{
 .opponent-buttons button{
     background:#3a2a08;
     color:#ffd166;
+}
+
+.opponent-manual-life{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+}
+
+.opponent-manual-life input{
+    min-width:0;
+    flex:1;
+    padding:8px;
+    border-radius:8px;
+    border:none;
+    outline:none;
+    background:#071421;
+    color:white;
+}
+
+.opponent-manual-life button{
+    padding:8px;
+    border-radius:8px;
+    font-size:12px;
+    font-weight:900;
 }
 
 .player-history-box{
@@ -401,6 +465,7 @@ button:hover{
 /* ÁREA DAS CÂMERAS */
 
 .video-area{
+    position:relative;
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:14px;
@@ -857,15 +922,19 @@ body:has(.bottom-bar:not(.collapsed)) .marker-bar{
 }
 
 .floating-markers-root{
-    position:fixed;
-    top:92px;
-    right:16px;
+    position:absolute;
+    top:0;
+    left:0;
     z-index:80;
     display:flex;
     flex-direction:column;
     gap:8px;
-    width:min(190px, calc(100vw - 32px));
+    width:170px;
     pointer-events:auto;
+}
+
+.video-area.has-floating-markers{
+    padding-left:184px;
 }
 
 .floating-markers-root .dynamic-marker-card{
@@ -929,8 +998,15 @@ body.focus-mode .video-area{
     grid-template-columns:1fr;
 }
 
-body.focus-mode .camera-card:first-child{
+body.focus-mode.player-one-active .camera-player-1,
+body.focus-mode.player-two-active .camera-player-2{
     display:none;
+}
+
+body.focus-mode.player-one-active .camera-player-2,
+body.focus-mode.player-two-active .camera-player-1{
+    display:flex;
+    width:100%;
 }
 
 /* BARRA INFERIOR */
@@ -1761,13 +1837,23 @@ body.spectator-mode .life{
     }
 
     .floating-markers-root{
-        top:78px;
-        right:8px;
-        width:min(160px, 46vw);
+        position:relative;
+        top:auto;
+        left:auto;
+        right:auto;
+        width:100%;
+        flex-direction:row;
+        overflow-x:auto;
         gap:6px;
+        grid-column:1 / -1;
+    }
+
+    .video-area.has-floating-markers{
+        padding-left:0;
     }
 
     .floating-markers-root .dynamic-marker-card{
+        min-width:150px;
         padding:6px;
     }
 
@@ -1969,6 +2055,7 @@ body.spectator-mode .bottom-bar,
 body.spectator-mode .bottom-toggle,
 body.spectator-mode .layout-buttons,
 body.spectator-mode .manual-life-box,
+body.spectator-mode .life-panel-toggle,
 body.spectator-mode .life-vertical-buttons,
 body.spectator-mode .opponent-life-wrapper,
 body.spectator-mode .player-history-box{
@@ -2061,6 +2148,7 @@ body.spectator-mode video{
 /* ESCONDER CONTROLES */
 
 body.spectator-mode .manual-life-box,
+body.spectator-mode .life-panel-toggle,
 body.spectator-mode .life-vertical-buttons,
 body.spectator-mode .opponent-life-wrapper,
 body.spectator-mode .player-history-box,

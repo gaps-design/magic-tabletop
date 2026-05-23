@@ -207,16 +207,21 @@
                     </div>
 
                     <div id="player1Life" class="life life-blue">20</div>
+
+                    <button class="life-panel-toggle" onclick="toggleManualLifePanel(1)">▾</button>
                 </div>
             </div>
 
             <div class="opponent-life-wrapper">
                 <button class="toggle-opponent-life" onclick="toggleOpponentLife(1)">
-                    ↔ Vida Oponente
+                    Vida Oponente
                 </button>
 
                 <div id="opponentLifeBox1" class="opponent-life-box hidden">
-                    <span class="label">Vida do oponente</span>
+                    <div class="opponent-life-header">
+                        <strong>Vida do Oponente</strong>
+                        <button onclick="toggleOpponentLife(1)">×</button>
+                    </div>
 
                     <div class="life-control-box opponent-local-control">
                         <div class="life-vertical-buttons opponent-buttons">
@@ -226,10 +231,15 @@
 
                         <div id="player1OpponentLife" class="life opponent-life">20</div>
                     </div>
+
+                    <div class="opponent-manual-life">
+                        <input id="opponentManualLife1" type="number" placeholder="Ex: 20">
+                        <button onclick="setOpponentLifeLocal(1)">Aplicar</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="manual-life-box">
+            <div id="manualLifeBox1" class="manual-life-box hidden">
                 <input id="manualLife1" type="number" placeholder="Ex: 20">
                 <button onclick="setManualLife(1)">Aplicar</button>
                 <button onclick="resetLife(1)">Reset</button>
@@ -253,6 +263,7 @@
         </aside>
 
         <section class="video-area">
+            <div id="floatingMarkersRoot" class="floating-markers-root"></div>
 
             <div class="camera-card camera-player-1">
                 <div class="camera-title">
@@ -335,16 +346,21 @@
                     </div>
 
                     <div id="player2Life" class="life life-green">20</div>
+
+                    <button class="life-panel-toggle" onclick="toggleManualLifePanel(2)">▾</button>
                 </div>
             </div>
 
             <div class="opponent-life-wrapper">
                 <button class="toggle-opponent-life" onclick="toggleOpponentLife(2)">
-                    ↔ Vida Oponente
+                    Vida Oponente
                 </button>
 
                 <div id="opponentLifeBox2" class="opponent-life-box hidden">
-                    <span class="label">Vida do oponente</span>
+                    <div class="opponent-life-header">
+                        <strong>Vida do Oponente</strong>
+                        <button onclick="toggleOpponentLife(2)">×</button>
+                    </div>
 
                     <div class="life-control-box opponent-local-control">
                         <div class="life-vertical-buttons opponent-buttons">
@@ -354,10 +370,15 @@
 
                         <div id="player2OpponentLife" class="life opponent-life">20</div>
                     </div>
+
+                    <div class="opponent-manual-life">
+                        <input id="opponentManualLife2" type="number" placeholder="Ex: 20">
+                        <button onclick="setOpponentLifeLocal(2)">Aplicar</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="manual-life-box">
+            <div id="manualLifeBox2" class="manual-life-box hidden">
                 <input id="manualLife2" type="number" placeholder="Ex: 20">
                 <button onclick="setManualLife(2)">Aplicar</button>
                 <button onclick="resetLife(2)">Reset</button>
@@ -514,7 +535,6 @@
         <button onclick="copyCameraLink()">Copiar link novamente</button>
     </div>
 </div>
-<div id="floatingMarkersRoot" class="floating-markers-root"></div>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <script src="/socket.io/socket.io.js"></script>
