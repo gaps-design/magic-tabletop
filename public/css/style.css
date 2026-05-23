@@ -2076,6 +2076,62 @@ body.spectator-mode.spectator-focus-p2 .camera-player-1{
     bottom:12% !important;
     font-size:54px !important;
 }
+
+.chat-messages,
+.spectator-chat-messages,
+.match-events-list{
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-start;
+    scroll-behavior:smooth;
+}
+
+.chat-message{
+    display:flex;
+    align-items:flex-start;
+    gap:6px;
+    animation:chatLiveIn .18s ease-out;
+}
+
+.chat-message span{
+    overflow-wrap:anywhere;
+}
+
+.event-item{
+    animation:chatLiveIn .18s ease-out;
+}
+
+.floating-emoji{
+    animation:emojiFloatLive 4.2s ease-out forwards !important;
+}
+
+@keyframes chatLiveIn{
+    from{
+        opacity:0;
+        transform:translateY(8px);
+    }
+
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+@keyframes emojiFloatLive{
+    0%{
+        transform:translate3d(0, 0, 0) scale(.7);
+        opacity:0;
+    }
+
+    12%{
+        opacity:1;
+    }
+
+    100%{
+        transform:translate3d(var(--emoji-drift, 0), -68vh, 0) scale(1.35);
+        opacity:0;
+    }
+}
 .camera-qr-modal{
     position:fixed;
     inset:0;

@@ -91,6 +91,8 @@ let isRedirectingHome = false;
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
+const CHAT_HISTORY_LIMIT = 80;
+const MATCH_EVENTS_LIMIT = 60;
 
 let diceHistory = [];
 
@@ -1151,7 +1153,9 @@ function addMatchEvent(text) {
     div.className = "event-item";
     div.innerText = text;
 
-    list.prepend(div);
+    list.appendChild(div);
+    trimChildren(list, MATCH_EVENTS_LIMIT);
+    scrollToLatest(list);
 }
 
 window.clearLifeHistory = function() {
@@ -1213,7 +1217,20 @@ function getEmotes() {
         { emoji: "\u{1F64F}", label: "Fé" },
         { emoji: "\u{1F44D}", label: "Joinha" },
         { emoji: "\u{1F44E}", label: "Joinha invertido" },
-        { emoji: "\u{1F622}", label: "Choro" }
+        { emoji: "\u{1F622}", label: "Choro" },
+        { emoji: "\u{1F602}", label: "Rindo" },
+        { emoji: "\u{1F631}", label: "Surpreso" },
+        { emoji: "\u{1F525}", label: "Fogo" },
+        { emoji: "\u{1F480}", label: "Morreu" },
+        { emoji: "\u{2764}\u{FE0F}", label: "Coração" },
+        { emoji: "\u{1F44F}", label: "Aplausos" },
+        { emoji: "\u{1F914}", label: "Pensando" },
+        { emoji: "\u{1F60E}", label: "Estiloso" },
+        { emoji: "\u{1F621}", label: "Bravo" },
+        { emoji: "\u{1F3B2}", label: "Dado" },
+        { emoji: "\u{2694}\u{FE0F}", label: "Combate" },
+        { emoji: "\u{1F9E0}", label: "Jogada inteligente" },
+        { emoji: "\u{1FA84}", label: "Mágica" }
     ];
 }
 
@@ -1337,12 +1354,11 @@ if (spectatorChatInput) {
 }
 
 socket.on("chat-message", (data) => {
-    if (data.type === "emoji") {
-        spawnFloatingEmoji(data.message);
-        return;
-    }
-
     renderChatMessage(data);
+});
+
+socket.on("floating-emoji", (data) => {
+    spawnFloatingEmoji(data?.message || data?.emoji);
 });
 
 socket.on("spectator-joined", ({ name }) => {
@@ -1354,40 +1370,50 @@ socket.on("chat-cooldown", (data) => {
 });
 
 function renderChatMessage(data) {
-    const messageHtml = `
-        <strong>${data.name || "Usuário"}:</strong>
-        <span>${data.message}</span>
-    `;
+    appendChatMessage(document.getElementById("chatMessages"), data);
+    appendChatMessage(document.getElementById("spectatorChatMessages"), data);
+}
 
-    const container = document.getElementById("chatMessages");
+function appendChatMessage(container, data) {
+    if (!container) return;
 
-    if (container) {
-        const div = document.createElement("div");
-        div.className = "chat-message";
-        div.innerHTML = messageHtml;
+    const div = document.createElement("div");
+    const name = document.createElement("strong");
+    const text = document.createElement("span");
 
-        container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
-    }
+    div.className = "chat-message";
+    name.innerText = `${data.name || "Usuário"}:`;
+    text.innerText = data.message || "";
 
-    const spectatorContainer = document.getElementById("spectatorChatMessages");
+    div.appendChild(name);
+    div.appendChild(text);
 
-    if (spectatorContainer) {
-        const spectatorDiv = document.createElement("div");
-        spectatorDiv.className = "chat-message";
-        spectatorDiv.innerHTML = messageHtml;
+    container.appendChild(div);
+    trimChildren(container, CHAT_HISTORY_LIMIT);
+    scrollToLatest(container);
+}
 
-        spectatorContainer.appendChild(spectatorDiv);
-        spectatorContainer.scrollTop = spectatorContainer.scrollHeight;
+function trimChildren(container, limit) {
+    while (container.children.length > limit) {
+        container.removeChild(container.firstElementChild);
     }
 }
 
+function scrollToLatest(container) {
+    requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+    });
+}
+
 function spawnFloatingEmoji(emoji) {
+    if (!emoji) return;
+
     const el = document.createElement("div");
 
     el.className = "floating-emoji";
     el.innerText = emoji;
     el.style.left = `${Math.floor(Math.random() * 80) + 10}%`;
+    el.style.setProperty("--emoji-drift", `${Math.floor(Math.random() * 121) - 60}px`);
 
     document.body.appendChild(el);
 

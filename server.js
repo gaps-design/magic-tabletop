@@ -21,6 +21,25 @@ const connectedUsers = {};
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
+const FLOATING_EMOJIS = new Set([
+  "\u{1F64F}",
+  "\u{1F44D}",
+  "\u{1F44E}",
+  "\u{1F622}",
+  "\u{1F602}",
+  "\u{1F631}",
+  "\u{1F525}",
+  "\u{1F480}",
+  "\u{2764}\u{FE0F}",
+  "\u{1F44F}",
+  "\u{1F914}",
+  "\u{1F60E}",
+  "\u{1F621}",
+  "\u{1F3B2}",
+  "\u{2694}\u{FE0F}",
+  "\u{1F9E0}",
+  "\u{1FA84}"
+]);
 
 const PUBLIC_TABLES = [
   "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
@@ -905,6 +924,8 @@ io.on("connection", (socket) => {
     control.count++;
 
     if (type === "emoji") {
+      if (!FLOATING_EMOJIS.has(safeMessage)) return;
+
       io.to(roomId).emit("floating-emoji", {
         name: clientProfiles[socket.id]?.name || "Usuário",
         message: safeMessage,
