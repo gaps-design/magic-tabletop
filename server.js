@@ -38,6 +38,18 @@ const FLOATING_EMOJIS = new Set([
   "\u{1F914}"
 ]);
 
+const MARKER_LABELS = {
+  storm: "Storm",
+  poison: "Veneno",
+  energy: "Energia",
+  "mana-white": "Mana Branca",
+  "mana-blue": "Mana Azul",
+  "mana-black": "Mana Preta",
+  "mana-red": "Mana Vermelha",
+  "mana-green": "Mana Verde",
+  "mana-colorless": "Mana Incolor"
+};
+
 const PUBLIC_TABLES = [
   "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
   "mtg-1006", "mtg-1007", "mtg-1008", "mtg-1009", "mtg-1010", "mtg-1011"
@@ -92,7 +104,8 @@ function ensureRoom(roomId) {
       format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
       timer: createDefaultTimer(),
       diceRolls: [],
-      micStatus: {}
+      micStatus: {},
+      markerState: { 1: {}, 2: {} }
     };
   }
 
@@ -219,7 +232,8 @@ function sendRoomState(roomId) {
         socketId: id,
         name: profile.name || "Espectador",
         photo: profile.photo || "/assets/default-avatar.png",
-        micEnabled: profile.micEnabled !== false
+        micAllowed: profile.micAllowed === true,
+        micEnabled: profile.micEnabled === true
       };
     }),
     queueList: (room.queue || []).map(item => ({
@@ -235,6 +249,7 @@ function sendRoomState(roomId) {
     format: room.format || "Formato livre",
     diceRolls: room.diceRolls,
     micStatus: room.micStatus,
+    markerState: room.markerState || { 1: {}, 2: {} },
     users: buildRoomUsers(room)
   });
 }
@@ -249,7 +264,8 @@ function getClientInfo(socketId) {
     linkedPlayer: profile.linkedPlayer || null,
     name: profile.name || "Usuário",
     photo: profile.photo || "/assets/default-avatar.png",
-    micEnabled: profile.micEnabled !== false
+    micAllowed: profile.micAllowed === true,
+    micEnabled: profile.micEnabled === true
   };
 }
 
@@ -336,8 +352,11 @@ function addSpectator(socket, roomId, user, reason = "") {
     name: profile.name,
     email: profile.email,
     photo: profile.photo,
-    micEnabled: true
+    micEnabled: false,
+    micAllowed: false
   };
+
+  room.micStatus[socket.id] = false;
 
   updateConnectedUser(socket.id, {
     status: "spectator",
@@ -846,6 +865,7 @@ io.on("connection", (socket) => {
 
     const profile = clientProfiles[socket.id];
     if (!profile) return;
+    if (profile.role === "spectator" && !profile.micAllowed) return;
 
     profile.micEnabled = !!micEnabled;
     room.micStatus[socket.id] = !!micEnabled;
@@ -855,6 +875,145 @@ io.on("connection", (socket) => {
       micEnabled: !!micEnabled,
       info: getClientInfo(socket.id)
     });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("spectator-mic-request", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.spectators.includes(socket.id)) return;
+
+    const profile = clientProfiles[socket.id] || {};
+
+    room.players.forEach(player => {
+      io.to(player.socketId).emit("spectator-mic-requested", {
+        roomId,
+        spectatorSocketId: socket.id,
+        name: profile.name || "Espectador",
+        photo: profile.photo || "/assets/default-avatar.png"
+      });
+    });
+
+    socket.emit("spectator-mic-status", {
+      status: "pending"
+    });
+  });
+
+  socket.on("spectator-mic-response", ({ roomId, spectatorSocketId, allow }) => {
+    const room = rooms[roomId];
+    if (!room || !isPlayerInRoom(room, socket.id)) return;
+    if (!room.spectators.includes(spectatorSocketId)) return;
+
+    const profile = clientProfiles[spectatorSocketId];
+    if (!profile) return;
+
+    profile.micAllowed = !!allow;
+    profile.micEnabled = false;
+    room.micStatus[spectatorSocketId] = false;
+
+    io.to(spectatorSocketId).emit("spectator-mic-status", {
+      status: allow ? "allowed" : "denied"
+    });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("spectator-mic-permission", ({ roomId, spectatorSocketId, allow }) => {
+    const room = rooms[roomId];
+    if (!room || !isPlayerInRoom(room, socket.id)) return;
+    if (!room.spectators.includes(spectatorSocketId)) return;
+
+    const profile = clientProfiles[spectatorSocketId];
+    if (!profile) return;
+
+    profile.micAllowed = !!allow;
+    profile.micEnabled = false;
+    room.micStatus[spectatorSocketId] = false;
+
+    io.to(spectatorSocketId).emit("spectator-mic-status", {
+      status: allow ? "allowed" : "muted"
+    });
+
+    io.to(roomId).emit("mic-status-update", {
+      socketId: spectatorSocketId,
+      micEnabled: false,
+      info: getClientInfo(spectatorSocketId)
+    });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("spectator-mic-mute", ({ roomId, spectatorSocketId }) => {
+    const room = rooms[roomId];
+    if (!room || !isPlayerInRoom(room, socket.id)) return;
+    if (!room.spectators.includes(spectatorSocketId)) return;
+
+    const profile = clientProfiles[spectatorSocketId];
+    if (!profile) return;
+
+    profile.micAllowed = false;
+    profile.micEnabled = false;
+    room.micStatus[spectatorSocketId] = false;
+
+    io.to(spectatorSocketId).emit("spectator-mic-status", {
+      status: "muted"
+    });
+
+    io.to(roomId).emit("mic-status-update", {
+      socketId: spectatorSocketId,
+      micEnabled: false,
+      info: getClientInfo(spectatorSocketId)
+    });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("marker-update", ({ roomId, playerNumber, markerId, marker, action, amount }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!isPlayerInRoom(room, socket.id)) return;
+    if (![1, 2].includes(Number(playerNumber))) return;
+    if (!MARKER_LABELS[markerId]) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player || Number(player.playerNumber) !== Number(playerNumber)) return;
+
+    if (!room.markerState) {
+      room.markerState = { 1: {}, 2: {} };
+    }
+
+    const playerKey = String(Number(playerNumber));
+    room.markerState[playerKey] = room.markerState[playerKey] || {};
+
+    if (action === "remove") {
+      delete room.markerState[playerKey][markerId];
+    } else if (marker && typeof marker === "object") {
+      room.markerState[playerKey][markerId] = {
+        value: Math.max(0, Number(marker.value) || 0)
+      };
+    }
+
+    const playerName = player?.name || `Jogador ${playerNumber}`;
+    const markerName = MARKER_LABELS[markerId];
+    let eventText = "";
+
+    if (action === "add") {
+      eventText = `${playerName} ativou ${markerName}`;
+    } else if (action === "remove") {
+      eventText = `${playerName} removeu marcador ${markerName}`;
+    } else if (Number(amount) > 0) {
+      eventText = `${playerName} adicionou ${markerName} +${Number(amount)}`;
+    } else if (Number(amount) < 0) {
+      eventText = `${playerName} removeu ${markerName} ${Number(amount)}`;
+    }
+
+    if (eventText) {
+      io.to(roomId).emit("system-event", {
+        type: "marker-event",
+        message: eventText,
+        time: new Date().toLocaleTimeString("pt-BR")
+      });
+    }
 
     sendRoomState(roomId);
   });

@@ -409,7 +409,8 @@ button:hover{
 }
 
 .history-small-btn,
-.history-clear-small{
+.history-clear-small,
+.notes-small-btn{
     padding:7px 9px;
     border:none;
     border-radius:10px;
@@ -424,6 +425,10 @@ button:hover{
 
 .history-clear-small{
     background:linear-gradient(135deg,#ff4d4d,#c90000);
+}
+
+.notes-small-btn{
+    background:linear-gradient(135deg,#172554,#2563eb);
 }
 
 .player-life-history{
@@ -686,8 +691,8 @@ video{
     position:fixed;
     right:18px;
     bottom:110px;
-    width:360px;
-    height:300px;
+    width:390px;
+    height:330px;
     background:rgba(5,10,18,0.97);
     border:1px solid rgba(255,255,255,0.1);
     border-radius:18px;
@@ -697,13 +702,14 @@ video{
 }
 
 .notes-header{
-    height:48px;
-    padding:0 14px;
+    min-height:54px;
+    padding:0 18px;
     background:#0f1d31;
     display:flex;
     align-items:center;
     justify-content:space-between;
     font-weight:900;
+    font-size:16px;
 }
 
 .notes-header button{
@@ -715,14 +721,15 @@ video{
 
 #tableNotesInput{
     width:100%;
-    height:calc(100% - 48px);
+    height:calc(100% - 54px);
     resize:none;
     border:none;
     outline:none;
     background:#071421;
     color:white;
-    padding:14px;
-    font-size:14px;
+    padding:18px;
+    font-size:16px;
+    line-height:1.55;
 }
 
 /* MARCADORES */
@@ -948,8 +955,12 @@ body:has(.bottom-bar:not(.collapsed)) .marker-bar{
 
 body.spectator-mode .dynamic-marker-area,
 body.spectator-mode .floating-markers-root,
+body.spectator-mode .notes-small-btn,
+body.spectator-mode .table-notes-panel,
 body.camera-mode .dynamic-marker-area,
-body.camera-mode .floating-markers-root{
+body.camera-mode .floating-markers-root,
+body.camera-mode .notes-small-btn,
+body.camera-mode .table-notes-panel{
     display:none !important;
 }
 
@@ -2071,12 +2082,30 @@ body.spectator-mode .player-history-box{
 
 body.spectator-mode .spectator-bottom-area{
     display:grid;
-    grid-template-columns:1fr 420px;
+    grid-template-columns:1fr 280px 420px;
     gap:14px;
     padding:0 14px 14px;
 }
 
+@media(max-width:900px){
+    body.spectator-mode .spectator-bottom-area{
+        grid-template-columns:1fr !important;
+        height:42vh !important;
+        max-height:42vh !important;
+        overflow-y:auto !important;
+    }
+
+    body.spectator-mode .spectator-chat-box,
+    body.spectator-mode .spectator-markers-box,
+    body.spectator-mode .spectator-events-box{
+        min-height:220px !important;
+        height:auto !important;
+        max-height:none !important;
+    }
+}
+
 .spectator-chat-box,
+.spectator-markers-box,
 .spectator-events-box{
     background:linear-gradient(180deg,#071421,#030712);
     border:1px solid rgba(255,255,255,0.08);
@@ -2095,6 +2124,7 @@ body.spectator-mode .spectator-bottom-area{
 }
 
 .spectator-chat-messages,
+.spectator-markers-list,
 .match-events-list{
     padding:14px;
     overflow-y:auto;
@@ -2102,6 +2132,59 @@ body.spectator-mode .spectator-bottom-area{
     display:flex;
     flex-direction:column;
     gap:10px;
+}
+
+.spectator-status-box{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px;
+    padding:10px;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    background:rgba(3,7,18,0.5);
+}
+
+.spectator-status-box span{
+    font-size:12px;
+    color:#cbd5e1;
+}
+
+.spectator-status-box button{
+    margin-left:auto;
+    padding:7px 9px;
+    border-radius:9px;
+    font-size:12px;
+    font-weight:900;
+}
+
+.spectator-marker-group{
+    background:#0f172a;
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    padding:10px;
+}
+
+.spectator-marker-group strong{
+    display:block;
+    margin-bottom:8px;
+    color:#93c5fd;
+    font-size:13px;
+}
+
+.spectator-marker-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+}
+
+.spectator-marker-chips span,
+.spectator-marker-empty{
+    background:#071421;
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:999px;
+    color:#e2e8f0;
+    font-size:12px;
+    padding:6px 8px;
 }
 
 .event-item{
@@ -2152,7 +2235,8 @@ body.spectator-mode .life-panel-toggle,
 body.spectator-mode .life-vertical-buttons,
 body.spectator-mode .opponent-life-wrapper,
 body.spectator-mode .player-history-box,
-body.spectator-mode .notes-box textarea,
+body.spectator-mode .notes-small-btn,
+body.spectator-mode .table-notes-panel,
 body.spectator-mode .bottom-bar,
 body.spectator-mode .layout-buttons,
 body.spectator-mode .bottom-toggle{
@@ -2191,7 +2275,7 @@ body.spectator-mode .bottom-toggle{
     font-weight:800;
 }
 body.spectator-mode .game-layout{
-    grid-template-rows:minmax(0, 1fr) 230px !important;
+    grid-template-rows:minmax(0, 1fr) 260px !important;
 }
 
 body.spectator-mode .video-area{
@@ -2203,15 +2287,16 @@ body.spectator-mode .camera-card{
 }
 
 body.spectator-mode .spectator-bottom-area{
-    height:230px !important;
-    min-height:230px !important;
-    max-height:230px !important;
+    height:260px !important;
+    min-height:260px !important;
+    max-height:260px !important;
     overflow:hidden !important;
 }
 
 .spectator-chat-messages,
+.spectator-markers-list,
 .match-events-list{
-    max-height:135px !important;
+    max-height:165px !important;
     overflow-y:auto !important;
 }
 .spectator-emoji-bar{
@@ -2234,15 +2319,17 @@ body.spectator-mode .spectator-bottom-area{
 ========================= */
 
 body.spectator-mode .spectator-bottom-area{
-    height:230px !important;
-    max-height:230px !important;
-    min-height:230px !important;
+    height:260px !important;
+    max-height:260px !important;
+    min-height:260px !important;
     overflow:hidden !important;
 }
 
-body.spectator-mode .spectator-chat-box{
-    height:230px !important;
-    max-height:230px !important;
+body.spectator-mode .spectator-chat-box,
+body.spectator-mode .spectator-markers-box,
+body.spectator-mode .spectator-events-box{
+    height:260px !important;
+    max-height:260px !important;
     display:flex !important;
     flex-direction:column !important;
     overflow:hidden !important;
@@ -2252,7 +2339,9 @@ body.spectator-mode .spectator-section-title{
     flex-shrink:0 !important;
 }
 
-body.spectator-mode .spectator-chat-messages{
+body.spectator-mode .spectator-chat-messages,
+body.spectator-mode .spectator-markers-list,
+body.spectator-mode .match-events-list{
     flex:1 !important;
     min-height:0 !important;
     max-height:none !important;
@@ -2361,6 +2450,62 @@ body.spectator-mode.spectator-focus-p2 .camera-player-1{
 .room-users-empty{
     color:#aebbd0;
     font-size:13px;
+}
+
+.room-user-action{
+    margin-left:auto;
+    padding:7px 9px;
+    border-radius:9px;
+    font-size:12px;
+    font-weight:900;
+    background:#7f1d1d;
+}
+
+.mic-request-toast{
+    position:fixed;
+    right:18px;
+    top:92px;
+    z-index:100000;
+    width:min(360px, calc(100vw - 36px));
+    display:grid;
+    grid-template-columns:42px 1fr;
+    gap:10px;
+    align-items:center;
+    background:#071421;
+    border:1px solid rgba(255,255,255,0.14);
+    border-radius:14px;
+    padding:12px;
+    box-shadow:0 18px 40px rgba(0,0,0,0.45);
+}
+
+.mic-request-toast img{
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    object-fit:cover;
+}
+
+.mic-request-toast strong,
+.mic-request-toast span{
+    display:block;
+}
+
+.mic-request-toast span{
+    color:#cbd5e1;
+    font-size:13px;
+}
+
+.mic-request-actions{
+    grid-column:1 / -1;
+    display:flex;
+    gap:8px;
+}
+
+.mic-request-actions button{
+    flex:1;
+    padding:9px;
+    border-radius:10px;
+    font-weight:900;
 }
 
 .chat-messages,

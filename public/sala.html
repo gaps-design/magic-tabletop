@@ -246,17 +246,13 @@
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(1)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="togglePlayerHistory(1)" class="history-small-btn">Histórico</button>
                 <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
+                <button onclick="toggleNotesPanel()" class="notes-small-btn">Notas</button>
 
                 <div id="lifeHistoryPanel1" class="player-life-history hidden">
                     <div id="lifeHistoryList1"></div>
                 </div>
-            </div>
-
-            <div class="notes-box">
-                <span class="label">📝 Notas</span>
-                <textarea id="notesPlayer1" placeholder="Anotações..."></textarea>
             </div>
 
             <div class="dynamic-marker-area" data-player-marker-area="1"></div>
@@ -385,17 +381,13 @@
             </div>
 
             <div class="player-history-box">
-                <button onclick="togglePlayerHistory(2)" class="history-small-btn">📜 Histórico</button>
+                <button onclick="togglePlayerHistory(2)" class="history-small-btn">Histórico</button>
                 <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
+                <button onclick="toggleNotesPanel()" class="notes-small-btn">Notas</button>
 
                 <div id="lifeHistoryPanel2" class="player-life-history hidden">
                     <div id="lifeHistoryList2"></div>
                 </div>
-            </div>
-
-            <div class="notes-box">
-                <span class="label">📝 Notas</span>
-                <textarea id="notesPlayer2" placeholder="Anotações..."></textarea>
             </div>
 
             <div class="dynamic-marker-area" data-player-marker-area="2"></div>
@@ -410,6 +402,12 @@
             💬 Chat da sala
         </div>
 
+        <div class="spectator-status-box">
+            <span id="spectatorModeBadge">👁️ Você está como espectador</span>
+            <span id="spectatorMicStatus">Você está mutado</span>
+            <button id="requestSpectatorMicBtn" type="button">Solicitar microfone</button>
+        </div>
+
         <div id="spectatorChatMessages" class="spectator-chat-messages">
         </div>
         <div class="spectator-chat-input-area">
@@ -417,6 +415,16 @@
     <button id="sendSpectatorChatBtn">Enviar</button>
 </div>
 <div id="spectatorEmojiBar" class="spectator-emoji-bar"></div>
+    </div>
+
+    <div class="spectator-markers-box">
+        <div class="spectator-section-title">
+            Marcadores em uso
+        </div>
+
+        <div id="spectatorMarkersList" class="spectator-markers-list">
+            <div class="spectator-marker-empty">Nenhum marcador ativo.</div>
+        </div>
     </div>
 
     <div class="spectator-events-box">
@@ -534,6 +542,14 @@
 
         <button onclick="copyCameraLink()">Copiar link novamente</button>
     </div>
+</div>
+<div id="tableNotesPanel" class="table-notes-panel hidden">
+    <div class="notes-header">
+        <strong>Notas da partida</strong>
+        <button type="button" onclick="toggleNotesPanel()">×</button>
+    </div>
+
+    <textarea id="tableNotesInput" placeholder="Anotações da partida..."></textarea>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 

@@ -887,6 +887,81 @@ window.toggleMicrophone = function() {
     }
 };
 
+window.enableSpectatorMicrophone = async function() {
+    if (currentRole !== "spectator") return;
+
+    const audioStream = await navigator.mediaDevices.getUserMedia({
+        video: false,
+        audio: selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true
+    });
+
+    const audioTrack = audioStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    micEnabled = true;
+    audioTrack.enabled = true;
+
+    if (!localStream) {
+        localStream = new MediaStream();
+    }
+
+    localStream.getAudioTracks().forEach(track => {
+        track.stop();
+        localStream.removeTrack(track);
+    });
+
+    localStream.addTrack(audioTrack);
+
+    Object.values(peerConnections).forEach(peer => {
+        const sender = peer.getSenders().find(s => s.track?.kind === "audio");
+
+        if (sender) {
+            sender.replaceTrack(audioTrack);
+        } else {
+            peer.addTrack(audioTrack, localStream);
+        }
+    });
+
+    updateMediaStatus();
+
+    if (currentRoomId) {
+        socket.emit("update-mic-status", {
+            roomId: currentRoomId,
+            micEnabled: true
+        });
+    }
+
+    for (const [socketId, info] of Object.entries(peerInfo)) {
+        if (info.role === "player" || info.role === "camera") {
+            await createOffer(socketId, info).catch(error => {
+                console.warn("Falha ao liberar microfone do espectador:", error);
+            });
+        }
+    }
+};
+
+window.disableSpectatorMicrophone = async function() {
+    if (currentRole !== "spectator") return;
+
+    micEnabled = false;
+
+    if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+            track.enabled = false;
+            track.stop();
+            localStream.removeTrack(track);
+        });
+    }
+
+    Object.values(peerConnections).forEach(peer => {
+        peer.getSenders()
+            .filter(sender => sender.track?.kind === "audio")
+            .forEach(sender => sender.replaceTrack(null));
+    });
+
+    updateMediaStatus();
+};
+
 /* =========================
    CÂMERA
 ========================= */

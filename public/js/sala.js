@@ -76,6 +76,9 @@ const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
 
 const spectatorChatInput = document.getElementById("spectatorChatInput");
 const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
+const requestSpectatorMicBtn = document.getElementById("requestSpectatorMicBtn");
+const spectatorMicStatus = document.getElementById("spectatorMicStatus");
+const spectatorMarkersList = document.getElementById("spectatorMarkersList");
 
 let selectedRole = forcedRole === "spectator" ? "spectator" : "player";
 let myPlayerNumber = null;
@@ -111,6 +114,22 @@ function redirectHomeOnce(delay = 250) {
     }, delay);
 }
 
+function closeRoomTabOrHome(delay = 250) {
+    if (isRedirectingHome) return;
+
+    isRedirectingHome = true;
+
+    setTimeout(() => {
+        window.close();
+
+        setTimeout(() => {
+            if (!window.closed) {
+                window.location.href = "/";
+            }
+        }, 180);
+    }, delay);
+}
+
 function leaveRoomForLogoutOnce() {
     if (hasHandledLogout) return;
 
@@ -121,7 +140,7 @@ function leaveRoomForLogoutOnce() {
     }
 
     socket.emit("leave-room", { roomId });
-    redirectHomeOnce(250);
+    closeRoomTabOrHome(250);
 }
 
 function bindAuthStateChanged(callback) {
@@ -341,6 +360,13 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("camera-mode");
         document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
 
+        if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
+        if (requestSpectatorMicBtn) {
+            requestSpectatorMicBtn.dataset.allowed = "false";
+            requestSpectatorMicBtn.innerText = "Solicitar microfone";
+            requestSpectatorMicBtn.disabled = false;
+        }
+
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
         return;
@@ -371,6 +397,7 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
+        syncActiveMarkersToRoom();
     }
 });
 
@@ -418,6 +445,7 @@ socket.on("room-state", (state) => {
     updatePlayerPanel(2, p2);
 
     renderLifeHistory(state.lifeHistory || []);
+    renderSpectatorMarkerSummary(state.markerState || {});
     updateTimerDisplay(state.timer);
 
     if (state.micStatus) {
@@ -493,6 +521,10 @@ function updateMicIconsFromState(state) {
 }
 
 socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
+    if (info?.role === "spectator") {
+        return;
+    }
+
     const linkedPlayer = Number(info?.linkedPlayer || info?.playerNumber || 0);
 
     if (socketId === socket.id || (myPlayerNumber && linkedPlayer === Number(myPlayerNumber))) {
@@ -867,11 +899,11 @@ window.leaveRoom = function() {
     }
 
     socket.emit("leave-room", { roomId });
-    redirectHomeOnce(300);
+    closeRoomTabOrHome(300);
 };
 
 socket.on("left-room", () => {
-    redirectHomeOnce(0);
+    closeRoomTabOrHome(0);
 });
 
 if (leaveSpectatorBtn) {
@@ -881,7 +913,7 @@ if (leaveSpectatorBtn) {
         }
 
         socket.emit("leave-room", { roomId });
-        redirectHomeOnce(300);
+        closeRoomTabOrHome(300);
     });
 }
 
@@ -930,6 +962,15 @@ function openRoomUsersPanel(title, people = []) {
         item.appendChild(img);
         item.appendChild(info);
 
+        if (person.actionLabel && person.onAction) {
+            const action = document.createElement("button");
+            action.type = "button";
+            action.className = "room-user-action";
+            action.innerText = person.actionLabel;
+            action.addEventListener("click", person.onAction);
+            item.appendChild(action);
+        }
+
         roomUsersList.appendChild(item);
     });
 
@@ -967,7 +1008,17 @@ if (spectatorsCountBtn) {
             currentSpectators.map(s => ({
                 name: s.name || "Espectador",
                 photo: s.photo || "",
-                status: s.micEnabled ? "Microfone ativo" : "Microfone mutado"
+                status: s.micAllowed
+                    ? (s.micEnabled ? "🎙️ Microfone ativo" : "✅ Microfone liberado")
+                    : "🔇 Microfone mutado",
+                actionLabel: selectedRole === "player" ? (s.micAllowed ? "Mutar" : "Desmutar") : "",
+                onAction: selectedRole === "player"
+                    ? () => socket.emit("spectator-mic-permission", {
+                        roomId,
+                        spectatorSocketId: s.socketId,
+                        allow: !s.micAllowed
+                    })
+                    : null
             }))
         );
     });
@@ -985,6 +1036,61 @@ if (roomUsersPanel) {
             roomUsersPanel.classList.add("hidden");
         }
     });
+}
+
+function showSpectatorMicRequest(data) {
+    const existing = document.querySelector(`[data-mic-request="${data.spectatorSocketId}"]`);
+    if (existing) existing.remove();
+
+    const prompt = document.createElement("div");
+    prompt.className = "mic-request-toast";
+    prompt.dataset.micRequest = data.spectatorSocketId;
+
+    const img = document.createElement("img");
+    img.src = data.photo || "/assets/default-avatar.png";
+    img.alt = data.name || "Espectador";
+
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.innerText = data.name || "Espectador";
+    const subtitle = document.createElement("span");
+    subtitle.innerText = "solicitou microfone";
+    text.appendChild(title);
+    text.appendChild(subtitle);
+
+    const actions = document.createElement("div");
+    actions.className = "mic-request-actions";
+
+    const allow = document.createElement("button");
+    allow.type = "button";
+    allow.innerText = "Permitir áudio";
+    allow.addEventListener("click", () => {
+        socket.emit("spectator-mic-response", {
+            roomId,
+            spectatorSocketId: data.spectatorSocketId,
+            allow: true
+        });
+        prompt.remove();
+    });
+
+    const deny = document.createElement("button");
+    deny.type = "button";
+    deny.innerText = "Negar";
+    deny.addEventListener("click", () => {
+        socket.emit("spectator-mic-response", {
+            roomId,
+            spectatorSocketId: data.spectatorSocketId,
+            allow: false
+        });
+        prompt.remove();
+    });
+
+    actions.appendChild(allow);
+    actions.appendChild(deny);
+    prompt.appendChild(img);
+    prompt.appendChild(text);
+    prompt.appendChild(actions);
+    document.body.appendChild(prompt);
 }
 
 window.copyCameraLink = async function() {
@@ -1313,6 +1419,29 @@ function renderAllMarkerPanels() {
     renderFloatingMarkers();
 }
 
+function emitMarkerUpdate(playerNumber, markerId, action, amount = 0) {
+    const marker = playerMarkers[playerNumber]?.[markerId] || null;
+
+    socket.emit("marker-update", {
+        roomId,
+        playerNumber,
+        markerId,
+        marker,
+        action,
+        amount
+    });
+}
+
+function syncActiveMarkersToRoom() {
+    [1, 2].forEach(playerNumber => {
+        if (selectedRole === "player" && myPlayerNumber && Number(playerNumber) !== Number(myPlayerNumber)) return;
+
+        Object.keys(playerMarkers[playerNumber] || {}).forEach(markerId => {
+            emitMarkerUpdate(playerNumber, markerId, "sync");
+        });
+    });
+}
+
 function renderMarkerPanel(playerNumber) {
     const root = document.querySelector(`[data-player-marker-area="${playerNumber}"]`);
     if (!root) return;
@@ -1320,6 +1449,7 @@ function renderMarkerPanel(playerNumber) {
     root.innerHTML = "";
 
     if (!isMarkerUiVisible()) return;
+    if (selectedRole === "player" && myPlayerNumber && Number(playerNumber) !== Number(myPlayerNumber)) return;
 
     const wrapper = document.createElement("div");
     wrapper.className = "marker-manager";
@@ -1459,6 +1589,8 @@ function renderFloatingMarkers() {
     let floatingCount = 0;
 
     [1, 2].forEach(playerNumber => {
+        if (selectedRole === "player" && myPlayerNumber && Number(playerNumber) !== Number(myPlayerNumber)) return;
+
         getActiveMarkers(playerNumber)
             .filter(marker => marker.placement === "floating")
             .forEach(marker => {
@@ -1476,6 +1608,7 @@ function renderFloatingMarkers() {
 
 function addPlayerMarker(playerNumber, markerId) {
     if (!markerDefinitionsById[markerId]) return;
+    if (selectedRole === "player" && Number(playerNumber) !== Number(myPlayerNumber)) return;
 
     playerMarkers[playerNumber][markerId] = {
         value: 0,
@@ -1484,19 +1617,23 @@ function addPlayerMarker(playerNumber, markerId) {
 
     savePlayerMarkers();
     renderAllMarkerPanels();
+    emitMarkerUpdate(playerNumber, markerId, "add");
 }
 
 function removePlayerMarker(playerNumber, markerId) {
     if (!playerMarkers[playerNumber]?.[markerId]) return;
+    if (selectedRole === "player" && Number(playerNumber) !== Number(myPlayerNumber)) return;
 
     delete playerMarkers[playerNumber][markerId];
     savePlayerMarkers();
     renderAllMarkerPanels();
+    emitMarkerUpdate(playerNumber, markerId, "remove");
 }
 
 function toggleMarkerPlacement(playerNumber, markerId) {
     const marker = playerMarkers[playerNumber]?.[markerId];
     if (!marker) return;
+    if (selectedRole === "player" && Number(playerNumber) !== Number(myPlayerNumber)) return;
 
     marker.placement = marker.placement === "floating" ? "sidebar" : "floating";
     savePlayerMarkers();
@@ -1506,19 +1643,76 @@ function toggleMarkerPlacement(playerNumber, markerId) {
 window.changePlayerMarker = function(playerNumber, markerId, amount) {
     const marker = playerMarkers[playerNumber]?.[markerId];
     if (!marker) return;
+    if (selectedRole === "player" && Number(playerNumber) !== Number(myPlayerNumber)) return;
 
-    marker.value = Math.max(0, marker.value + Number(amount));
+    const normalizedAmount = Number(amount);
+    const oldValue = marker.value;
+    marker.value = Math.max(0, marker.value + normalizedAmount);
     savePlayerMarkers();
     renderAllMarkerPanels();
+
+    if (marker.value !== oldValue) {
+        emitMarkerUpdate(playerNumber, markerId, "change", normalizedAmount);
+    }
 };
 
 window.addEventListener("load", renderAllMarkerPanels);
+
+function renderSpectatorMarkerSummary(markerState = {}) {
+    if (!spectatorMarkersList) return;
+
+    spectatorMarkersList.innerHTML = "";
+
+    let hasMarkers = false;
+
+    [1, 2].forEach(playerNumber => {
+        const playerMarkersState = markerState[playerNumber] || markerState[String(playerNumber)] || {};
+        const activeMarkers = Object.entries(playerMarkersState)
+            .filter(([markerId]) => markerDefinitionsById[markerId])
+            .map(([markerId, marker]) => ({
+                ...markerDefinitionsById[markerId],
+                value: Number(marker?.value) || 0
+            }));
+
+        if (!activeMarkers.length) return;
+
+        hasMarkers = true;
+
+        const group = document.createElement("div");
+        group.className = "spectator-marker-group";
+
+        const title = document.createElement("strong");
+        title.innerText = `Jogador ${playerNumber}`;
+        group.appendChild(title);
+
+        const list = document.createElement("div");
+        list.className = "spectator-marker-chips";
+
+        activeMarkers.forEach(marker => {
+            const chip = document.createElement("span");
+            chip.innerText = `${marker.icon} ${marker.label} ${marker.value}`;
+            list.appendChild(chip);
+        });
+
+        group.appendChild(list);
+        spectatorMarkersList.appendChild(group);
+    });
+
+    if (!hasMarkers) {
+        const empty = document.createElement("div");
+        empty.className = "spectator-marker-empty";
+        empty.innerText = "Nenhum marcador ativo.";
+        spectatorMarkersList.appendChild(empty);
+    }
+}
 
 /* =========================
    ANOTAÇÕES
 ========================= */
 
 window.toggleNotesPanel = function() {
+    if (selectedRole !== "player") return;
+
     const panel = document.getElementById("tableNotesPanel");
     if (!panel) return;
 
@@ -1667,6 +1861,29 @@ if (spectatorChatInput) {
     });
 }
 
+if (requestSpectatorMicBtn) {
+    requestSpectatorMicBtn.addEventListener("click", async () => {
+        if (selectedRole !== "spectator") return;
+
+        if (requestSpectatorMicBtn.dataset.allowed === "true") {
+            try {
+                await window.enableSpectatorMicrophone?.();
+                if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone liberado";
+                requestSpectatorMicBtn.innerText = "Microfone ativo";
+                requestSpectatorMicBtn.disabled = true;
+            } catch (error) {
+                alert("Não foi possível ativar seu microfone.");
+            }
+            return;
+        }
+
+        socket.emit("spectator-mic-request", { roomId });
+        if (spectatorMicStatus) spectatorMicStatus.innerText = "Solicitação enviada";
+        requestSpectatorMicBtn.innerText = "Solicitação enviada";
+        requestSpectatorMicBtn.disabled = true;
+    });
+}
+
 socket.on("chat-message", (data) => {
     renderChatMessage(data);
 });
@@ -1677,6 +1894,50 @@ socket.on("floating-emoji", (data) => {
 
 socket.on("spectator-joined", ({ name }) => {
     addMatchEvent(`${name || "Um espectador"} entrou para assistir.`);
+});
+
+socket.on("system-event", (data) => {
+    if (!data?.message) return;
+    addMatchEvent(data.time ? `[${data.time}] ${data.message}` : data.message);
+});
+
+socket.on("spectator-mic-requested", (data) => {
+    if (selectedRole !== "player") return;
+    showSpectatorMicRequest(data);
+});
+
+socket.on("spectator-mic-status", async ({ status }) => {
+    if (!spectatorMicStatus || !requestSpectatorMicBtn) return;
+
+    if (status === "pending") {
+        spectatorMicStatus.innerText = "Solicitação enviada";
+        requestSpectatorMicBtn.innerText = "Solicitação enviada";
+        requestSpectatorMicBtn.disabled = true;
+        return;
+    }
+
+    if (status === "allowed") {
+        spectatorMicStatus.innerText = "Microfone liberado";
+        requestSpectatorMicBtn.dataset.allowed = "true";
+        requestSpectatorMicBtn.innerText = "Ativar microfone";
+        requestSpectatorMicBtn.disabled = false;
+        return;
+    }
+
+    if (status === "denied") {
+        spectatorMicStatus.innerText = "Microfone negado";
+        requestSpectatorMicBtn.innerText = "Solicitar microfone";
+        requestSpectatorMicBtn.disabled = false;
+        return;
+    }
+
+    if (status === "muted") {
+        await window.disableSpectatorMicrophone?.();
+        spectatorMicStatus.innerText = "Você está mutado";
+        requestSpectatorMicBtn.dataset.allowed = "false";
+        requestSpectatorMicBtn.innerText = "Solicitar microfone";
+        requestSpectatorMicBtn.disabled = false;
+    }
 });
 
 socket.on("chat-cooldown", (data) => {
