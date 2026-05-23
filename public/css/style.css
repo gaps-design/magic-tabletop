@@ -563,6 +563,24 @@ video{
     box-shadow:0 0 14px rgba(255,0,0,0.65);
 }
 
+.muted-mic-symbol{
+    position:relative;
+    line-height:1;
+}
+
+.muted-mic-symbol::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:30px;
+    height:4px;
+    border-radius:999px;
+    background:white;
+    transform:translate(-50%, -50%) rotate(-38deg);
+    box-shadow:0 0 4px rgba(0,0,0,0.45);
+}
+
 /* DADOS */
 
 .dice-overlay{

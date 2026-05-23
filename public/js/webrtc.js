@@ -1122,6 +1122,11 @@ window.toggleCamera = function() {
         currentRole === "player" &&
         cameraEnabled
     ) {
+        cameraEnabled = false;
+        localStream.getVideoTracks().forEach(track => {
+            track.enabled = false;
+        });
+        updateMediaStatus();
         socket.emit("resenha-yield-seat", { roomId: currentRoomId });
         return;
     }
