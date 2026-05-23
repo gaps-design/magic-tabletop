@@ -254,13 +254,7 @@ async function startWebcam(
         track.enabled = cameraEnabled;
     });
 
-    if (localVideo) {
-        localVideo.srcObject = localStream;
-        localVideo.muted = true;
-        localVideo.playsInline = true;
-
-        await localVideo.play().catch(() => {});
-    }
+    routeLocalPreview();
 
     await getDevices();
 
@@ -343,13 +337,7 @@ async function switchCamera(cameraId) {
 
     localStream.addTrack(newVideoTrack);
 
-    if (localVideo) {
-        localVideo.srcObject = localStream;
-        localVideo.muted = true;
-        localVideo.playsInline = true;
-
-        await localVideo.play().catch(() => {});
-    }
+    routeLocalPreview();
 
     replaceTrackOnPeers("video", newVideoTrack);
     updateMediaStatus();
@@ -464,17 +452,19 @@ function getVideoElementForPlayer(playerNumber) {
 
     if (![1, 2].includes(normalizedPlayer)) return null;
 
-    if (currentRole === "spectator") {
-        return normalizedPlayer === 1 ? localVideo : remoteVideo;
-    }
+    return normalizedPlayer === 1 ? localVideo : remoteVideo;
+}
 
-    if (currentRole === "player") {
-        return normalizedPlayer === Number(myPlayerNumberRTC)
-            ? localVideo
-            : remoteVideo;
-    }
+function routeLocalPreview() {
+    if (!localStream || currentRole !== "player") return;
 
-    return null;
+    const videoElement = getVideoElementForPlayer(myPlayerNumberRTC);
+    if (!videoElement) return;
+
+    const otherElement = Number(myPlayerNumberRTC) === 1 ? remoteVideo : localVideo;
+    clearVideoIfStream(otherElement, localStream);
+
+    setVideoStream(videoElement, localStream, true);
 }
 
 function hasActiveCameraForPlayer(playerNumber) {
@@ -490,6 +480,11 @@ function routeStream(socketId, stream) {
     if (currentRole === "camera") return;
 
     const info = peerInfo[socketId] || {};
+    const isLocalPlayerStream =
+        info.role === "player" &&
+        Number(info.playerNumber) === Number(myPlayerNumberRTC);
+
+    if (isLocalPlayerStream) return;
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
@@ -831,6 +826,7 @@ socket.on("assigned-role", async (data) => {
         }
     }
 
+    routeLocalPreview();
     routeAllStreams();
 });
 
@@ -845,6 +841,7 @@ socket.on("connect", async () => {
             await startWebcam();
         }
 
+        routeLocalPreview();
         socket.emit("join-room", lastJoinPayload);
     } catch (error) {
         console.warn("Falha ao restaurar sala após reconexão:", error);

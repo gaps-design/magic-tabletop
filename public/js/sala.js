@@ -443,6 +443,7 @@ socket.on("room-state", (state) => {
 
     updatePlayerPanel(1, p1);
     updatePlayerPanel(2, p2);
+    updateCameraTitles(p1, p2);
 
     renderLifeHistory(state.lifeHistory || []);
     renderSpectatorMarkerSummary(state.markerState || {});
@@ -469,6 +470,19 @@ function updatePlayerPanel(playerNumber, playerData) {
         if (deck) deck.innerText = "Aguardando...";
         if (guild) guild.innerText = "---";
         if (life) life.innerText = "20";
+    }
+}
+
+function updateCameraTitles(playerOne, playerTwo) {
+    const titleOne = document.getElementById("localCameraTitle");
+    const titleTwo = document.getElementById("remoteCameraTitle");
+
+    if (titleOne) {
+        titleOne.innerText = playerOne?.name || "Jogador 1";
+    }
+
+    if (titleTwo) {
+        titleTwo.innerText = playerTwo?.name || "Jogador 2";
     }
 }
 
