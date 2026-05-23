@@ -249,34 +249,7 @@
                 <textarea id="notesPlayer1" placeholder="Anotações..."></textarea>
             </div>
 
-            <div class="player-marker-box">
-                <div class="player-marker-card">
-                    <span>⚡ Energia</span>
-                    <div>
-                        <button onclick="changePlayerMarker(1, 'energy', -1)">−</button>
-                        <strong id="energyMarker1">0</strong>
-                        <button onclick="changePlayerMarker(1, 'energy', 1)">+</button>
-                    </div>
-                </div>
-
-                <div class="player-marker-card">
-                    <span>☠️ Veneno</span>
-                    <div>
-                        <button onclick="changePlayerMarker(1, 'poison', -1)">−</button>
-                        <strong id="poisonMarker1">0</strong>
-                        <button onclick="changePlayerMarker(1, 'poison', 1)">+</button>
-                    </div>
-                </div>
-
-                <div class="player-marker-card">
-                    <span>🌩 Storm</span>
-                    <div>
-                        <button onclick="changePlayerMarker(1, 'storm', -1)">−</button>
-                        <strong id="stormMarker1">0</strong>
-                        <button onclick="changePlayerMarker(1, 'storm', 1)">+</button>
-                    </div>
-                </div>
-            </div>
+            <div class="dynamic-marker-area" data-player-marker-area="1"></div>
         </aside>
 
         <section class="video-area">
@@ -404,34 +377,7 @@
                 <textarea id="notesPlayer2" placeholder="Anotações..."></textarea>
             </div>
 
-            <div class="player-marker-box">
-                <div class="player-marker-card">
-                    <span>⚡ Energia</span>
-                    <div>
-                        <button onclick="changePlayerMarker(2, 'energy', -1)">−</button>
-                        <strong id="energyMarker2">0</strong>
-                        <button onclick="changePlayerMarker(2, 'energy', 1)">+</button>
-                    </div>
-                </div>
-
-                <div class="player-marker-card">
-                    <span>☠️ Veneno</span>
-                    <div>
-                        <button onclick="changePlayerMarker(2, 'poison', -1)">−</button>
-                        <strong id="poisonMarker2">0</strong>
-                        <button onclick="changePlayerMarker(2, 'poison', 1)">+</button>
-                    </div>
-                </div>
-
-                <div class="player-marker-card">
-                    <span>🌩 Storm</span>
-                    <div>
-                        <button onclick="changePlayerMarker(2, 'storm', -1)">−</button>
-                        <strong id="stormMarker2">0</strong>
-                        <button onclick="changePlayerMarker(2, 'storm', 1)">+</button>
-                    </div>
-                </div>
-            </div>
+            <div class="dynamic-marker-area" data-player-marker-area="2"></div>
         </aside>
 
         <!-- ÁREA STREAM / ESPECTADOR -->
@@ -568,6 +514,7 @@
         <button onclick="copyCameraLink()">Copiar link novamente</button>
     </div>
 </div>
+<div id="floatingMarkersRoot" class="floating-markers-root"></div>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <script src="/socket.io/socket.io.js"></script>

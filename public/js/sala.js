@@ -341,6 +341,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("camera-mode");
 
         showLeaveSpectatorButton();
+        renderAllMarkerPanels();
         return;
     }
 
@@ -352,6 +353,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("spectator-mode");
 
         showLeaveSpectatorButton();
+        renderAllMarkerPanels();
         return;
     }
 
@@ -364,6 +366,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("camera-mode");
 
         showLeaveSpectatorButton();
+        renderAllMarkerPanels();
     }
 });
 
@@ -1166,36 +1169,286 @@ window.clearLifeHistory = function() {
    MARCADORES POR JOGADOR
 ========================= */
 
-const playerMarkers = {
-    1: {
-        energy: 0,
-        poison: 0,
-        storm: 0
-    },
+const MARKER_DEFINITIONS = [
+    { id: "storm", label: "Storm", icon: "\u{1F329}" },
+    { id: "poison", label: "Veneno", icon: "\u{2620}\u{FE0F}" },
+    { id: "energy", label: "Energia", icon: "\u{26A1}" },
+    { id: "mana-white", label: "Mana Branca", icon: "\u{26AA}" },
+    { id: "mana-blue", label: "Mana Azul", icon: "\u{1F535}" },
+    { id: "mana-black", label: "Mana Preta", icon: "\u{26AB}" },
+    { id: "mana-red", label: "Mana Vermelha", icon: "\u{1F534}" },
+    { id: "mana-green", label: "Mana Verde", icon: "\u{1F7E2}" },
+    { id: "mana-colorless", label: "Mana Incolor", icon: "\u{25C7}" }
+];
 
-    2: {
-        energy: 0,
-        poison: 0,
-        storm: 0
-    }
+const markerDefinitionsById = MARKER_DEFINITIONS.reduce((map, marker) => {
+    map[marker.id] = marker;
+    return map;
+}, {});
+
+let markerPanelsOpen = {
+    1: false,
+    2: false
 };
 
-window.changePlayerMarker = function(playerNumber, type, amount) {
-    if (!playerMarkers[playerNumber]) return;
-    if (!playerMarkers[playerNumber].hasOwnProperty(type)) return;
+const playerMarkers = loadPlayerMarkers();
 
-    playerMarkers[playerNumber][type] += Number(amount);
+function getDefaultMarkerState() {
+    return {
+        1: {},
+        2: {}
+    };
+}
 
-    if (playerMarkers[playerNumber][type] < 0) {
-        playerMarkers[playerNumber][type] = 0;
+function getMarkerStorageKey() {
+    return `mt_markers_${roomId || "local"}`;
+}
+
+function loadPlayerMarkers() {
+    const fallback = getDefaultMarkerState();
+
+    try {
+        const saved = JSON.parse(localStorage.getItem(getMarkerStorageKey()) || "null");
+        if (!saved || typeof saved !== "object") return fallback;
+
+        [1, 2].forEach(playerNumber => {
+            const playerSaved = saved[playerNumber] || {};
+
+            Object.entries(playerSaved).forEach(([markerId, marker]) => {
+                if (!markerDefinitionsById[markerId]) return;
+
+                fallback[playerNumber][markerId] = {
+                    value: Math.max(0, Number(marker.value) || 0),
+                    placement: marker.placement === "floating" ? "floating" : "sidebar"
+                };
+            });
+        });
+    } catch (error) {
+        console.warn("Não foi possível carregar marcadores salvos.", error);
     }
 
-    const el = document.getElementById(`${type}Marker${playerNumber}`);
+    return fallback;
+}
 
-    if (el) {
-        el.innerText = playerMarkers[playerNumber][type];
+function savePlayerMarkers() {
+    try {
+        localStorage.setItem(getMarkerStorageKey(), JSON.stringify(playerMarkers));
+    } catch (error) {
+        console.warn("Não foi possível salvar marcadores.", error);
     }
+}
+
+function isMarkerUiVisible() {
+    return selectedRole !== "spectator" && selectedRole !== "camera";
+}
+
+function createMarkerButton(text, className, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.innerText = text;
+    button.addEventListener("click", onClick);
+    return button;
+}
+
+function renderAllMarkerPanels() {
+    renderMarkerPanel(1);
+    renderMarkerPanel(2);
+    renderFloatingMarkers();
+}
+
+function renderMarkerPanel(playerNumber) {
+    const root = document.querySelector(`[data-player-marker-area="${playerNumber}"]`);
+    if (!root) return;
+
+    root.innerHTML = "";
+
+    if (!isMarkerUiVisible()) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "marker-manager";
+
+    const toggle = createMarkerButton(
+        markerPanelsOpen[playerNumber] ? "▴ Painel de Marcadores" : "▾ Painel de Marcadores",
+        "marker-panel-toggle",
+        () => {
+            markerPanelsOpen[playerNumber] = !markerPanelsOpen[playerNumber];
+            renderMarkerPanel(playerNumber);
+        }
+    );
+
+    wrapper.appendChild(toggle);
+
+    const activeSidebar = document.createElement("div");
+    activeSidebar.className = "active-marker-list";
+
+    getActiveMarkers(playerNumber)
+        .filter(marker => marker.placement !== "floating")
+        .forEach(marker => {
+            activeSidebar.appendChild(createActiveMarkerCard(playerNumber, marker));
+        });
+
+    wrapper.appendChild(activeSidebar);
+
+    if (markerPanelsOpen[playerNumber]) {
+        wrapper.appendChild(createMarkerPicker(playerNumber));
+    }
+
+    root.appendChild(wrapper);
+}
+
+function createMarkerPicker(playerNumber) {
+    const panel = document.createElement("div");
+    panel.className = "marker-picker";
+
+    const title = document.createElement("div");
+    title.className = "marker-picker-title";
+    title.innerText = "Adicionar marcador";
+    panel.appendChild(title);
+
+    const available = document.createElement("div");
+    available.className = "marker-option-grid";
+
+    MARKER_DEFINITIONS
+        .filter(marker => !playerMarkers[playerNumber][marker.id])
+        .forEach(marker => {
+            const option = createMarkerButton(
+                `${marker.icon} ${marker.label}`,
+                "marker-option-btn",
+                () => addPlayerMarker(playerNumber, marker.id)
+            );
+
+            available.appendChild(option);
+        });
+
+    if (!available.children.length) {
+        const empty = document.createElement("p");
+        empty.className = "marker-empty";
+        empty.innerText = "Todos os marcadores estão ativos.";
+        available.appendChild(empty);
+    }
+
+    panel.appendChild(available);
+    return panel;
+}
+
+function getActiveMarkers(playerNumber) {
+    return Object.entries(playerMarkers[playerNumber] || {})
+        .map(([id, data]) => ({
+            ...markerDefinitionsById[id],
+            value: data.value,
+            placement: data.placement
+        }))
+        .filter(marker => marker.id);
+}
+
+function createActiveMarkerCard(playerNumber, marker) {
+    const card = document.createElement("div");
+    card.className = `dynamic-marker-card ${marker.placement === "floating" ? "is-floating" : ""}`;
+
+    const header = document.createElement("div");
+    header.className = "dynamic-marker-header";
+
+    const label = document.createElement("span");
+    label.innerText = `${marker.icon} ${marker.label}`;
+
+    const close = createMarkerButton("×", "marker-close-btn", () => {
+        removePlayerMarker(playerNumber, marker.id);
+    });
+    close.title = "Remover marcador";
+
+    header.appendChild(label);
+    header.appendChild(close);
+
+    const controls = document.createElement("div");
+    controls.className = "dynamic-marker-controls";
+
+    const minus = createMarkerButton("−", "marker-count-btn", () => {
+        changePlayerMarker(playerNumber, marker.id, -1);
+    });
+
+    const value = document.createElement("strong");
+    value.innerText = marker.value;
+
+    const plus = createMarkerButton("+", "marker-count-btn", () => {
+        changePlayerMarker(playerNumber, marker.id, 1);
+    });
+
+    controls.appendChild(minus);
+    controls.appendChild(value);
+    controls.appendChild(plus);
+
+    const placement = createMarkerButton(
+        marker.placement === "floating" ? "Manter na barra lateral" : "Fixar na tela",
+        "marker-placement-btn",
+        () => toggleMarkerPlacement(playerNumber, marker.id)
+    );
+
+    card.appendChild(header);
+    card.appendChild(controls);
+    card.appendChild(placement);
+
+    return card;
+}
+
+function renderFloatingMarkers() {
+    const root = document.getElementById("floatingMarkersRoot");
+    if (!root) return;
+
+    root.innerHTML = "";
+
+    if (!isMarkerUiVisible()) return;
+
+    [1, 2].forEach(playerNumber => {
+        getActiveMarkers(playerNumber)
+            .filter(marker => marker.placement === "floating")
+            .forEach(marker => {
+                const card = createActiveMarkerCard(playerNumber, marker);
+                card.classList.add(`floating-marker-player-${playerNumber}`);
+                root.appendChild(card);
+            });
+    });
+}
+
+function addPlayerMarker(playerNumber, markerId) {
+    if (!markerDefinitionsById[markerId]) return;
+
+    playerMarkers[playerNumber][markerId] = {
+        value: 0,
+        placement: "sidebar"
+    };
+
+    savePlayerMarkers();
+    renderAllMarkerPanels();
+}
+
+function removePlayerMarker(playerNumber, markerId) {
+    if (!playerMarkers[playerNumber]?.[markerId]) return;
+
+    delete playerMarkers[playerNumber][markerId];
+    savePlayerMarkers();
+    renderAllMarkerPanels();
+}
+
+function toggleMarkerPlacement(playerNumber, markerId) {
+    const marker = playerMarkers[playerNumber]?.[markerId];
+    if (!marker) return;
+
+    marker.placement = marker.placement === "floating" ? "sidebar" : "floating";
+    savePlayerMarkers();
+    renderAllMarkerPanels();
+}
+
+window.changePlayerMarker = function(playerNumber, markerId, amount) {
+    const marker = playerMarkers[playerNumber]?.[markerId];
+    if (!marker) return;
+
+    marker.value = Math.max(0, marker.value + Number(amount));
+    savePlayerMarkers();
+    renderAllMarkerPanels();
 };
+
+window.addEventListener("load", renderAllMarkerPanels);
 
 /* =========================
    ANOTAÇÕES
