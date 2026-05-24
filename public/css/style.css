@@ -1216,6 +1216,34 @@ body.focus-mode.player-two-active .camera-player-1{
     border-color:#3b82f6;
 }
 
+.player-fields input.from-google-profile{
+    color:#cbd5e1;
+    border-color:rgba(59,130,246,0.35);
+    background:#0b1a2d;
+    cursor:not-allowed;
+}
+
+.google-entry-profile{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    border:1px solid rgba(59,130,246,0.22);
+    border-radius:12px;
+    background:rgba(15,29,49,0.72);
+    color:#cbd5e1;
+    font-size:13px;
+    font-weight:800;
+}
+
+.google-entry-profile img{
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    object-fit:cover;
+    border:1px solid rgba(255,255,255,0.18);
+}
+
 .enter-btn{
     margin-top:10px;
     width:100%;

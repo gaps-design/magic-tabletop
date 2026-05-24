@@ -779,23 +779,30 @@ async function joinRoom(roomId, user) {
         }
     }
 
+    const profile = user.profile || {};
+    const loggedName = profile.name ||
+        loggedUser?.displayName ||
+        (loggedUser?.email ? loggedUser.email.split("@")[0] : "") ||
+        "Usuario";
+    const loggedPhoto = profile.photo || loggedUser?.photoURL || "/assets/default-avatar.png";
+
     lastJoinPayload = {
         roomId,
 
         user: isCameraMode
             ? {}
             : {
-                uid: loggedUser.uid,
-                name: loggedUser.displayName || "Usuário",
-                email: loggedUser.email || "",
-                photo: loggedUser.photoURL || "/assets/default-avatar.png"
+                uid: profile.uid || loggedUser.uid,
+                name: loggedName,
+                email: profile.email || loggedUser.email || "",
+                photo: loggedPhoto
             },
 
         role: user.role,
 
         name: isCameraMode
             ? user.name
-            : (user.name || loggedUser.displayName || "Usuário"),
+            : (user.name || loggedName),
 
         deck: user.deck,
         guild: user.guild,

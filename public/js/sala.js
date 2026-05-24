@@ -39,6 +39,9 @@ const spectatorRoleBtn = document.getElementById("spectatorRoleBtn");
 const playerFields = document.getElementById("playerFields");
 
 const playerNameInput = document.getElementById("playerNameInput");
+const googleEntryProfile = document.getElementById("googleEntryProfile");
+const googleEntryPhoto = document.getElementById("googleEntryPhoto");
+const googleEntryText = document.getElementById("googleEntryText");
 const deckNameInput = document.getElementById("deckNameInput");
 const guildInput = document.getElementById("guildInput");
 const enterRoomBtn = document.getElementById("enterRoomBtn");
@@ -94,6 +97,7 @@ let isQueuedInResenha = false;
 let hasSeenLoggedUser = false;
 let hasHandledLogout = false;
 let isRedirectingHome = false;
+let googleRoomProfile = null;
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
@@ -157,14 +161,95 @@ function bindAuthStateChanged(callback) {
     }, { once: true });
 }
 
+function getGoogleProfileName(user) {
+    if (!user) return "";
+
+    const displayName = String(user.displayName || "").trim();
+    if (displayName) return displayName;
+
+    const email = String(user.email || "").trim();
+    if (email.includes("@")) return email.split("@")[0];
+
+    return "";
+}
+
+function applyGoogleEntryProfile(user) {
+    const name = getGoogleProfileName(user);
+
+    if (!name) {
+        googleRoomProfile = null;
+
+        if (playerNameInput) {
+            playerNameInput.readOnly = false;
+            playerNameInput.classList.remove("from-google-profile");
+            if (!playerNameInput.value.trim()) {
+                playerNameInput.value = localStorage.getItem("mt_player_name") || "";
+            }
+        }
+
+        googleEntryProfile?.classList.add("hidden");
+        return;
+    }
+
+    googleRoomProfile = {
+        uid: user.uid || "",
+        name,
+        email: user.email || "",
+        photo: user.photoURL || "/assets/default-avatar.png"
+    };
+
+    if (playerNameInput) {
+        playerNameInput.value = name;
+        playerNameInput.readOnly = true;
+        playerNameInput.classList.add("from-google-profile");
+    }
+
+    if (googleEntryPhoto) {
+        googleEntryPhoto.src = googleRoomProfile.photo;
+        googleEntryPhoto.alt = name;
+    }
+
+    if (googleEntryText) {
+        googleEntryText.innerText = `Entrando como: ${name}`;
+    }
+
+    googleEntryProfile?.classList.remove("hidden");
+}
+
+function waitForAuthResolution(timeout = 1800) {
+    if (window.authHasResolved || window.currentUser) {
+        return Promise.resolve(window.currentUser || null);
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+
+        const finish = (user) => {
+            if (settled) return;
+            settled = true;
+            resolve(user || window.currentUser || null);
+        };
+
+        const timer = setTimeout(() => finish(null), timeout);
+
+        bindAuthStateChanged((user) => {
+            clearTimeout(timer);
+            finish(user);
+        });
+    });
+}
+
 bindAuthStateChanged((user) => {
         if (selectedRole === "camera" || cameraFor) return;
 
         if (user) {
             hasSeenLoggedUser = true;
             hasHandledLogout = false;
+            applyGoogleEntryProfile(user);
             return;
         }
+
+        applyGoogleEntryProfile(null);
 
         if (!hasSeenLoggedUser && !window.authHadUser && !window.isSigningOut) return;
 
@@ -314,7 +399,12 @@ if (enterRoomBtn) {
     enterRoomBtn.addEventListener("click", async () => {
         if (entryError) entryError.innerText = "";
 
-        const name = playerNameInput ? playerNameInput.value.trim() : "";
+        if (!window.authHasResolved && !googleRoomProfile) {
+            const resolvedUser = await waitForAuthResolution();
+            applyGoogleEntryProfile(resolvedUser);
+        }
+
+        const name = (googleRoomProfile?.name || (playerNameInput ? playerNameInput.value.trim() : "")).trim();
         const deck = deckNameInput ? deckNameInput.value : "";
         const guild = guildInput ? guildInput.value : "";
 
@@ -336,6 +426,7 @@ if (enterRoomBtn) {
             await safeJoinRoom(roomId, {
                 role: selectedRole,
                 name,
+                profile: googleRoomProfile,
                 deck: selectedRole === "spectator" ? "---" : deck,
                 guild: selectedRole === "spectator" ? "---" : guild,
                 format: roomFormat
