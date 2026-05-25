@@ -310,6 +310,41 @@ button:hover{
     font-weight:900;
 }
 
+body.player-one-active #playerPanel2 .life-vertical-buttons,
+body.player-one-active #playerPanel2 .life-panel-toggle,
+body.player-one-active #playerPanel2 .manual-life-box,
+body.player-one-active #playerPanel2 .opponent-life-wrapper,
+body.player-one-active #playerPanel2 .player-history-box,
+body.player-two-active #playerPanel1 .life-vertical-buttons,
+body.player-two-active #playerPanel1 .life-panel-toggle,
+body.player-two-active #playerPanel1 .manual-life-box,
+body.player-two-active #playerPanel1 .opponent-life-wrapper,
+body.player-two-active #playerPanel1 .player-history-box{
+    display:none !important;
+}
+
+body.player-one-active #playerPanel2 .label,
+body.player-two-active #playerPanel1 .label{
+    text-align:center;
+    text-transform:uppercase;
+    letter-spacing:0;
+}
+
+body.player-one-active #playerPanel2 .life-control-box,
+body.player-two-active #playerPanel1 .life-control-box{
+    padding:10px 0 14px;
+    gap:0;
+}
+
+body.player-one-active #playerPanel2 .life,
+body.player-two-active #playerPanel1 .life{
+    min-width:112px;
+    margin:0 auto;
+    font-size:64px;
+    line-height:1;
+    text-shadow:0 12px 28px rgba(0,0,0,0.38);
+}
+
 .life-vertical-buttons{
     display:flex;
     flex-direction:column;
@@ -978,6 +1013,54 @@ body:has(.bottom-bar:not(.collapsed)) .marker-bar{
     color:#bae6fd;
     font-size:11px;
     font-weight:900;
+}
+
+.readonly-marker-summary{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    padding:10px;
+    background:rgba(3,7,18,0.38);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+}
+
+.readonly-marker-title{
+    color:#93c5fd;
+    font-size:12px;
+    font-weight:900;
+    text-transform:uppercase;
+    letter-spacing:0;
+}
+
+.readonly-marker-list{
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+}
+
+.readonly-marker-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 10px;
+    background:#071421;
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:10px;
+}
+
+.readonly-marker-item span{
+    color:#e2e8f0;
+    font-size:13px;
+    font-weight:800;
+}
+
+.readonly-marker-item strong{
+    min-width:30px;
+    color:white;
+    text-align:center;
+    font-size:20px;
 }
 
 .floating-markers-root{
@@ -2459,6 +2542,14 @@ body.spectator-mode.spectator-focus-p2 .video-area{
 
 body.spectator-mode.spectator-focus-p2 .camera-player-1{
     display:none !important;
+}
+
+body.spectator-mode .dynamic-marker-area{
+    display:flex !important;
+}
+
+body.spectator-mode .readonly-marker-summary{
+    display:flex !important;
 }
 
 .room-users-panel{

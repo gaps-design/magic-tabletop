@@ -94,6 +94,7 @@ let currentCameraClients = [];
 let currentSpectators = [];
 let currentQueue = [];
 let isQueuedInResenha = false;
+let currentRoomMarkerState = { 1: {}, 2: {} };
 const previousOfficialLife = {};
 const lifeDeltaTimers = {};
 let hasSeenLoggedUser = false;
@@ -545,6 +546,7 @@ socket.on("room-state", (state) => {
     updatePlayerPanel(2, p2);
     updateCameraTitles(p1, p2);
 
+    applyRoomMarkerState(state.markerState || {});
     renderLifeHistory(state.lifeHistory || []);
     renderSpectatorMarkerSummary(state.markerState || {});
     updateTimerDisplay(state.timer);
@@ -1690,6 +1692,39 @@ function renderAllMarkerPanels() {
     renderFloatingMarkers();
 }
 
+function normalizeRoomMarkerState(markerState = {}) {
+    const normalized = { 1: {}, 2: {} };
+
+    [1, 2].forEach(playerNumber => {
+        const markers = markerState[playerNumber] || markerState[String(playerNumber)] || {};
+
+        Object.entries(markers).forEach(([markerId, marker]) => {
+            if (!markerDefinitionsById[markerId]) return;
+
+            normalized[playerNumber][markerId] = {
+                value: Math.max(0, Number(marker?.value) || 0),
+                placement: playerMarkers[playerNumber]?.[markerId]?.placement === "floating"
+                    ? "floating"
+                    : "sidebar"
+            };
+        });
+    });
+
+    return normalized;
+}
+
+function applyRoomMarkerState(markerState = {}) {
+    const normalized = normalizeRoomMarkerState(markerState);
+
+    [1, 2].forEach(playerNumber => {
+        playerMarkers[playerNumber] = normalized[playerNumber];
+    });
+
+    currentRoomMarkerState = normalized;
+    savePlayerMarkers();
+    renderAllMarkerPanels();
+}
+
 function emitMarkerUpdate(playerNumber, markerId, action, amount = 0) {
     const marker = playerMarkers[playerNumber]?.[markerId] || null;
 
@@ -1719,8 +1754,17 @@ function renderMarkerPanel(playerNumber) {
 
     root.innerHTML = "";
 
-    if (!isMarkerUiVisible()) return;
-    if (selectedRole === "player" && myPlayerNumber && Number(playerNumber) !== Number(myPlayerNumber)) return;
+    if (selectedRole === "camera") return;
+
+    const isOwnPanel =
+        selectedRole === "player" &&
+        myPlayerNumber &&
+        Number(playerNumber) === Number(myPlayerNumber);
+
+    if (!isOwnPanel) {
+        renderReadOnlyMarkerPanel(root, playerNumber);
+        return;
+    }
 
     const wrapper = document.createElement("div");
     wrapper.className = "marker-manager";
@@ -1751,6 +1795,38 @@ function renderMarkerPanel(playerNumber) {
         wrapper.appendChild(createMarkerPicker(playerNumber));
     }
 
+    root.appendChild(wrapper);
+}
+
+function renderReadOnlyMarkerPanel(root, playerNumber) {
+    const markers = getActiveMarkers(playerNumber);
+
+    if (!markers.length) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "readonly-marker-summary";
+
+    const title = document.createElement("div");
+    title.className = "readonly-marker-title";
+    title.innerText = selectedRole === "player"
+        ? "Marcadores ativos do oponente"
+        : "Marcadores ativos";
+    wrapper.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "readonly-marker-list";
+
+    markers.forEach(marker => {
+        const item = document.createElement("div");
+        item.className = "readonly-marker-item";
+        item.innerHTML = `
+            <span>${marker.icon} ${marker.label}</span>
+            <strong>${marker.value}</strong>
+        `;
+        list.appendChild(item);
+    });
+
+    wrapper.appendChild(list);
     root.appendChild(wrapper);
 }
 

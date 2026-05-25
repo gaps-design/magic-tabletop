@@ -332,7 +332,8 @@ function resetPublicRoomIfEmpty(roomId) {
       format: isResenhaRoom(roomId) ? "Mesa da Resenha" : "",
       timer: createDefaultTimer(),
       diceRolls: [],
-      micStatus: {}
+      micStatus: {},
+      markerState: { 1: {}, 2: {} }
     };
   } else {
     delete rooms[roomId];
