@@ -117,6 +117,8 @@ let cleanModeEnabled = false;
 let cleanHudHidden = false;
 let currentLifeHistory = [];
 let localOpponentLifeHistory = [];
+let lastRoomToastKey = "";
+let lastRoomToastAt = 0;
 const CHAT_HISTORY_LIMIT = 80;
 const MATCH_EVENTS_LIMIT = 60;
 
@@ -2479,6 +2481,48 @@ socket.on("chat-message", (data) => {
 
 socket.on("floating-emoji", (data) => {
     spawnFloatingEmoji(data?.message || data?.emoji);
+});
+
+function showRoomToast(message) {
+    const text = String(message || "").trim();
+    if (!text) return;
+
+    const container = document.getElementById("roomToastContainer");
+    if (!container) return;
+
+    const toast = document.createElement("div");
+    toast.className = "room-toast";
+    toast.innerText = text;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.remove();
+    }, 2100);
+}
+
+socket.on("room-join-toast", ({ name, role, playerNumber }) => {
+    const now = Date.now();
+    const key = `${name || ""}-${role || ""}-${playerNumber || ""}`;
+
+    if (key === lastRoomToastKey && now - lastRoomToastAt < 2500) return;
+
+    lastRoomToastKey = key;
+    lastRoomToastAt = now;
+
+    let label = "";
+
+    if (role === "player") {
+        label = `Jogador ${playerNumber || ""}`.trim();
+    } else if (role === "spectator") {
+        label = "Espectador";
+    } else if (role === "camera") {
+        label = "Câmera auxiliar";
+    }
+
+    if (!label) return;
+
+    showRoomToast(`${name || "Usuário"} entrou como ${label}`);
 });
 
 socket.on("spectator-joined", ({ name }) => {

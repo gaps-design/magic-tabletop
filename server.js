@@ -564,6 +564,12 @@ function addSpectator(socket, roomId, user, reason = "") {
     photo: profile.photo
   });
 
+  socket.to(roomId).emit("room-join-toast", {
+    name: profile.name,
+    role: "spectator",
+    playerNumber: null
+  });
+
   io.to(roomId).emit("system-event", {
     type: "spectator-joined",
     message: `👁️ ${profile.name} entrou como espectador.`,
@@ -688,6 +694,12 @@ function promoteNextResenhaPlayer(roomId) {
       playerNumber,
       name: next.name,
       photo: next.photo || "/assets/default-avatar.png"
+    });
+
+    nextSocket.to(roomId).emit("room-join-toast", {
+      name: next.name,
+      role: "player",
+      playerNumber
     });
   }
 }
@@ -1089,6 +1101,12 @@ io.on("connection", (socket) => {
       playerNumber,
       name,
       photo: user.photo
+    });
+
+    socket.to(roomId).emit("room-join-toast", {
+      name,
+      role: "player",
+      playerNumber
     });
 
     sendRoomState(roomId);
