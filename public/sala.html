@@ -475,8 +475,20 @@
     </div>
 
     <div class="layout-buttons">
+        <button id="cleanModeBtn">Clean</button>
         <button id="dualViewBtn">Dual View</button>
         <button id="focusViewBtn">Focus Mode</button>
+    </div>
+
+    <div id="cleanExitBar" class="clean-exit-bar" aria-label="Menu do modo clean">
+        <button id="cleanMenuTab" class="clean-menu-tab" type="button">⚙️ Menu</button>
+        <div class="clean-menu-actions">
+            <button id="cleanExitBtn" type="button">↩ Voltar ao modo normal</button>
+            <button id="cleanFocusBtn" type="button">🎯 Focus</button>
+            <button id="cleanDualBtn" type="button">🖥️ Dual View</button>
+            <button id="cleanCopyRoomBtn" type="button">🔗 Copiar link da sala</button>
+            <button id="cleanLeaveRoomBtn" type="button">🚪 Sair da sala</button>
+        </div>
     </div>
 
     <button id="bottomToggleBtn" class="bottom-toggle" onclick="toggleBottomBar()">⌄</button>
@@ -510,6 +522,7 @@
 
         <div class="main-controls">
             <button id="fullscreenBtn">⛶ Tela cheia</button>
+            <button id="cleanModeBtnBottom">Clean</button>
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
             <button onclick="copyCameraLink()">📷 Celular como câmera</button>
             <button id="toggleChatBtn">💬 Chat</button>

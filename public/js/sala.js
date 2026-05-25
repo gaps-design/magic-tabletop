@@ -60,6 +60,15 @@ const roomUsersList = document.getElementById("roomUsersList");
 const dualViewBtn = document.getElementById("dualViewBtn");
 const focusViewBtn = document.getElementById("focusViewBtn");
 const dualViewBtnBottom = document.getElementById("dualViewBtnBottom");
+const cleanModeBtn = document.getElementById("cleanModeBtn");
+const cleanModeBtnBottom = document.getElementById("cleanModeBtnBottom");
+const cleanExitBar = document.getElementById("cleanExitBar");
+const cleanMenuTab = document.getElementById("cleanMenuTab");
+const cleanExitBtn = document.getElementById("cleanExitBtn");
+const cleanFocusBtn = document.getElementById("cleanFocusBtn");
+const cleanDualBtn = document.getElementById("cleanDualBtn");
+const cleanCopyRoomBtn = document.getElementById("cleanCopyRoomBtn");
+const cleanLeaveRoomBtn = document.getElementById("cleanLeaveRoomBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 const toggleChatBtn = document.getElementById("toggleChatBtn");
@@ -104,6 +113,8 @@ let googleRoomProfile = null;
 
 let chatMessagesSent = 0;
 let chatCooldown = false;
+let cleanModeEnabled = false;
+let cleanHudHidden = false;
 const CHAT_HISTORY_LIMIT = 80;
 const MATCH_EVENTS_LIMIT = 60;
 
@@ -1422,24 +1433,154 @@ document.querySelectorAll(".rotate-btn").forEach(btn => {
     });
 });
 
+function isTypingInEditableField() {
+    const activeElement = document.activeElement;
+    const tag = activeElement?.tagName;
+
+    return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        activeElement?.isContentEditable ||
+        !!activeElement?.closest?.("#chatContainer, #spectatorBottomArea, #tableNotesPanel")
+    );
+}
+
+function isEntryModalVisible() {
+    if (!entryModal) return false;
+    if (entryModal.classList.contains("hidden")) return false;
+    return window.getComputedStyle(entryModal).display !== "none";
+}
+
+function enableDualView() {
+    if (selectedRole === "camera") return;
+
+    document.body.classList.remove("focus-mode");
+
+    if (selectedRole === "spectator" && typeof window.setSpectatorFocus === "function") {
+        window.setSpectatorFocus("both");
+    }
+}
+
+function enableFocusMode() {
+    if (selectedRole === "camera") return;
+
+    if (selectedRole === "spectator") {
+        if (typeof window.setSpectatorFocus === "function") {
+            window.setSpectatorFocus("p1");
+        }
+        return;
+    }
+
+    document.body.classList.add("focus-mode");
+}
+
+function restoreDefaultLayout() {
+    enableDualView();
+}
+
+function updateCleanControls() {
+    cleanModeBtn?.classList.toggle("active", cleanModeEnabled);
+    cleanModeBtnBottom?.classList.toggle("active", cleanModeEnabled);
+    cleanExitBar?.classList.toggle("expanded", false);
+}
+
+function enableCleanMode() {
+    cleanModeEnabled = true;
+    cleanHudHidden = false;
+    document.body.classList.add("clean-mode");
+    document.body.classList.remove("clean-hud-hidden");
+    updateCleanControls();
+}
+
+function disableCleanMode() {
+    cleanModeEnabled = false;
+    cleanHudHidden = false;
+    document.body.classList.remove("clean-mode", "clean-hud-hidden");
+    updateCleanControls();
+}
+
+function toggleCleanMode() {
+    if (cleanModeEnabled) {
+        disableCleanMode();
+        return;
+    }
+
+    enableCleanMode();
+}
+
+function toggleCleanHud() {
+    if (!cleanModeEnabled) return;
+
+    cleanHudHidden = !cleanHudHidden;
+    document.body.classList.toggle("clean-hud-hidden", cleanHudHidden);
+}
+
+window.toggleCleanMode = toggleCleanMode;
+window.enableCleanMode = enableCleanMode;
+window.disableCleanMode = disableCleanMode;
+window.toggleCleanHud = toggleCleanHud;
+window.restoreDefaultLayout = restoreDefaultLayout;
+
+if (cleanModeBtn) {
+    cleanModeBtn.addEventListener("click", toggleCleanMode);
+}
+
+if (cleanModeBtnBottom) {
+    cleanModeBtnBottom.addEventListener("click", toggleCleanMode);
+}
+
+if (cleanMenuTab) {
+    cleanMenuTab.addEventListener("click", () => {
+        cleanExitBar?.classList.toggle("expanded");
+    });
+}
+
+if (cleanExitBtn) {
+    cleanExitBtn.addEventListener("click", () => {
+        disableCleanMode();
+        restoreDefaultLayout();
+    });
+}
+
+if (cleanFocusBtn) {
+    cleanFocusBtn.addEventListener("click", enableFocusMode);
+}
+
+if (cleanDualBtn) {
+    cleanDualBtn.addEventListener("click", enableDualView);
+}
+
+if (cleanCopyRoomBtn) {
+    cleanCopyRoomBtn.addEventListener("click", () => {
+        copyRoomBtn?.click();
+    });
+}
+
+if (cleanLeaveRoomBtn) {
+    cleanLeaveRoomBtn.addEventListener("click", () => {
+        window.leaveRoom?.();
+    });
+}
+
 if (dualViewBtn) {
     dualViewBtn.addEventListener("click", () => {
         if (selectedRole === "spectator") return;
-        document.body.classList.remove("focus-mode");
+        enableDualView();
     });
 }
 
 if (dualViewBtnBottom) {
     dualViewBtnBottom.addEventListener("click", () => {
         if (selectedRole === "spectator") return;
-        document.body.classList.remove("focus-mode");
+        enableDualView();
     });
 }
 
 if (focusViewBtn) {
     focusViewBtn.addEventListener("click", () => {
         if (selectedRole === "spectator") return;
-        document.body.classList.add("focus-mode");
+        enableFocusMode();
     });
 }
 
@@ -1448,6 +1589,46 @@ if (fullscreenBtn) {
         document.documentElement.requestFullscreen();
     });
 }
+
+document.addEventListener("keydown", (event) => {
+    if (isEntryModalVisible()) return;
+    if (isTypingInEditableField()) return;
+
+    if (event.altKey && event.code === "KeyC") {
+        event.preventDefault();
+        toggleCleanMode();
+        console.log("[UI] Clean mode toggled");
+        return;
+    }
+
+    if (event.altKey && event.code === "KeyF") {
+        event.preventDefault();
+        enableFocusMode();
+        console.log("[UI] Focus mode enabled");
+        return;
+    }
+
+    if (event.altKey && event.code === "KeyD") {
+        event.preventDefault();
+        enableDualView();
+        console.log("[UI] Dual view enabled");
+        return;
+    }
+
+    if (event.altKey && event.code === "KeyH") {
+        event.preventDefault();
+        toggleCleanHud();
+        console.log("[UI] Clean HUD toggled");
+        return;
+    }
+
+    if (event.code === "Escape" && cleanModeEnabled) {
+        event.preventDefault();
+        disableCleanMode();
+        restoreDefaultLayout();
+        console.log("[UI] Layout restored");
+    }
+});
 
 /* =========================
    TIMER

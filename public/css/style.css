@@ -1155,6 +1155,123 @@ body.focus-mode.player-two-active .camera-player-1{
     width:100%;
 }
 
+/* CLEAN MODE */
+
+.clean-exit-bar{
+    display:none;
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    z-index:9999;
+    align-items:flex-end;
+    gap:8px;
+    font-weight:800;
+}
+
+.clean-menu-tab,
+.clean-menu-actions button{
+    border:1px solid rgba(255,255,255,0.14);
+    background:rgba(6,16,29,0.88);
+    color:#fff;
+    box-shadow:0 10px 28px rgba(0,0,0,0.35);
+    backdrop-filter:blur(10px);
+}
+
+.clean-menu-tab{
+    padding:10px 12px;
+    border-radius:8px;
+}
+
+.clean-menu-actions{
+    display:none;
+    flex-direction:column;
+    gap:6px;
+    min-width:220px;
+}
+
+.clean-menu-actions button{
+    width:100%;
+    padding:10px 12px;
+    border-radius:8px;
+    text-align:left;
+}
+
+.clean-exit-bar:hover .clean-menu-actions,
+.clean-exit-bar.expanded .clean-menu-actions{
+    display:flex;
+}
+
+body.clean-mode .topbar,
+body.clean-mode .bottom-bar,
+body.clean-mode .bottom-toggle,
+body.clean-mode .chat-container,
+body.clean-mode .player-panel,
+body.clean-mode .layout-buttons,
+body.clean-mode .marker-bar,
+body.clean-mode .floating-markers-root,
+body.clean-mode .table-notes-panel,
+body.clean-mode .dice-overlay,
+body.clean-mode .room-users-panel,
+body.clean-mode .spectator-bottom-area,
+body.clean-mode .camera-title,
+body.clean-mode .camera-status,
+body.clean-mode .rotate-btn,
+body.clean-mode .muted-icon{
+    display:none !important;
+}
+
+body.clean-mode{
+    overflow:hidden;
+    background:#000;
+}
+
+body.clean-mode .game-layout{
+    display:block;
+    height:100vh;
+    width:100vw;
+    max-width:100vw;
+    margin:0;
+    padding:0;
+}
+
+body.clean-mode .video-area{
+    height:100vh;
+    width:100vw;
+    max-width:100vw;
+    margin:0;
+    padding:0;
+    gap:0;
+}
+
+body.clean-mode .camera-card{
+    height:100%;
+    border:none;
+    border-radius:0;
+    padding:0;
+    background:#000;
+}
+
+body.clean-mode video{
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+}
+
+body.clean-mode .clean-exit-bar{
+    display:flex;
+}
+
+body.clean-mode.clean-hud-hidden .clean-exit-bar{
+    display:none;
+}
+
+body.clean-mode .layout-buttons button.active,
+.layout-buttons button.active,
+.main-controls button.active{
+    border-color:#45c8ff;
+    color:#7dd3fc;
+}
+
 /* BARRA INFERIOR */
 
 .bottom-toggle{
