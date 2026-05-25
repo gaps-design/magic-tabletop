@@ -28,6 +28,10 @@ const peerInfo = {};
 const remoteStreams = {};
 const pendingCandidates = {};
 const reconnectAttempts = {};
+const reconnectTimers = {};
+const makingOffer = {};
+
+const RTC_DEBUG = true;
 
 const servers = {
     iceServers: [
@@ -219,6 +223,11 @@ async function startWebcam(
     cameraId = selectedCameraId,
     microphoneId = selectedMicrophoneId
 ) {
+    rtcLog(null, "starting local media", {
+        hasSavedCamera: !!cameraId,
+        hasSavedMicrophone: !!microphoneId
+    });
+
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
@@ -241,6 +250,7 @@ async function startWebcam(
             localVideo.srcObject = null;
         }
 
+        rtcLog(null, "local media unavailable");
         await getDevices();
         updateMediaStatus();
         return;
@@ -260,6 +270,16 @@ async function startWebcam(
 
     const videoTrack = localStream.getVideoTracks()[0];
     const audioTrack = localStream.getAudioTracks()[0];
+
+    rtcLog(null, "local media ready", {
+        tracks: localStream.getTracks().map(track => ({
+            id: track.id,
+            kind: track.kind,
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState
+        }))
+    });
 
     if (videoTrack) {
         const settings = videoTrack.getSettings();
@@ -431,12 +451,48 @@ function setVideoStream(videoElement, stream, muted = false) {
     if (!videoElement || !stream) return;
 
     if (videoElement.srcObject !== stream) {
+        rtcLog(null, "attaching stream to video element", {
+            videoId: videoElement.id,
+            muted,
+            streamId: stream.id,
+            tracks: stream.getTracks().map(track => ({
+                id: track.id,
+                kind: track.kind,
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            }))
+        });
+
         videoElement.srcObject = stream;
     }
 
     videoElement.muted = muted;
     videoElement.playsInline = true;
-    videoElement.play().catch(() => {});
+    videoElement.autoplay = true;
+
+    const playPromise = videoElement.play();
+
+    if (playPromise?.catch) {
+        playPromise.catch(error => {
+            rtcLog(null, "video autoplay blocked or delayed", {
+                videoId: videoElement.id,
+                muted,
+                errorName: error?.name,
+                errorMessage: error?.message
+            });
+        });
+    }
+
+    videoElement.onloadedmetadata = () => {
+        videoElement.play().catch(error => {
+            rtcLog(null, "video play after metadata failed", {
+                videoId: videoElement.id,
+                errorName: error?.name,
+                errorMessage: error?.message
+            });
+        });
+    };
 }
 
 function clearVideoIfStream(videoElement, stream) {
@@ -485,6 +541,20 @@ function routeStream(socketId, stream) {
         Number(info.playerNumber) === Number(myPlayerNumberRTC);
 
     if (isLocalPlayerStream) return;
+
+    rtcLog(socketId, "routing remote stream", {
+        currentRole,
+        remoteRole: info.role,
+        playerNumber: info.playerNumber,
+        linkedPlayer: info.linkedPlayer,
+        streamId: stream.id,
+        tracks: stream.getTracks().map(track => ({
+            kind: track.kind,
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState
+        }))
+    });
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
@@ -555,25 +625,59 @@ function createPeerConnection(targetId) {
 
     const peer = new RTCPeerConnection(servers);
     peerConnections[targetId] = peer;
+    rtcLog(targetId, "peer created", {
+        iceServers: servers.iceServers.map(server => server.urls)
+    });
 
     if (localStream) {
         localStream.getTracks().forEach(track => {
             peer.addTrack(track, localStream);
+            rtcLog(targetId, "local track added", {
+                kind: track.kind,
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            });
         });
     } else {
         peer.addTransceiver("video", { direction: "recvonly" });
         peer.addTransceiver("audio", { direction: "recvonly" });
+        rtcLog(targetId, "recvonly transceivers added");
     }
 
     peer.ontrack = (event) => {
         let stream = event.streams[0];
+
+        rtcLog(targetId, "remote track received", {
+            kind: event.track?.kind,
+            muted: event.track?.muted,
+            readyState: event.track?.readyState,
+            streamId: stream?.id,
+            streamTrackCount: stream?.getTracks?.().length || 0
+        });
+
+        event.track.onunmute = () => {
+            rtcLog(targetId, "remote track unmuted", {
+                kind: event.track.kind,
+                readyState: event.track.readyState
+            });
+            routeStream(targetId, remoteStreams[targetId] || stream);
+        };
+
+        event.track.onended = () => {
+            rtcLog(targetId, "remote track ended", {
+                kind: event.track.kind
+            });
+        };
 
         if (!stream) {
             if (!remoteStreams[targetId]) {
                 remoteStreams[targetId] = new MediaStream();
             }
 
-            remoteStreams[targetId].addTrack(event.track);
+            if (!remoteStreams[targetId].getTracks().some(track => track.id === event.track.id)) {
+                remoteStreams[targetId].addTrack(event.track);
+            }
             stream = remoteStreams[targetId];
         } else {
             remoteStreams[targetId] = stream;
@@ -588,24 +692,53 @@ function createPeerConnection(targetId) {
 
     peer.onicecandidate = (event) => {
         if (event.candidate) {
+            rtcLog(targetId, "sending ICE candidate", summarizeCandidate(event.candidate));
             socket.emit("ice-candidate", {
                 target: targetId,
                 candidate: event.candidate
             });
+        } else {
+            rtcLog(targetId, "ICE gathering complete");
         }
     };
 
+    peer.oniceconnectionstatechange = () => {
+        rtcLog(targetId, "ice connection state changed", {
+            iceConnectionState: peer.iceConnectionState,
+            iceGatheringState: peer.iceGatheringState,
+            signalingState: peer.signalingState
+        });
+    };
+
+    peer.onicegatheringstatechange = () => {
+        rtcLog(targetId, "ice gathering state changed", {
+            iceGatheringState: peer.iceGatheringState
+        });
+    };
+
+    peer.onsignalingstatechange = () => {
+        rtcLog(targetId, "signaling state changed", {
+            signalingState: peer.signalingState
+        });
+    };
+
     peer.onconnectionstatechange = () => {
+        rtcLog(targetId, "connection state changed", {
+            connectionState: peer.connectionState
+        });
+
         if (peer.connectionState === "connected") {
             reconnectAttempts[targetId] = 0;
             routeAllStreams();
+            logSelectedCandidatePair(targetId, peer);
         }
 
-        if (
-            peer.connectionState === "failed" ||
-            peer.connectionState === "disconnected"
-        ) {
+        if (peer.connectionState === "failed") {
             schedulePeerReconnect(targetId);
+        }
+
+        if (peer.connectionState === "disconnected") {
+            schedulePeerReconnect(targetId, 5000);
         }
 
         if (peer.connectionState === "closed") {
@@ -616,14 +749,21 @@ function createPeerConnection(targetId) {
     return peer;
 }
 
-function schedulePeerReconnect(targetId) {
+function schedulePeerReconnect(targetId, baseDelay = 1200) {
     const info = peerInfo[targetId];
     if (!info || !currentRoomId) return;
+    if (reconnectTimers[targetId]) return;
 
     reconnectAttempts[targetId] = (reconnectAttempts[targetId] || 0) + 1;
     if (reconnectAttempts[targetId] > 3) return;
 
-    setTimeout(async () => {
+    rtcLog(targetId, "scheduling peer reconnect", {
+        attempt: reconnectAttempts[targetId],
+        baseDelay
+    });
+
+    reconnectTimers[targetId] = setTimeout(async () => {
+        delete reconnectTimers[targetId];
         if (!peerInfo[targetId]) return;
 
         cleanupPeer(targetId);
@@ -637,7 +777,7 @@ function schedulePeerReconnect(targetId) {
         } catch (error) {
             console.warn("Falha ao renegociar WebRTC:", error);
         }
-    }, 1200 * reconnectAttempts[targetId]);
+    }, baseDelay * reconnectAttempts[targetId]);
 }
 
 function cleanupPeer(socketId) {
@@ -646,6 +786,12 @@ function cleanupPeer(socketId) {
     const peerConnection = peerConnections[socketId];
 
     delete peerConnections[socketId];
+    delete makingOffer[socketId];
+
+    if (reconnectTimers[socketId]) {
+        clearTimeout(reconnectTimers[socketId]);
+        delete reconnectTimers[socketId];
+    }
 
     if (peerConnection) {
         peerConnection.close();
@@ -705,6 +851,15 @@ window.shutdownRoomConnection = function() {
         delete reconnectAttempts[socketId];
     });
 
+    Object.keys(reconnectTimers).forEach(socketId => {
+        clearTimeout(reconnectTimers[socketId]);
+        delete reconnectTimers[socketId];
+    });
+
+    Object.keys(makingOffer).forEach(socketId => {
+        delete makingOffer[socketId];
+    });
+
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
@@ -714,23 +869,157 @@ window.shutdownRoomConnection = function() {
     if (remoteVideo) remoteVideo.srcObject = null;
 };
 
+function rtcLog(targetId, message, details = {}) {
+    if (!RTC_DEBUG) return;
+
+    console.log(`[RTC${targetId ? `:${targetId}` : ""}] ${message}`, {
+        socketId: socket.id,
+        roomId: currentRoomId,
+        role: currentRole,
+        ...details
+    });
+}
+
+function peerSnapshot(peer) {
+    if (!peer) return {};
+
+    return {
+        signalingState: peer.signalingState,
+        iceConnectionState: peer.iceConnectionState,
+        iceGatheringState: peer.iceGatheringState,
+        connectionState: peer.connectionState
+    };
+}
+
+function describeDescription(description) {
+    return {
+        type: description?.type,
+        hasSdp: !!description?.sdp,
+        sdpLength: description?.sdp?.length || 0
+    };
+}
+
+async function setLoggedLocalDescription(targetId, peer, description, reason) {
+    rtcLog(targetId, "setLocalDescription start", {
+        reason,
+        description: describeDescription(description),
+        before: peerSnapshot(peer)
+    });
+
+    await peer.setLocalDescription(description);
+
+    rtcLog(targetId, "setLocalDescription done", {
+        reason,
+        localDescription: describeDescription(peer.localDescription),
+        after: peerSnapshot(peer)
+    });
+}
+
+async function setLoggedRemoteDescription(targetId, peer, description, reason) {
+    rtcLog(targetId, "setRemoteDescription start", {
+        reason,
+        description: describeDescription(description),
+        before: peerSnapshot(peer)
+    });
+
+    await peer.setRemoteDescription(description);
+
+    rtcLog(targetId, "setRemoteDescription done", {
+        reason,
+        remoteDescription: describeDescription(peer.remoteDescription),
+        after: peerSnapshot(peer)
+    });
+}
+
+function summarizeCandidate(candidate) {
+    const raw = candidate?.candidate || "";
+
+    return {
+        type: candidate?.type || raw.match(/ typ (\w+)/)?.[1] || "unknown",
+        protocol: candidate?.protocol || raw.match(/ (udp|tcp) /i)?.[1] || "unknown",
+        address: candidate?.address || candidate?.ip || raw.match(/candidate:\S+ \d+ \S+ \d+ ([^\s]+)/)?.[1] || "",
+        port: candidate?.port || raw.match(/candidate:\S+ \d+ \S+ \d+ [^\s]+ (\d+)/)?.[1] || ""
+    };
+}
+
+function isPolitePeer(targetId) {
+    if (!socket.id || !targetId) return true;
+    return socket.id.localeCompare(targetId) > 0;
+}
+
+async function logSelectedCandidatePair(targetId, peer) {
+    try {
+        const stats = await peer.getStats();
+        let selectedPair = null;
+
+        stats.forEach(report => {
+            if (report.type === "transport" && report.selectedCandidatePairId) {
+                selectedPair = stats.get(report.selectedCandidatePairId);
+            }
+
+            if (report.type === "candidate-pair" && report.selected) {
+                selectedPair = report;
+            }
+        });
+
+        if (!selectedPair) return;
+
+        const local = stats.get(selectedPair.localCandidateId);
+        const remote = stats.get(selectedPair.remoteCandidateId);
+
+        rtcLog(targetId, "selected ICE candidate pair", {
+            localType: local?.candidateType,
+            localProtocol: local?.protocol,
+            localAddress: local?.address || local?.ip,
+            localPort: local?.port,
+            remoteType: remote?.candidateType,
+            remoteProtocol: remote?.protocol,
+            remoteAddress: remote?.address || remote?.ip,
+            remotePort: remote?.port
+        });
+    } catch (error) {
+        rtcLog(targetId, "failed to read ICE stats", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        });
+    }
+}
+
 async function createOffer(targetId, data = {}) {
     savePeerInfo(targetId, data);
 
     const peer = createPeerConnection(targetId);
 
-    if (peer.signalingState !== "stable") {
+    if (makingOffer[targetId] || peer.signalingState !== "stable") {
+        rtcLog(targetId, "offer skipped", {
+            makingOffer: !!makingOffer[targetId],
+            signalingState: peer.signalingState
+        });
         return;
     }
 
-    const offer = await peer.createOffer();
+    try {
+        makingOffer[targetId] = true;
+        rtcLog(targetId, "creating offer");
 
-    await peer.setLocalDescription(offer);
+        const offer = await peer.createOffer();
+        rtcLog(targetId, "createOffer done", {
+            offer: describeDescription(offer),
+            peer: peerSnapshot(peer)
+        });
 
-    socket.emit("offer", {
-        target: targetId,
-        offer
-    });
+        await setLoggedLocalDescription(targetId, peer, offer, "local-offer");
+        rtcLog(targetId, "sending offer", {
+            signalingState: peer.signalingState
+        });
+
+        socket.emit("offer", {
+            target: targetId,
+            offer
+        });
+    } finally {
+        makingOffer[targetId] = false;
+    }
 }
 
 async function flushPendingCandidates(sender) {
@@ -741,6 +1030,7 @@ async function flushPendingCandidates(sender) {
 
     for (const candidate of pendingCandidates[sender]) {
         try {
+            rtcLog(sender, "adding pending ICE candidate", summarizeCandidate(candidate));
             await peer.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
             console.error("Erro ICE pendente:", err);
@@ -838,6 +1128,13 @@ socket.on("assigned-role", async (data) => {
 });
 
 socket.on("connect", async () => {
+    rtcLog(null, "socket connected", {
+        socketId: socket.id,
+        recovered: socket.recovered,
+        hasLastJoinPayload: !!lastJoinPayload,
+        peerCount: Object.keys(peerConnections).length
+    });
+
     if (!allowRoomReconnect) return;
     if (!lastJoinPayload || !currentRoomId) return;
 
@@ -853,6 +1150,49 @@ socket.on("connect", async () => {
     } catch (error) {
         console.warn("Falha ao restaurar sala após reconexão:", error);
     }
+});
+
+socket.on("disconnect", (reason) => {
+    rtcLog(null, "socket disconnected", {
+        reason,
+        peerCount: Object.keys(peerConnections).length,
+        peers: Object.keys(peerConnections)
+    });
+});
+
+socket.on("connect_error", (error) => {
+    rtcLog(null, "socket connect error", {
+        errorMessage: error?.message,
+        errorDescription: error?.description,
+        errorContext: error?.context
+    });
+});
+
+socket.io?.on?.("reconnect_attempt", (attempt) => {
+    rtcLog(null, "socket reconnect attempt", {
+        attempt,
+        peerCount: Object.keys(peerConnections).length
+    });
+});
+
+socket.io?.on?.("reconnect", (attempt) => {
+    rtcLog(null, "socket reconnected", {
+        attempt,
+        socketId: socket.id,
+        peerCount: Object.keys(peerConnections).length
+    });
+});
+
+socket.io?.on?.("reconnect_error", (error) => {
+    rtcLog(null, "socket reconnect error", {
+        errorMessage: error?.message
+    });
+});
+
+socket.io?.on?.("reconnect_failed", () => {
+    rtcLog(null, "socket reconnect failed", {
+        peerCount: Object.keys(peerConnections).length
+    });
 });
 
 socket.on("existing-peers", async ({ peers }) => {
@@ -884,44 +1224,91 @@ socket.on("user-connected", (data) => {
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
     if (!sender || !offer) return;
 
-    if (senderInfo) {
-        savePeerInfo(sender, senderInfo);
+    try {
+        if (senderInfo) {
+            savePeerInfo(sender, senderInfo);
+        }
+
+        let peer = peerConnections[sender];
+
+        if (!peer) {
+            peer = createPeerConnection(sender);
+        }
+
+        const offerCollision = makingOffer[sender] || peer.signalingState !== "stable";
+        const polite = isPolitePeer(sender);
+
+        rtcLog(sender, "offer received", {
+            offerCollision,
+            polite,
+            signalingState: peer.signalingState
+        });
+
+        if (offerCollision && !polite) {
+            rtcLog(sender, "offer ignored due to collision");
+            return;
+        }
+
+        if (offerCollision) {
+            await setLoggedLocalDescription(sender, peer, { type: "rollback" }, "rollback-after-offer-collision");
+            rtcLog(sender, "local offer rolled back");
+        }
+
+        await setLoggedRemoteDescription(sender, peer, new RTCSessionDescription(offer), "remote-offer");
+        rtcLog(sender, "remote offer applied");
+
+        rtcLog(sender, "creating answer", {
+            peer: peerSnapshot(peer)
+        });
+        const answer = await peer.createAnswer();
+        rtcLog(sender, "createAnswer done", {
+            answer: describeDescription(answer),
+            peer: peerSnapshot(peer)
+        });
+
+        await setLoggedLocalDescription(sender, peer, answer, "local-answer");
+        rtcLog(sender, "sending answer", {
+            signalingState: peer.signalingState
+        });
+
+        socket.emit("answer", {
+            target: sender,
+            answer
+        });
+
+        await flushPendingCandidates(sender);
+    } catch (error) {
+        console.error("Erro ao processar offer WebRTC:", error);
+        rtcLog(sender, "offer handling failed", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        });
     }
-
-    let peer = peerConnections[sender];
-
-    if (!peer) {
-        peer = createPeerConnection(sender);
-    }
-
-    if (peer.signalingState !== "stable") {
-        peer.close();
-        delete peerConnections[sender];
-        peer = createPeerConnection(sender);
-    }
-
-    await peer.setRemoteDescription(new RTCSessionDescription(offer));
-
-    const answer = await peer.createAnswer();
-
-    await peer.setLocalDescription(answer);
-
-    socket.emit("answer", {
-        target: sender,
-        answer
-    });
-
-    await flushPendingCandidates(sender);
 });
 
 socket.on("answer", async ({ answer, sender }) => {
     const peer = peerConnections[sender];
 
     if (!peer || !answer) return;
-    if (peer.signalingState === "stable") return;
+    if (peer.signalingState === "stable") {
+        rtcLog(sender, "answer ignored because signaling is already stable");
+        return;
+    }
 
-    await peer.setRemoteDescription(new RTCSessionDescription(answer));
-    await flushPendingCandidates(sender);
+    try {
+        rtcLog(sender, "answer received", {
+            signalingState: peer.signalingState
+        });
+        await setLoggedRemoteDescription(sender, peer, new RTCSessionDescription(answer), "remote-answer");
+        rtcLog(sender, "remote answer applied");
+        await flushPendingCandidates(sender);
+    } catch (error) {
+        console.error("Erro ao processar answer WebRTC:", error);
+        rtcLog(sender, "answer handling failed", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        });
+    }
 });
 
 socket.on("ice-candidate", async ({ candidate, sender }) => {
@@ -935,13 +1322,20 @@ socket.on("ice-candidate", async ({ candidate, sender }) => {
         }
 
         pendingCandidates[sender].push(candidate);
+        rtcLog(sender, "ICE candidate queued", summarizeCandidate(candidate));
         return;
     }
 
     try {
+        rtcLog(sender, "adding ICE candidate", summarizeCandidate(candidate));
         await peer.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
         console.error("Erro ICE:", err);
+        rtcLog(sender, "ICE candidate failed", {
+            ...summarizeCandidate(candidate),
+            errorName: err?.name,
+            errorMessage: err?.message
+        });
     }
 });
 
