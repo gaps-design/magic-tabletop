@@ -254,12 +254,7 @@
 
             <div class="player-history-box">
                 <button onclick="togglePlayerHistory(1)" class="history-small-btn">Histórico</button>
-                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
                 <button onclick="toggleNotesPanel()" class="notes-small-btn">Notas</button>
-
-                <div id="lifeHistoryPanel1" class="player-life-history hidden">
-                    <div id="lifeHistoryList1"></div>
-                </div>
             </div>
 
             <div class="dynamic-marker-area" data-player-marker-area="1"></div>
@@ -393,12 +388,7 @@
 
             <div class="player-history-box">
                 <button onclick="togglePlayerHistory(2)" class="history-small-btn">Histórico</button>
-                <button onclick="clearLifeHistory()" class="history-clear-small">Limpar</button>
                 <button onclick="toggleNotesPanel()" class="notes-small-btn">Notas</button>
-
-                <div id="lifeHistoryPanel2" class="player-life-history hidden">
-                    <div id="lifeHistoryList2"></div>
-                </div>
             </div>
 
             <div class="dynamic-marker-area" data-player-marker-area="2"></div>
@@ -574,6 +564,32 @@
     </div>
 
     <textarea id="tableNotesInput" placeholder="Anotações da partida..."></textarea>
+</div>
+<div id="lifeHistoryFloatingPanel" class="life-history-floating-panel hidden">
+    <div class="notes-header">
+        <strong>Histórico de Vida</strong>
+        <div class="life-history-header-actions">
+            <button type="button" onclick="clearLifeHistory()">Limpar</button>
+            <button type="button" onclick="closeLifeHistoryPanel()">×</button>
+        </div>
+    </div>
+
+    <div class="life-history-columns">
+        <section class="life-history-column">
+            <h3>Minha vida</h3>
+            <div id="myLifeHistoryList" class="life-history-column-list"></div>
+        </section>
+
+        <section class="life-history-column">
+            <h3>Oponente por mim</h3>
+            <div id="opponentByMeLifeHistoryList" class="life-history-column-list"></div>
+        </section>
+
+        <section class="life-history-column">
+            <h3>Oponente real</h3>
+            <div id="opponentRealLifeHistoryList" class="life-history-column-list"></div>
+        </section>
+    </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 

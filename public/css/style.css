@@ -788,6 +788,20 @@ video{
     overflow:hidden;
 }
 
+.life-history-floating-panel{
+    position:fixed;
+    right:18px;
+    bottom:110px;
+    width:min(820px, calc(100vw - 36px));
+    max-height:min(520px, calc(100vh - 132px));
+    background:rgba(5,10,18,0.97);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:18px;
+    z-index:998;
+    box-shadow:0 0 35px rgba(0,0,0,0.55);
+    overflow:hidden;
+}
+
 .notes-header{
     min-height:54px;
     padding:0 18px;
@@ -806,6 +820,50 @@ video{
     border-radius:50%;
 }
 
+.life-history-header-actions{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.life-history-header-actions button:first-child{
+    width:auto;
+    min-width:64px;
+    padding:0 12px;
+    border-radius:999px;
+    color:#fca5a5;
+}
+
+.life-history-columns{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:12px;
+    padding:14px;
+    max-height:calc(min(520px, calc(100vh - 132px)) - 54px);
+    overflow:auto;
+    background:#071421;
+}
+
+.life-history-column{
+    min-width:0;
+    background:rgba(15,29,49,0.74);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    padding:12px;
+}
+
+.life-history-column h3{
+    margin:0 0 10px;
+    color:#bae6fd;
+    font-size:14px;
+}
+
+.life-history-column-list{
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+}
+
 #tableNotesInput{
     width:100%;
     height:calc(100% - 54px);
@@ -817,6 +875,21 @@ video{
     padding:18px;
     font-size:16px;
     line-height:1.55;
+}
+
+@media(max-width:700px){
+    .life-history-floating-panel{
+        right:12px;
+        left:12px;
+        bottom:86px;
+        width:auto;
+        max-height:calc(100vh - 112px);
+    }
+
+    .life-history-columns{
+        grid-template-columns:1fr;
+        max-height:calc(100vh - 166px);
+    }
 }
 
 /* MARCADORES */
@@ -1092,10 +1165,12 @@ body.spectator-mode .dynamic-marker-area,
 body.spectator-mode .floating-markers-root,
 body.spectator-mode .notes-small-btn,
 body.spectator-mode .table-notes-panel,
+body.spectator-mode .life-history-floating-panel,
 body.camera-mode .dynamic-marker-area,
 body.camera-mode .floating-markers-root,
 body.camera-mode .notes-small-btn,
-body.camera-mode .table-notes-panel{
+body.camera-mode .table-notes-panel,
+body.camera-mode .life-history-floating-panel{
     display:none !important;
 }
 
@@ -1210,6 +1285,7 @@ body.clean-mode .layout-buttons,
 body.clean-mode .marker-bar,
 body.clean-mode .floating-markers-root,
 body.clean-mode .table-notes-panel,
+body.clean-mode .life-history-floating-panel,
 body.clean-mode .dice-overlay,
 body.clean-mode .room-users-panel,
 body.clean-mode .spectator-bottom-area,
@@ -2517,6 +2593,7 @@ body.spectator-mode .opponent-life-wrapper,
 body.spectator-mode .player-history-box,
 body.spectator-mode .notes-small-btn,
 body.spectator-mode .table-notes-panel,
+body.spectator-mode .life-history-floating-panel,
 body.spectator-mode .bottom-bar,
 body.spectator-mode .layout-buttons,
 body.spectator-mode .bottom-toggle{

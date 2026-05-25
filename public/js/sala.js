@@ -115,6 +115,8 @@ let chatMessagesSent = 0;
 let chatCooldown = false;
 let cleanModeEnabled = false;
 let cleanHudHidden = false;
+let currentLifeHistory = [];
+let localOpponentLifeHistory = [];
 const CHAT_HISTORY_LIMIT = 80;
 const MATCH_EVENTS_LIMIT = 60;
 
@@ -917,6 +919,24 @@ function showOpponentLifeDelta(panelPlayerNumber, delta) {
     );
 }
 
+function addLocalOpponentLifeHistory(panelPlayerNumber, oldLife, newLife) {
+    if (selectedRole !== "player") return;
+    if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) return;
+
+    const previous = Number(oldLife);
+    const next = Number(newLife);
+    if (!Number.isFinite(previous) || !Number.isFinite(next)) return;
+    if (previous === next) return;
+
+    localOpponentLifeHistory.push({
+        oldLife: previous,
+        newLife: next,
+        time: new Date().toLocaleTimeString("pt-BR")
+    });
+
+    renderLifeHistoryPanel();
+}
+
 function updateLife(playerNumber, delta) {
     const normalizedPlayer = Number(playerNumber);
     const amount = Number(delta);
@@ -1089,7 +1109,9 @@ window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
     const delta = Number(amount);
     if (!delta) return false;
 
-    box.innerText = current + delta;
+    const next = current + delta;
+    box.innerText = next;
+    addLocalOpponentLifeHistory(panelPlayerNumber, current, next);
     showOpponentLifeDelta(panelPlayerNumber, delta);
     return true;
 };
@@ -1114,7 +1136,9 @@ window.setOpponentLifeLocal = function(panelPlayerNumber) {
         return;
     }
 
+    const current = Number(box.innerText || 20);
     box.innerText = value;
+    addLocalOpponentLifeHistory(panelPlayerNumber, current, value);
     input.value = "";
 };
 
@@ -1142,7 +1166,9 @@ document.querySelectorAll(".opponent-life").forEach(lifeBox => {
             return;
         }
 
+        const currentValue = Number(lifeBox.innerText || 20);
         lifeBox.innerText = newValue;
+        addLocalOpponentLifeHistory(panelPlayerNumber, currentValue, newValue);
     });
 });
 
@@ -1699,25 +1725,22 @@ const processedLifeEvents = new Set();
 window.togglePlayerHistory = function(playerNumber) {
     if (selectedRole === "spectator") return;
 
-    const panel = document.getElementById(`lifeHistoryPanel${playerNumber}`);
+    const panel = document.getElementById("lifeHistoryFloatingPanel");
     if (!panel) return;
 
     panel.classList.toggle("hidden");
+    renderLifeHistoryPanel();
+};
+
+window.closeLifeHistoryPanel = function() {
+    document.getElementById("lifeHistoryFloatingPanel")?.classList.add("hidden");
 };
 
 function renderLifeHistory(history = []) {
-    const list1 = document.getElementById("lifeHistoryList1");
-    const list2 = document.getElementById("lifeHistoryList2");
+    currentLifeHistory = Array.isArray(history) ? history : [];
+    renderLifeHistoryPanel();
 
-    if (!list1 || !list2) return;
-
-    list1.innerHTML = "";
-    list2.innerHTML = "";
-
-    renderPlayerHistory(list1, history.filter(item => Number(item.playerNumber) === 1));
-    renderPlayerHistory(list2, history.filter(item => Number(item.playerNumber) === 2));
-
-    history.forEach(item => {
+    currentLifeHistory.forEach(item => {
         const key = `${item.playerNumber}-${item.oldLife}-${item.newLife}-${item.time}-${item.change}`;
 
         if (processedLifeEvents.has(key)) return;
@@ -1743,21 +1766,57 @@ function renderLifeHistory(history = []) {
 
 function renderPlayerHistory(list, history = []) {
     if (!history.length) {
-        list.innerHTML = `<p class="empty-history">Sem alterações.</p>`;
+        list.innerHTML = `<p class="empty-history">Sem registros.</p>`;
         return;
     }
+
+    list.innerHTML = "";
 
     history.forEach(item => {
         const div = document.createElement("div");
         div.className = "history-item-small";
+        const diff = Number(item.newLife) - Number(item.oldLife);
+        const diffText = diff > 0 ? `+${diff}` : String(diff);
 
         div.innerHTML = `
-            <span>${item.oldLife} → ${item.newLife}</span>
+            <span>${diffText} ${item.oldLife} → ${item.newLife}</span>
             <small>${item.time || ""}</small>
         `;
 
         list.appendChild(div);
     });
+}
+
+function getLifeHistoryGroups() {
+    if (selectedRole !== "player" || !myPlayerNumber) {
+        return {
+            mine: [],
+            opponentByMe: localOpponentLifeHistory,
+            opponentReal: []
+        };
+    }
+
+    const opponentPlayerNumber = getOpponentPlayerNumber();
+
+    return {
+        mine: currentLifeHistory.filter(item => Number(item.playerNumber) === Number(myPlayerNumber)),
+        opponentByMe: localOpponentLifeHistory,
+        opponentReal: currentLifeHistory.filter(item => Number(item.playerNumber) === Number(opponentPlayerNumber))
+    };
+}
+
+function renderLifeHistoryPanel() {
+    const myList = document.getElementById("myLifeHistoryList");
+    const opponentByMeList = document.getElementById("opponentByMeLifeHistoryList");
+    const opponentRealList = document.getElementById("opponentRealLifeHistoryList");
+
+    if (!myList || !opponentByMeList || !opponentRealList) return;
+
+    const groups = getLifeHistoryGroups();
+
+    renderPlayerHistory(myList, groups.mine);
+    renderPlayerHistory(opponentByMeList, groups.opponentByMe);
+    renderPlayerHistory(opponentRealList, groups.opponentReal);
 }
 
 function addMatchEvent(text) {
@@ -1779,6 +1838,8 @@ function addMatchEvent(text) {
 
 window.clearLifeHistory = function() {
     if (selectedRole !== "player") return;
+    localOpponentLifeHistory = [];
+    renderLifeHistoryPanel();
     socket.emit("clear-life-history", { roomId });
 };
 /* =========================
