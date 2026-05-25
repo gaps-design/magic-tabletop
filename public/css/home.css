@@ -766,13 +766,34 @@ body{
   box-shadow: 0 10px 25px rgba(0,0,0,0.35);
 }
 
-.conves-card strong {
+.conves-card-title {
   color: #f6d17a;
+  white-space: nowrap;
 }
 
-.conves-card span {
-  font-size: 13px;
-  opacity: 0.9;
+.mini-presence-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: 4px;
+}
+
+.mini-presence-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.mini-presence-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.mini-presence-item strong {
+  color: #fff;
+  font-size: 14px;
 }
 
 .conves-modal {

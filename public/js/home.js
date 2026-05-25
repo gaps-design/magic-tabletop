@@ -266,35 +266,41 @@ socket.on("lobby-state", (tables) => {
 
 socket.on("conves-state", (users) => {
   if (!Array.isArray(users)) return;
-  renderConves(users);
+  renderPresence(buildPresenceFromLegacyUsers(users));
 });
 
-function renderConves(users = []) {
-  const totalOnline = document.getElementById("convesOnline");
-  const totalTables = document.getElementById("convesTables");
-  const totalSpectators = document.getElementById("convesSpectators");
+socket.on("presence-update", (presence) => {
+  renderPresence(presence);
+});
+
+function buildPresenceFromLegacyUsers(users = []) {
+  return {
+    proa: users.filter(u => u.status === "spectating" || u.role === "spectator"),
+    conves: users.filter(u => u.status === "playing" || u.role === "player"),
+    calabouco: users.filter(u => u.status === "idle" || u.role === "idle")
+  };
+}
+
+function renderPresence(presence = {}) {
+  const proa = Array.isArray(presence.proa) ? presence.proa : [];
+  const conves = Array.isArray(presence.conves) ? presence.conves : [];
+  const calabouco = Array.isArray(presence.calabouco) ? presence.calabouco : [];
+
+  const proaCount = document.getElementById("proaCount");
+  const convesCount = document.getElementById("convesCount");
+  const calaboucoCount = document.getElementById("calaboucoCount");
 
   const proaList = document.getElementById("proaList");
   const convesList = document.getElementById("convesList");
   const calaboucoList = document.getElementById("calaboucoList");
 
-  const players = users.filter(u => u.role === "player");
-  const spectators = users.filter(u => u.role === "spectator");
-  const idle = users.filter(u => u.role === "idle");
+  if (proaCount) proaCount.innerText = proa.length;
+  if (convesCount) convesCount.innerText = conves.length;
+  if (calaboucoCount) calaboucoCount.innerText = calabouco.length;
 
-  const occupiedRooms = new Set(
-    users
-      .filter(u => u.roomId && (u.role === "player" || u.role === "spectator"))
-      .map(u => u.roomId)
-  );
-
-  if (totalOnline) totalOnline.innerText = users.length;
-  if (totalTables) totalTables.innerText = occupiedRooms.size;
-  if (totalSpectators) totalSpectators.innerText = spectators.length;
-
-  if (proaList) proaList.innerHTML = renderUserList(spectators, "👁️");
-  if (convesList) convesList.innerHTML = renderUserList(players, "⚔️");
-  if (calaboucoList) calaboucoList.innerHTML = renderUserList(idle, "⛓️");
+  if (proaList) proaList.innerHTML = renderUserList(proa, "👁️");
+  if (convesList) convesList.innerHTML = renderUserList(conves, "⚔️");
+  if (calaboucoList) calaboucoList.innerHTML = renderUserList(calabouco, "👻");
 }
 
 function renderUserList(list, icon) {

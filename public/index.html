@@ -19,10 +19,23 @@
       </a>
 
       <div id="convesCard" class="conves-card">
-        ⚓ Convés
-        <span id="convesOnline">0 online</span>
-        <span id="convesTables">0 mesas</span>
-        <span id="convesSpectators">0 espectadores</span>
+        <span class="conves-card-title">⚓ Convés</span>
+        <div class="mini-presence-counts" aria-label="Status dos usuários online">
+          <div class="mini-presence-item" title="Espectadores na Proa">
+            <span class="mini-presence-icon">👁️</span>
+            <strong id="proaCount">0</strong>
+          </div>
+
+          <div class="mini-presence-item" title="Jogadores ativos no Convés">
+            <span class="mini-presence-icon">⚔️</span>
+            <strong id="convesCount">0</strong>
+          </div>
+
+          <div class="mini-presence-item" title="Logados sem mesa no Calabouço">
+            <span class="mini-presence-icon">👻</span>
+            <strong id="calaboucoCount">0</strong>
+          </div>
+        </div>
       </div>
 
       <nav class="top-links">

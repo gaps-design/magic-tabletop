@@ -18,6 +18,8 @@ const rooms = {};
 const chatControl = {};
 const clientProfiles = {};
 const connectedUsers = {};
+const onlineUsers = new Map();
+const socketPresence = new Map();
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
@@ -66,6 +68,149 @@ function normalizeUser(user = {}) {
     email: user.email || "",
     photo: user.photo || user.photoURL || "/assets/default-avatar.png"
   };
+}
+
+function getPresenceUserId(user = {}) {
+  const profile = normalizeUser(user);
+  return profile.uid || profile.email || "";
+}
+
+function normalizePresenceStatus(status = "idle", role = "idle") {
+  if (status === "playing" || status === "player" || role === "player") return "playing";
+  if (status === "spectating" || status === "spectator" || status === "queued" || role === "spectator" || role === "queued") {
+    return "spectating";
+  }
+
+  return "idle";
+}
+
+function normalizePresenceRole(role = "idle", status = "idle") {
+  if (role === "player" || status === "playing" || status === "player") return "player";
+  if (role === "spectator" || role === "queued" || status === "spectating" || status === "spectator" || status === "queued") {
+    return "spectator";
+  }
+
+  return "idle";
+}
+
+function presencePriority(user = {}) {
+  if (user.status === "playing") return 3;
+  if (user.status === "spectating") return 2;
+  return 1;
+}
+
+function toLegacyPresenceUser(user = {}) {
+  return {
+    socketId: user.socketId,
+    uid: user.uid || "",
+    name: user.name || "Usuário",
+    email: user.email || "",
+    photo: user.photo || "/assets/default-avatar.png",
+    status: user.status || "idle",
+    roomId: user.room || null,
+    role: user.role || "idle",
+    playerNumber: user.playerNumber || null
+  };
+}
+
+function rebuildUserPresence(userId) {
+  if (!userId) return;
+
+  const candidates = Array.from(socketPresence.values())
+    .filter(user => user.id === userId);
+
+  delete connectedUsers[userId];
+
+  if (!candidates.length) {
+    onlineUsers.delete(userId);
+    return;
+  }
+
+  candidates.sort((a, b) => {
+    const priorityDiff = presencePriority(b) - presencePriority(a);
+    if (priorityDiff !== 0) return priorityDiff;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+
+  const selected = candidates[0];
+  onlineUsers.set(userId, selected);
+  connectedUsers[userId] = toLegacyPresenceUser(selected);
+}
+
+function setUserPresence(userId, patch = {}) {
+  if (!userId) return;
+
+  const current = onlineUsers.get(userId) || {};
+  const updated = {
+    ...current,
+    ...patch,
+    id: userId,
+    status: normalizePresenceStatus(patch.status || current.status, patch.role || current.role),
+    role: normalizePresenceRole(patch.role || current.role, patch.status || current.status),
+    updatedAt: Date.now()
+  };
+
+  onlineUsers.set(userId, updated);
+  connectedUsers[userId] = toLegacyPresenceUser(updated);
+  broadcastPresence();
+}
+
+function setSocketPresence(socketId, user = {}, patch = {}) {
+  const profile = normalizeUser(user);
+  const userId = getPresenceUserId(profile);
+  if (!userId) return;
+
+  const current = socketPresence.get(socketId) || {};
+  const status = normalizePresenceStatus(patch.status || current.status, patch.role || current.role);
+  const role = normalizePresenceRole(patch.role || current.role, patch.status || current.status);
+
+  socketPresence.set(socketId, {
+    ...current,
+    ...patch,
+    id: userId,
+    uid: profile.uid || current.uid || "",
+    name: profile.name || current.name || "Usuário",
+    email: profile.email || current.email || "",
+    photo: profile.photo || current.photo || "/assets/default-avatar.png",
+    status,
+    role,
+    room: patch.room ?? patch.roomId ?? current.room ?? null,
+    roomId: patch.room ?? patch.roomId ?? current.room ?? null,
+    socketId,
+    playerNumber: patch.playerNumber ?? current.playerNumber ?? null,
+    updatedAt: Date.now()
+  });
+
+  rebuildUserPresence(userId);
+  broadcastPresence();
+}
+
+function updateSocketPresence(socketId, patch = {}) {
+  const current = socketPresence.get(socketId);
+  if (!current?.id) return;
+
+  socketPresence.set(socketId, {
+    ...current,
+    ...patch,
+    status: normalizePresenceStatus(patch.status || current.status, patch.role || current.role),
+    role: normalizePresenceRole(patch.role || current.role, patch.status || current.status),
+    room: patch.room ?? patch.roomId ?? current.room ?? null,
+    roomId: patch.room ?? patch.roomId ?? current.room ?? null,
+    playerNumber: patch.playerNumber ?? current.playerNumber ?? null,
+    updatedAt: Date.now()
+  });
+
+  rebuildUserPresence(current.id);
+  broadcastPresence();
+}
+
+function removeSocketPresence(socketId) {
+  const current = socketPresence.get(socketId);
+  if (!current?.id) return;
+
+  socketPresence.delete(socketId);
+  rebuildUserPresence(current.id);
+  broadcastPresence();
 }
 
 function isLoggedUser(user = {}) {
@@ -117,34 +262,55 @@ function setConnectedUser(socketId, user, status = "idle", roomId = null, role =
 
   if (!profile.uid && !profile.email) return;
 
-  connectedUsers[socketId] = {
-    socketId,
-    uid: profile.uid,
-    name: profile.name,
-    email: profile.email,
-    photo: profile.photo,
+  setSocketPresence(socketId, profile, {
     status,
-    roomId,
     role,
+    room: roomId,
+    roomId,
     playerNumber
-  };
-
-  emitConvesState();
+  });
 }
 
 function updateConnectedUser(socketId, data = {}) {
-  if (!connectedUsers[socketId]) return;
-
-  connectedUsers[socketId] = {
-    ...connectedUsers[socketId],
-    ...data
-  };
-
-  emitConvesState();
+  updateSocketPresence(socketId, data);
 }
 
 function emitConvesState() {
-  io.emit("conves-state", Object.values(connectedUsers));
+  broadcastPresence();
+}
+
+function buildPresencePayload() {
+  const presence = {
+    proa: [],
+    conves: [],
+    calabouco: []
+  };
+
+  Array.from(onlineUsers.values()).forEach(user => {
+    const publicUser = toLegacyPresenceUser(user);
+
+    if (user.status === "spectating") {
+      presence.proa.push(publicUser);
+    } else if (user.status === "playing") {
+      presence.conves.push(publicUser);
+    } else {
+      presence.calabouco.push(publicUser);
+    }
+  });
+
+  return presence;
+}
+
+function broadcastPresence(target = io) {
+  const presence = buildPresencePayload();
+  const legacyUsers = [
+    ...presence.proa,
+    ...presence.conves,
+    ...presence.calabouco
+  ];
+
+  target.emit("presence-update", presence);
+  target.emit("conves-state", legacyUsers);
 }
 
 function buildLobbyState() {
@@ -681,11 +847,21 @@ function removeSocketFromAllRooms(socketId) {
   }
 }
 
+function moveSocketPresenceToLobby(socketId) {
+  updateConnectedUser(socketId, {
+    status: "idle",
+    role: "idle",
+    room: null,
+    roomId: null,
+    playerNumber: null
+  });
+}
+
 io.on("connection", (socket) => {
   console.log("Conectado:", socket.id);
 
   socket.emit("lobby-state", buildLobbyState());
-  socket.emit("conves-state", Object.values(connectedUsers));
+  broadcastPresence(socket);
 
   socket.on("user-online", (user = {}) => {
     const profile = normalizeUser(user);
@@ -695,7 +871,7 @@ io.on("connection", (socket) => {
 
   socket.on("user-logout", () => {
     removeSocketFromAllRooms(socket.id);
-    delete connectedUsers[socket.id];
+    removeSocketPresence(socket.id);
 
     broadcastLobbyState();
   });
@@ -1423,14 +1599,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leave-room", ({ roomId }) => {
-    updateConnectedUser(socket.id, {
-      status: "idle",
-      role: "idle",
-      roomId: null,
-      playerNumber: null
-    });
-
     removeSocketFromAllRooms(socket.id);
+    moveSocketPresenceToLobby(socket.id);
 
     if (roomId) {
       socket.leave(roomId);
@@ -1443,8 +1613,8 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("Desconectado:", socket.id);
 
-    delete connectedUsers[socket.id];
     removeSocketFromAllRooms(socket.id);
+    removeSocketPresence(socket.id);
     broadcastLobbyState();
   });
 });
