@@ -94,6 +94,8 @@ let currentCameraClients = [];
 let currentSpectators = [];
 let currentQueue = [];
 let isQueuedInResenha = false;
+const previousOfficialLife = {};
+const lifeDeltaTimers = {};
 let hasSeenLoggedUser = false;
 let hasHandledLogout = false;
 let isRedirectingHome = false;
@@ -560,15 +562,25 @@ function updatePlayerPanel(playerNumber, playerData) {
     const life = document.getElementById(`player${playerNumber}Life`);
 
     if (playerData) {
+        const newLife = Number(playerData.life ?? 20);
+        const previousLife = previousOfficialLife[playerNumber];
+
         if (name) name.innerText = playerData.name || `Jogador ${playerNumber}`;
         if (deck) deck.innerText = playerData.deck || "---";
         if (guild) guild.innerText = playerData.guild || "---";
-        if (life) life.innerText = playerData.life ?? 20;
+        if (life) life.innerText = newLife;
+
+        if (typeof previousLife === "number" && previousLife !== newLife) {
+            showLifeDelta(playerNumber, newLife - previousLife);
+        }
+
+        previousOfficialLife[playerNumber] = newLife;
     } else {
         if (name) name.innerText = `Jogador ${playerNumber}`;
         if (deck) deck.innerText = "Aguardando...";
         if (guild) guild.innerText = "---";
         if (life) life.innerText = "20";
+        delete previousOfficialLife[playerNumber];
     }
 }
 
@@ -828,6 +840,126 @@ socket.on("dice-reset", () => {
    VIDA OFICIAL
 ========================= */
 
+function isActivePlayer() {
+    return (
+        selectedRole === "player" &&
+        !isQueuedInResenha &&
+        [1, 2].includes(Number(myPlayerNumber)) &&
+        currentPlayers.some(player => Number(player.playerNumber) === Number(myPlayerNumber))
+    );
+}
+
+function isActivePlayerSlot(playerNumber) {
+    return currentPlayers.some(player => Number(player.playerNumber) === Number(playerNumber));
+}
+
+function getOpponentPlayerNumber() {
+    const normalizedPlayer = Number(myPlayerNumber);
+
+    if (normalizedPlayer === 1) return 2;
+    if (normalizedPlayer === 2) return 1;
+
+    return null;
+}
+
+function showLifeDeltaBesideElement(timerKey, lifeElement, delta) {
+    const amount = Number(delta);
+    if (!amount) return;
+
+    const container = lifeElement?.closest(".life-control-box");
+    if (!lifeElement || !container) return;
+
+    const previousDelta = container.querySelector(".life-delta");
+    if (previousDelta) previousDelta.remove();
+
+    if (lifeDeltaTimers[timerKey]) {
+        clearTimeout(lifeDeltaTimers[timerKey]);
+    }
+
+    const deltaEl = document.createElement("span");
+    deltaEl.className = `life-delta ${amount > 0 ? "positive" : "negative"}`;
+    deltaEl.innerText = amount > 0 ? `+${amount}` : String(amount);
+
+    container.appendChild(deltaEl);
+
+    lifeDeltaTimers[timerKey] = setTimeout(() => {
+        deltaEl.remove();
+        delete lifeDeltaTimers[timerKey];
+    }, 1000);
+}
+
+function showLifeDelta(playerNumber, delta) {
+    showLifeDeltaBesideElement(
+        `official-${playerNumber}`,
+        document.getElementById(`player${playerNumber}Life`),
+        delta
+    );
+}
+
+function showOpponentLifeDelta(panelPlayerNumber, delta) {
+    showLifeDeltaBesideElement(
+        `opponent-${panelPlayerNumber}`,
+        document.getElementById(`player${panelPlayerNumber}OpponentLife`),
+        delta
+    );
+}
+
+function updateLife(playerNumber, delta) {
+    const normalizedPlayer = Number(playerNumber);
+    const amount = Number(delta);
+
+    if (!isActivePlayer()) return false;
+    if (![1, 2].includes(normalizedPlayer)) return false;
+    if (!isActivePlayerSlot(normalizedPlayer)) return false;
+    if (!amount) return false;
+
+    socket.emit("change-life", {
+        roomId,
+        playerNumber: normalizedPlayer,
+        amount
+    });
+
+    return true;
+}
+
+function isLifeShortcutBlocked(event) {
+    const target = event.target;
+    const activeElement = document.activeElement;
+    const editableElement = target?.closest?.("input, textarea, select, [contenteditable='true']");
+    const notesPanel = document.getElementById("tableNotesPanel");
+
+    if (editableElement) return true;
+
+    return !!(
+        notesPanel &&
+        !notesPanel.classList.contains("hidden") &&
+        activeElement &&
+        notesPanel.contains(activeElement)
+    );
+}
+
+function handleLifeShortcut(event) {
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    if (isLifeShortcutBlocked(event)) return;
+    if (!isActivePlayer()) return;
+
+    let processed = false;
+
+    if (event.key === "ArrowUp") {
+        processed = updateLife(myPlayerNumber, 1);
+    } else if (event.key === "ArrowDown") {
+        processed = updateLife(myPlayerNumber, -1);
+    } else if (event.key === "ArrowLeft") {
+        processed = window.changeOpponentLifeLocal(myPlayerNumber, 1);
+    } else if (event.key === "ArrowRight") {
+        processed = window.changeOpponentLifeLocal(myPlayerNumber, -1);
+    }
+
+    if (processed) {
+        event.preventDefault();
+    }
+}
+
 function changeOfficialLife(playerNumber, amount) {
     if (selectedRole !== "player") return;
 
@@ -836,11 +968,7 @@ function changeOfficialLife(playerNumber, amount) {
         return;
     }
 
-    socket.emit("change-life", {
-        roomId,
-        playerNumber: myPlayerNumber,
-        amount: Number(amount)
-    });
+    updateLife(myPlayerNumber, amount);
 }
 
 document.querySelectorAll("[data-player][data-amount]").forEach(button => {
@@ -855,12 +983,10 @@ document.querySelectorAll("[data-player][data-amount]").forEach(button => {
 window.changeMyLife = function(amount) {
     if (selectedRole !== "player") return;
 
-    socket.emit("change-life", {
-        roomId,
-        playerNumber: myPlayerNumber,
-        amount: Number(amount)
-    });
+    updateLife(myPlayerNumber, amount);
 };
+
+document.addEventListener("keydown", handleLifeShortcut);
 
 window.toggleManualLifePanel = function(playerNumber) {
     if (selectedRole !== "player") return;
@@ -936,7 +1062,7 @@ window.toggleOpponentLife = function(panelPlayerNumber) {
 };
 
 window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
-    if (selectedRole !== "player") return;
+    if (selectedRole !== "player") return false;
 
     if (Number(panelPlayerNumber) !== Number(myPlayerNumber)) {
         alert("Você só pode alterar a anotação do oponente no seu painel.");
@@ -944,10 +1070,15 @@ window.changeOpponentLifeLocal = function(panelPlayerNumber, amount) {
     }
 
     const box = document.getElementById(`player${panelPlayerNumber}OpponentLife`);
-    if (!box) return;
+    if (!box) return false;
 
     const current = Number(box.innerText || 20);
-    box.innerText = current + Number(amount);
+    const delta = Number(amount);
+    if (!delta) return false;
+
+    box.innerText = current + delta;
+    showOpponentLifeDelta(panelPlayerNumber, delta);
+    return true;
 };
 
 window.setOpponentLifeLocal = function(panelPlayerNumber) {
