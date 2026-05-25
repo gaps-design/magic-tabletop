@@ -32,6 +32,8 @@ const reconnectTimers = {};
 const makingOffer = {};
 
 const RTC_DEBUG = true;
+let lastMediaAccessError = null;
+let mediaErrorAlertShown = false;
 
 const servers = {
     iceServers: [
@@ -54,6 +56,8 @@ const servers = {
         }
     ]
 };
+
+warnIfBraveBrowser();
 
 /* =========================
    DISPOSITIVOS
@@ -130,6 +134,54 @@ function updateMediaStatus() {
     }
 }
 
+function getMediaErrorInfo(error) {
+    const name = error?.name || "UnknownError";
+    const constraint = error?.constraint || error?.constraintName || "";
+
+    const messages = {
+        NotAllowedError: "Permissao de camera/microfone bloqueada. Libere o acesso no navegador e tente novamente.",
+        PermissionDeniedError: "Permissao de camera/microfone bloqueada. Libere o acesso no navegador e tente novamente.",
+        NotFoundError: "Camera ou microfone nao encontrado. Verifique se o dispositivo esta conectado.",
+        DevicesNotFoundError: "Camera ou microfone nao encontrado. Verifique se o dispositivo esta conectado.",
+        NotReadableError: "Camera ou microfone em uso por outro aplicativo. Feche outros apps e tente novamente.",
+        TrackStartError: "Camera ou microfone em uso por outro aplicativo. Feche outros apps e tente novamente.",
+        OverconstrainedError: `Configuracao de midia nao suportada${constraint ? ` (${constraint})` : ""}. Tentando dispositivo padrao.`,
+        ConstraintNotSatisfiedError: `Configuracao de midia nao suportada${constraint ? ` (${constraint})` : ""}. Tentando dispositivo padrao.`,
+        SecurityError: "O navegador bloqueou o acesso a camera/microfone. Verifique HTTPS e permissoes do site."
+    };
+
+    return {
+        name,
+        message: error?.message || "",
+        constraint,
+        userMessage: messages[name] || "Nao foi possivel acessar camera/microfone. Verifique permissoes e dispositivos."
+    };
+}
+
+function showCriticalMediaAlert(error) {
+    const info = getMediaErrorInfo(error);
+
+    if (!info.userMessage || mediaErrorAlertShown) return;
+
+    mediaErrorAlertShown = true;
+    alert(info.userMessage);
+}
+
+async function warnIfBraveBrowser() {
+    try {
+        const isBrave = !!navigator.brave?.isBrave && await navigator.brave.isBrave();
+
+        if (isBrave) {
+            console.warn("[WEBRTC] Navegador Brave detectado. Se camera/audio falhar, desative o Shields no icone do leao.");
+        }
+    } catch (error) {
+        mediaLog("brave detection failed", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        }, "warn");
+    }
+}
+
 function isMissingMediaDeviceError(error) {
     const name = error?.name || "";
     const message = String(error?.message || "").toLowerCase();
@@ -165,22 +217,50 @@ function clearSavedMediaDevices({ camera = false, microphone = false } = {}) {
 }
 
 async function getUserMediaWithDeviceFallback(constraints, fallbackConstraints, resetOptions) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        const error = new Error("navigator.mediaDevices.getUserMedia indisponivel.");
+        error.name = "SecurityError";
+        throw error;
+    }
+
     try {
+        mediaLog("requesting local media", { constraints });
         return await navigator.mediaDevices.getUserMedia(constraints);
     } catch (error) {
+        lastMediaAccessError = error;
+
         if (!isMissingMediaDeviceError(error)) {
+            mediaLog("local media request failed", {
+                ...getMediaErrorInfo(error),
+                constraints
+            }, "warn");
             throw error;
         }
 
         console.warn("Dispositivo salvo não encontrado. Tentando dispositivo padrão.", error);
+        mediaLog("saved media device not found, trying default device", {
+            ...getMediaErrorInfo(error),
+            constraints,
+            fallbackConstraints
+        }, "warn");
         clearSavedMediaDevices(resetOptions);
 
-        return await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        try {
+            return await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } catch (fallbackError) {
+            lastMediaAccessError = fallbackError;
+            mediaLog("fallback local media request failed", {
+                ...getMediaErrorInfo(fallbackError),
+                fallbackConstraints
+            }, "warn");
+            throw fallbackError;
+        }
     }
 }
 
 async function getOptionalRoomMedia(constraints, resetOptions) {
     try {
+        lastMediaAccessError = null;
         return await getUserMediaWithDeviceFallback(
             constraints,
             {
@@ -190,6 +270,10 @@ async function getOptionalRoomMedia(constraints, resetOptions) {
             resetOptions
         );
     } catch (videoError) {
+        lastMediaAccessError = videoError;
+        mediaLog("camera access failed, trying audio only", {
+            ...getMediaErrorInfo(videoError)
+        }, "warn");
         console.warn("Falha ao acessar câmera. Tentando somente áudio.", videoError);
         clearSavedMediaDevices({ camera: true });
 
@@ -208,6 +292,10 @@ async function getOptionalRoomMedia(constraints, resetOptions) {
                 }
             );
         } catch (audioError) {
+            lastMediaAccessError = audioError;
+            mediaLog("audio access failed, joining without camera/microphone", {
+                ...getMediaErrorInfo(audioError)
+            }, "warn");
             console.warn("Falha ao acessar áudio. Entrando sem câmera/microfone.", audioError);
             clearSavedMediaDevices({ camera: true, microphone: true });
             return null;
@@ -250,6 +338,14 @@ async function startWebcam(
             localVideo.srcObject = null;
         }
 
+        if ((currentRole === "player" || currentRole === "camera") && lastMediaAccessError) {
+            showCriticalMediaAlert(lastMediaAccessError);
+        }
+
+        mediaLog("joining without local media", {
+            role: currentRole,
+            lastError: lastMediaAccessError ? getMediaErrorInfo(lastMediaAccessError) : null
+        }, "warn");
         rtcLog(null, "local media unavailable");
         await getDevices();
         updateMediaStatus();
@@ -259,6 +355,8 @@ async function startWebcam(
     localStream.getAudioTracks().forEach(track => {
         track.enabled = micEnabled;
     });
+
+    mediaErrorAlertShown = false;
 
     localStream.getVideoTracks().forEach(track => {
         track.enabled = cameraEnabled;
@@ -360,6 +458,7 @@ async function switchCamera(cameraId) {
     routeLocalPreview();
 
     replaceTrackOnPeers("video", newVideoTrack);
+    mediaErrorAlertShown = false;
     updateMediaStatus();
 }
 
@@ -417,17 +516,24 @@ async function switchMicrophone(microphoneId) {
     localStream.addTrack(newAudioTrack);
 
     replaceTrackOnPeers("audio", newAudioTrack);
+    mediaErrorAlertShown = false;
     updateMediaStatus();
 }
 
 function replaceTrackOnPeers(kind, newTrack) {
-    Object.values(peerConnections).forEach(peer => {
+    Object.entries(peerConnections).forEach(([socketId, peer]) => {
         const sender = peer.getSenders().find(
             s => s.track && s.track.kind === kind
         );
 
         if (sender) {
-            sender.replaceTrack(newTrack);
+            sender.replaceTrack(newTrack).catch(error => {
+                rtcLog(socketId, "replaceTrack failed", {
+                    kind,
+                    errorName: error?.name,
+                    errorMessage: error?.message
+                });
+            });
         }
     });
 }
@@ -451,7 +557,7 @@ function setVideoStream(videoElement, stream, muted = false) {
     if (!videoElement || !stream) return;
 
     if (videoElement.srcObject !== stream) {
-        rtcLog(null, "attaching stream to video element", {
+        mediaLog("attaching stream to video element", {
             videoId: videoElement.id,
             muted,
             streamId: stream.id,
@@ -475,22 +581,22 @@ function setVideoStream(videoElement, stream, muted = false) {
 
     if (playPromise?.catch) {
         playPromise.catch(error => {
-            rtcLog(null, "video autoplay blocked or delayed", {
+            audioLog("remote/local video autoplay blocked or delayed", {
                 videoId: videoElement.id,
                 muted,
                 errorName: error?.name,
                 errorMessage: error?.message
-            });
+            }, "warn");
         });
     }
 
     videoElement.onloadedmetadata = () => {
         videoElement.play().catch(error => {
-            rtcLog(null, "video play after metadata failed", {
+            audioLog("video play after metadata failed", {
                 videoId: videoElement.id,
                 errorName: error?.name,
                 errorMessage: error?.message
-            });
+            }, "warn");
         });
     };
 }
@@ -785,6 +891,15 @@ function cleanupPeer(socketId) {
     const stream = remoteStreams[socketId];
     const peerConnection = peerConnections[socketId];
 
+    rtcLog(socketId, "cleaning peer connection", {
+        remoteRole: info.role,
+        playerNumber: info.playerNumber,
+        linkedPlayer: info.linkedPlayer,
+        hasRemoteStream: !!stream,
+        hasPeerConnection: !!peerConnection,
+        peer: peerSnapshot(peerConnection)
+    });
+
     delete peerConnections[socketId];
     delete makingOffer[socketId];
 
@@ -872,12 +987,45 @@ window.shutdownRoomConnection = function() {
 function rtcLog(targetId, message, details = {}) {
     if (!RTC_DEBUG) return;
 
-    console.log(`[RTC${targetId ? `:${targetId}` : ""}] ${message}`, {
+    console.log(`[WEBRTC${targetId ? `:${targetId}` : ""}] ${message}`, {
         socketId: socket.id,
         roomId: currentRoomId,
         role: currentRole,
         ...details
     });
+}
+
+function scopedLog(scope, message, details = {}, level = "log") {
+    if (!RTC_DEBUG) return;
+
+    const logger = typeof console[level] === "function" ? console[level] : console.log;
+
+    logger.call(console, `[${scope}] ${message}`, {
+        socketId: socket.id,
+        roomId: currentRoomId,
+        role: currentRole,
+        ...details
+    });
+}
+
+function mediaLog(message, details = {}, level = "log") {
+    scopedLog("MEDIA", message, details, level);
+}
+
+function socketLog(message, details = {}, level = "log") {
+    scopedLog("SOCKET", message, details, level);
+}
+
+function spectatorLog(message, details = {}, level = "log") {
+    scopedLog("SPECTATOR", message, details, level);
+}
+
+function cameraLog(message, details = {}, level = "log") {
+    scopedLog("CAMERA", message, details, level);
+}
+
+function audioLog(message, details = {}, level = "log") {
+    scopedLog("AUDIO", message, details, level);
 }
 
 function peerSnapshot(peer) {
@@ -1128,7 +1276,7 @@ socket.on("assigned-role", async (data) => {
 });
 
 socket.on("connect", async () => {
-    rtcLog(null, "socket connected", {
+    socketLog("socket connected", {
         socketId: socket.id,
         recovered: socket.recovered,
         hasLastJoinPayload: !!lastJoinPayload,
@@ -1153,7 +1301,7 @@ socket.on("connect", async () => {
 });
 
 socket.on("disconnect", (reason) => {
-    rtcLog(null, "socket disconnected", {
+    socketLog("socket disconnected", {
         reason,
         peerCount: Object.keys(peerConnections).length,
         peers: Object.keys(peerConnections)
@@ -1161,22 +1309,22 @@ socket.on("disconnect", (reason) => {
 });
 
 socket.on("connect_error", (error) => {
-    rtcLog(null, "socket connect error", {
+    socketLog("socket connect error", {
         errorMessage: error?.message,
         errorDescription: error?.description,
         errorContext: error?.context
-    });
+    }, "warn");
 });
 
 socket.io?.on?.("reconnect_attempt", (attempt) => {
-    rtcLog(null, "socket reconnect attempt", {
+    socketLog("socket reconnect attempt", {
         attempt,
         peerCount: Object.keys(peerConnections).length
     });
 });
 
 socket.io?.on?.("reconnect", (attempt) => {
-    rtcLog(null, "socket reconnected", {
+    socketLog("socket reconnected", {
         attempt,
         socketId: socket.id,
         peerCount: Object.keys(peerConnections).length
@@ -1184,26 +1332,44 @@ socket.io?.on?.("reconnect", (attempt) => {
 });
 
 socket.io?.on?.("reconnect_error", (error) => {
-    rtcLog(null, "socket reconnect error", {
+    socketLog("socket reconnect error", {
         errorMessage: error?.message
-    });
+    }, "warn");
 });
 
 socket.io?.on?.("reconnect_failed", () => {
-    rtcLog(null, "socket reconnect failed", {
+    socketLog("socket reconnect failed", {
         peerCount: Object.keys(peerConnections).length
-    });
+    }, "warn");
 });
 
 socket.on("existing-peers", async ({ peers }) => {
+    socketLog("existing peers received", {
+        count: peers?.length || 0,
+        peers: (peers || []).map(peer => ({
+            socketId: peer.socketId,
+            role: peer.role,
+            playerNumber: peer.playerNumber,
+            linkedPlayer: peer.linkedPlayer
+        }))
+    });
+
     for (const peerData of peers) {
         if (!peerData.socketId) continue;
 
         savePeerInfo(peerData.socketId, peerData);
 
-        if (peerData.role === "spectator") continue;
+        if (peerData.role === "spectator") {
+            spectatorLog("skipping offer to spectator peer", {
+                target: peerData.socketId
+            });
+            continue;
+        }
 
         if (currentRole === "camera" && peerData.role === "camera") {
+            cameraLog("skipping camera to camera peer offer", {
+                target: peerData.socketId
+            });
             continue;
         }
 
@@ -1214,9 +1380,20 @@ socket.on("existing-peers", async ({ peers }) => {
 socket.on("user-connected", (data) => {
     if (!data.socketId) return;
 
+    socketLog("user connected to room", {
+        socketId: data.socketId,
+        role: data.role,
+        playerNumber: data.playerNumber,
+        linkedPlayer: data.linkedPlayer
+    });
+
     savePeerInfo(data.socketId, data);
 
     if (currentRole === "spectator" && data.role !== "spectator") {
+        spectatorLog("spectator creating offer to new media sender", {
+            target: data.socketId,
+            remoteRole: data.role
+        });
         createOffer(data.socketId, data);
     }
 });
@@ -1340,10 +1517,15 @@ socket.on("ice-candidate", async ({ candidate, sender }) => {
 });
 
 socket.on("user-disconnected", (socketId) => {
+    socketLog("user disconnected from room", {
+        socketId,
+        knownPeer: !!peerConnections[socketId]
+    });
     cleanupPeer(socketId);
 });
 
 socket.on("camera-replaced", () => {
+    cameraLog("camera connection replaced", {}, "warn");
     alert("Essa câmera foi substituída por outra conexão.");
     window.location.href = "/";
 });
@@ -1359,6 +1541,7 @@ socket.on("force-home", () => {
 });
 
 socket.on("camera-error", (message) => {
+    cameraLog("camera connection rejected", { message }, "warn");
     alert(message || "Não foi possível conectar a câmera.");
     window.location.href = "/";
 });
@@ -1382,7 +1565,10 @@ if (cameraSelect) {
             await switchCamera(cameraSelect.value);
         } catch (err) {
             console.error("Erro ao trocar câmera:", err);
-            alert("Erro ao trocar câmera.");
+            cameraLog("camera switch failed", {
+                ...getMediaErrorInfo(err)
+            }, "warn");
+            showCriticalMediaAlert(err);
         }
     });
 }
@@ -1393,7 +1579,10 @@ if (microphoneSelect) {
             await switchMicrophone(microphoneSelect.value);
         } catch (err) {
             console.error("Erro ao trocar microfone:", err);
-            alert("Erro ao trocar microfone.");
+            audioLog("microphone switch failed", {
+                ...getMediaErrorInfo(err)
+            }, "warn");
+            showCriticalMediaAlert(err);
         }
     });
 }
@@ -1462,7 +1651,12 @@ window.enableSpectatorMicrophone = async function() {
         const sender = peer.getSenders().find(s => s.track?.kind === "audio");
 
         if (sender) {
-            sender.replaceTrack(audioTrack);
+            sender.replaceTrack(audioTrack).catch(error => {
+                audioLog("spectator microphone replaceTrack failed", {
+                    errorName: error?.name,
+                    errorMessage: error?.message
+                }, "warn");
+            });
         } else {
             peer.addTrack(audioTrack, localStream);
         }
@@ -1502,7 +1696,14 @@ window.disableSpectatorMicrophone = async function() {
     Object.values(peerConnections).forEach(peer => {
         peer.getSenders()
             .filter(sender => sender.track?.kind === "audio")
-            .forEach(sender => sender.replaceTrack(null));
+            .forEach(sender => {
+                sender.replaceTrack(null).catch(error => {
+                    audioLog("spectator microphone detach failed", {
+                        errorName: error?.name,
+                        errorMessage: error?.message
+                    }, "warn");
+                });
+            });
     });
 
     updateMediaStatus();
