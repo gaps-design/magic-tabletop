@@ -30,6 +30,12 @@ const pendingCandidates = {};
 const reconnectAttempts = {};
 const reconnectTimers = {};
 const makingOffer = {};
+const faceCamPeerConnections = {};
+const faceCamPendingCandidates = {};
+const faceCamSources = {};
+const remoteFaceCamStreams = {};
+let localFaceCamStream = null;
+let localFaceCamMeta = null;
 
 const RTC_DEBUG = true;
 let lastMediaAccessError = null;
@@ -121,6 +127,8 @@ async function getDevices() {
 }
 
 function updateMediaStatus() {
+    const hasActiveMic = !!localStream?.getAudioTracks().length && micEnabled;
+
     if (micStatusText) {
         micStatusText.innerText = localStream?.getAudioTracks().length
             ? (micEnabled ? "Ativado" : "Desativado")
@@ -131,6 +139,10 @@ function updateMediaStatus() {
         cameraStatusText.innerText = localStream?.getVideoTracks().length
             ? (cameraEnabled ? "Ativada" : "Desativada")
             : "Sem câmera";
+    }
+
+    if (currentRole === "player" && typeof window.setLocalMutedIconState === "function") {
+        window.setLocalMutedIconState(hasActiveMic);
     }
 }
 
@@ -411,6 +423,10 @@ async function switchCamera(cameraId) {
 
     selectedCameraId = cameraId;
     localStorage.setItem("magicSelectedCamera", selectedCameraId);
+
+    if (typeof window.releaseFaceCamForMainCamera === "function") {
+        await window.releaseFaceCamForMainCamera(selectedCameraId);
+    }
 
     const newStream = await getUserMediaWithDeviceFallback(
         {
@@ -855,6 +871,218 @@ function createPeerConnection(targetId) {
     return peer;
 }
 
+function faceCamKey(socketId, side) {
+    return `${socketId}:${side}`;
+}
+
+function getFaceCamPlayerInfo(socketId, fallback = {}) {
+    return faceCamSources[socketId] || peerInfo[socketId] || fallback || {};
+}
+
+function createFaceCamSenderPeer(receiverId) {
+    const key = faceCamKey(receiverId, "send");
+
+    if (faceCamPeerConnections[key]) {
+        faceCamPeerConnections[key].close();
+        delete faceCamPeerConnections[key];
+    }
+
+    const peer = new RTCPeerConnection(servers);
+    faceCamPeerConnections[key] = peer;
+
+    if (localFaceCamStream) {
+        localFaceCamStream.getVideoTracks().forEach(track => {
+            peer.addTrack(track, localFaceCamStream);
+        });
+    }
+
+    peer.onicecandidate = (event) => {
+        if (!event.candidate) return;
+
+        socket.emit("facecam-ice-candidate", {
+            target: receiverId,
+            candidate: event.candidate,
+            side: "send"
+        });
+    };
+
+    peer.onconnectionstatechange = () => {
+        rtcLog(receiverId, "facecam sender connection state", {
+            state: peer.connectionState,
+            side: "send"
+        });
+
+        if (["failed", "closed", "disconnected"].includes(peer.connectionState)) {
+            if (peer.connectionState === "failed") {
+                cleanupFaceCamPeer(receiverId, { removeRemote: false });
+            }
+        }
+    };
+
+    return peer;
+}
+
+function createFaceCamReceiverPeer(sourceId, sourceInfo = {}) {
+    const key = faceCamKey(sourceId, "recv");
+
+    if (faceCamPeerConnections[key]) {
+        return faceCamPeerConnections[key];
+    }
+
+    const peer = new RTCPeerConnection(servers);
+    faceCamPeerConnections[key] = peer;
+    faceCamSources[sourceId] = {
+        ...(faceCamSources[sourceId] || {}),
+        ...sourceInfo,
+        socketId: sourceId,
+        mediaType: "facecam"
+    };
+
+    peer.addTransceiver("video", { direction: "recvonly" });
+
+    peer.ontrack = (event) => {
+        let stream = event.streams[0];
+
+        if (!stream) {
+            if (!remoteFaceCamStreams[sourceId]) {
+                remoteFaceCamStreams[sourceId] = new MediaStream();
+            }
+
+            if (!remoteFaceCamStreams[sourceId].getTracks().some(track => track.id === event.track.id)) {
+                remoteFaceCamStreams[sourceId].addTrack(event.track);
+            }
+
+            stream = remoteFaceCamStreams[sourceId];
+        } else {
+            remoteFaceCamStreams[sourceId] = stream;
+        }
+
+        const info = getFaceCamPlayerInfo(sourceId, sourceInfo);
+
+        window.updateRemoteFaceCam?.(info.playerNumber, stream, {
+            ...info,
+            socketId: sourceId
+        });
+    };
+
+    peer.onicecandidate = (event) => {
+        if (!event.candidate) return;
+
+        socket.emit("facecam-ice-candidate", {
+            target: sourceId,
+            candidate: event.candidate,
+            side: "recv"
+        });
+    };
+
+    peer.onconnectionstatechange = () => {
+        rtcLog(sourceId, "facecam receiver connection state", {
+            state: peer.connectionState,
+            side: "recv"
+        });
+    };
+
+    return peer;
+}
+
+async function requestFaceCamSource(sourceInfo = {}) {
+    const sourceId = sourceInfo.socketId;
+
+    if (!sourceId || sourceId === socket.id) return;
+    if (currentRole === "camera") return;
+
+    if (faceCamPeerConnections[faceCamKey(sourceId, "recv")]) return;
+
+    faceCamSources[sourceId] = {
+        ...(faceCamSources[sourceId] || {}),
+        ...sourceInfo,
+        mediaType: "facecam"
+    };
+
+    const peer = createFaceCamReceiverPeer(sourceId, sourceInfo);
+
+    if (peer.signalingState !== "stable") return;
+
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+
+    socket.emit("facecam-offer", {
+        target: sourceId,
+        offer
+    });
+}
+
+function cleanupFaceCamPeer(socketId, { removeRemote = true } = {}) {
+    ["send", "recv"].forEach(side => {
+        const key = faceCamKey(socketId, side);
+        const peer = faceCamPeerConnections[key];
+
+        if (peer) {
+            peer.close();
+            delete faceCamPeerConnections[key];
+        }
+
+        delete faceCamPendingCandidates[key];
+    });
+
+    if (removeRemote) {
+        const info = faceCamSources[socketId] || {};
+        delete remoteFaceCamStreams[socketId];
+        delete faceCamSources[socketId];
+        window.removeRemoteFaceCam?.(info.playerNumber || socketId);
+    }
+}
+
+async function flushFaceCamCandidates(key) {
+    const peer = faceCamPeerConnections[key];
+    const queued = faceCamPendingCandidates[key] || [];
+
+    if (!peer || !peer.remoteDescription) return;
+
+    while (queued.length) {
+        await peer.addIceCandidate(new RTCIceCandidate(queued.shift()));
+    }
+
+    delete faceCamPendingCandidates[key];
+}
+
+window.startFaceCamBroadcast = function(stream, meta = {}) {
+    if (!stream || currentRole !== "player" || !currentRoomId) return;
+
+    localFaceCamStream = stream;
+    localFaceCamMeta = {
+        ...meta,
+        roomId: currentRoomId,
+        playerNumber: meta.playerNumber || myPlayerNumberRTC,
+        mediaType: "facecam"
+    };
+
+    socket.emit("facecam-started", {
+        roomId: currentRoomId,
+        playerNumber: localFaceCamMeta.playerNumber
+    });
+};
+
+window.stopFaceCamBroadcast = function({ roomId } = {}) {
+    const hadStream = !!localFaceCamStream;
+
+    localFaceCamStream = null;
+    localFaceCamMeta = null;
+
+    Object.keys(faceCamPeerConnections)
+        .filter(key => key.endsWith(":send"))
+        .forEach(key => {
+            faceCamPeerConnections[key].close();
+            delete faceCamPeerConnections[key];
+        });
+
+    if (hadStream && (roomId || currentRoomId)) {
+        socket.emit("facecam-stopped", {
+            roomId: roomId || currentRoomId
+        });
+    }
+};
+
 function schedulePeerReconnect(targetId, baseDelay = 1200) {
     const info = peerInfo[targetId];
     if (!info || !currentRoomId) return;
@@ -942,6 +1170,8 @@ function cleanupPeer(socketId) {
 }
 
 window.shutdownRoomConnection = function() {
+    const shutdownRoomId = currentRoomId;
+
     allowRoomReconnect = false;
     lastJoinPayload = null;
     currentRoomId = null;
@@ -973,6 +1203,26 @@ window.shutdownRoomConnection = function() {
 
     Object.keys(makingOffer).forEach(socketId => {
         delete makingOffer[socketId];
+    });
+
+    window.stopFaceCamBroadcast?.({ roomId: shutdownRoomId });
+
+    Object.keys(faceCamPeerConnections).forEach(key => {
+        faceCamPeerConnections[key].close();
+        delete faceCamPeerConnections[key];
+    });
+
+    Object.keys(faceCamPendingCandidates).forEach(key => {
+        delete faceCamPendingCandidates[key];
+    });
+
+    Object.keys(faceCamSources).forEach(socketId => {
+        delete faceCamSources[socketId];
+        window.removeRemoteFaceCam?.(socketId);
+    });
+
+    Object.keys(remoteFaceCamStreams).forEach(socketId => {
+        delete remoteFaceCamStreams[socketId];
     });
 
     if (localStream) {
@@ -1398,6 +1648,105 @@ socket.on("user-connected", (data) => {
     }
 });
 
+socket.on("room-state", ({ faceCams = [] } = {}) => {
+    faceCams.forEach(source => {
+        if (!source?.socketId || source.socketId === socket.id) return;
+        requestFaceCamSource(source).catch(error => {
+            console.warn("Falha ao solicitar FaceCam ativa:", error);
+        });
+    });
+});
+
+socket.on("facecam-list", ({ faceCams = [] } = {}) => {
+    faceCams.forEach(source => {
+        if (!source?.socketId || source.socketId === socket.id) return;
+        requestFaceCamSource(source).catch(error => {
+            console.warn("Falha ao solicitar FaceCam:", error);
+        });
+    });
+});
+
+socket.on("facecam-started", (source = {}) => {
+    if (!source.socketId || source.socketId === socket.id) return;
+
+    requestFaceCamSource(source).catch(error => {
+        console.warn("Falha ao conectar FaceCam:", error);
+    });
+});
+
+socket.on("facecam-stopped", ({ socketId, playerNumber }) => {
+    if (!socketId) return;
+
+    cleanupFaceCamPeer(socketId);
+    window.removeRemoteFaceCam?.(playerNumber || socketId);
+});
+
+socket.on("facecam-offer", async ({ offer, sender, senderInfo }) => {
+    if (!sender || !offer || !localFaceCamStream) return;
+
+    try {
+        const peer = createFaceCamSenderPeer(sender);
+
+        await peer.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+
+        socket.emit("facecam-answer", {
+            target: sender,
+            answer
+        });
+
+        await flushFaceCamCandidates(faceCamKey(sender, "send"));
+    } catch (error) {
+        console.error("Erro ao processar offer da FaceCam:", error);
+    }
+});
+
+socket.on("facecam-answer", async ({ answer, sender, senderInfo }) => {
+    if (!sender || !answer) return;
+
+    if (senderInfo) {
+        faceCamSources[sender] = {
+            ...(faceCamSources[sender] || {}),
+            ...senderInfo,
+            socketId: sender,
+            mediaType: "facecam"
+        };
+    }
+
+    const key = faceCamKey(sender, "recv");
+    const peer = faceCamPeerConnections[key];
+
+    if (!peer) return;
+
+    try {
+        await peer.setRemoteDescription(new RTCSessionDescription(answer));
+        await flushFaceCamCandidates(key);
+    } catch (error) {
+        console.error("Erro ao processar answer da FaceCam:", error);
+    }
+});
+
+socket.on("facecam-ice-candidate", async ({ candidate, sender, side }) => {
+    if (!candidate || !sender) return;
+
+    const localSide = side === "recv" ? "send" : "recv";
+    const key = faceCamKey(sender, localSide);
+    const peer = faceCamPeerConnections[key];
+
+    if (!peer || !peer.remoteDescription) {
+        faceCamPendingCandidates[key] = faceCamPendingCandidates[key] || [];
+        faceCamPendingCandidates[key].push(candidate);
+        return;
+    }
+
+    try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+        console.error("Erro ICE FaceCam:", error);
+    }
+});
+
 socket.on("offer", async ({ offer, sender, senderInfo }) => {
     if (!sender || !offer) return;
 
@@ -1522,6 +1871,7 @@ socket.on("user-disconnected", (socketId) => {
         knownPeer: !!peerConnections[socketId]
     });
     cleanupPeer(socketId);
+    cleanupFaceCamPeer(socketId);
 });
 
 socket.on("camera-replaced", () => {

@@ -89,6 +89,10 @@ const diceHistoryList = document.getElementById("diceHistoryList");
 
 const localMutedIcon = document.getElementById("localMutedIcon");
 const remoteMutedIcon = document.getElementById("remoteMutedIcon");
+const toggleFaceCameraBtn = document.getElementById("toggleFaceCameraBtn");
+const faceCameraStatusText = document.getElementById("faceCameraStatusText");
+const faceCameraSelect = document.getElementById("faceCameraSelect");
+const faceCameraSelectControl = document.querySelector(".face-camera-select-control");
 
 const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
 
@@ -126,6 +130,10 @@ let currentLifeHistory = [];
 let localOpponentLifeHistory = [];
 let lastRoomToastKey = "";
 let lastRoomToastAt = 0;
+let faceCameraStream = null;
+let faceCameraDeviceId = localStorage.getItem("magicSelectedFaceCamera") || "";
+let faceCameraStatus = "off";
+const remoteFaceCameras = {};
 let lastTimerRemaining = null;
 let timerAudioContext = null;
 const timerAlertMarks = [1200, 900, 600, 300];
@@ -346,12 +354,258 @@ function showLeaveSpectatorButton() {
     }
 }
 
+function getMainCameraDeviceId() {
+    const mainCameraSelect = document.getElementById("cameraSelect");
+    return mainCameraSelect?.value || localStorage.getItem("magicSelectedCamera") || "";
+}
+
+function getActiveFaceCameraDeviceId() {
+    return faceCameraStream?.getVideoTracks?.()[0]?.getSettings?.().deviceId || faceCameraDeviceId || "";
+}
+
+function updateFaceCameraControls() {
+    const isPlayer = selectedRole === "player";
+
+    toggleFaceCameraBtn?.classList.toggle("hidden", !isPlayer);
+    faceCameraSelectControl?.classList.toggle("hidden", !isPlayer);
+
+    if (faceCameraStatusText) {
+        const labels = {
+            off: "Desativada",
+            starting: "Ativando...",
+            on: "Ativada",
+            error: "Erro"
+        };
+
+        faceCameraStatusText.innerText = labels[faceCameraStatus] || labels.off;
+    }
+
+    if (toggleFaceCameraBtn) {
+        toggleFaceCameraBtn.classList.toggle("active", faceCameraStatus === "on");
+        toggleFaceCameraBtn.disabled = faceCameraStatus === "starting" || !isPlayer;
+    }
+}
+
+async function getFaceCameraDevices({ warnIfMissing = false } = {}) {
+    if (!navigator.mediaDevices?.enumerateDevices || !navigator.mediaDevices?.getUserMedia) {
+        if (warnIfMissing) showRoomToast("Não foi possível ativar a câmera de rosto.");
+        return [];
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter(device => device.kind === "videoinput");
+    const mainCameraId = getMainCameraDeviceId();
+    const secondaryCameras = cameras.filter(camera => !mainCameraId || camera.deviceId !== mainCameraId);
+
+    if (faceCameraSelect) {
+        faceCameraSelect.innerHTML = "";
+
+        secondaryCameras.forEach((camera, index) => {
+            const option = document.createElement("option");
+            option.value = camera.deviceId;
+            option.text = camera.label || `Câmera de rosto ${index + 1}`;
+            faceCameraSelect.appendChild(option);
+        });
+
+        if (!secondaryCameras.some(camera => camera.deviceId === faceCameraDeviceId)) {
+            faceCameraDeviceId = secondaryCameras[0]?.deviceId || "";
+        }
+
+        if (faceCameraDeviceId) {
+            faceCameraSelect.value = faceCameraDeviceId;
+        }
+    }
+
+    if (warnIfMissing && cameras.length <= 1) {
+        showRoomToast("Nenhuma segunda câmera encontrada.");
+    }
+
+    return secondaryCameras;
+}
+
+function renderFaceCameraCard(root, { stream, playerNumber, name, isLocal = false } = {}) {
+    if (!root || !stream) return false;
+
+    const card = document.createElement("div");
+    const header = document.createElement("div");
+    const title = document.createElement("strong");
+    const closeButton = document.createElement("button");
+    const video = document.createElement("video");
+
+    card.className = `face-camera-card face-camera-player-${playerNumber || "local"}`;
+    header.className = "face-camera-header";
+    title.innerText = isLocal
+        ? "Minha FaceCam"
+        : `FaceCam ${name || `Jogador ${playerNumber || ""}`}`.trim();
+    closeButton.type = "button";
+    closeButton.innerText = "X";
+    closeButton.setAttribute("aria-label", "Desligar câmera de rosto");
+    closeButton.classList.toggle("hidden", !isLocal);
+    closeButton.addEventListener("click", () => stopFaceCamera());
+
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+
+    header.appendChild(title);
+    header.appendChild(closeButton);
+    card.appendChild(header);
+    card.appendChild(video);
+    root.appendChild(card);
+
+    return true;
+}
+
+async function startFaceCamera() {
+    if (selectedRole !== "player") return;
+
+    faceCameraStatus = "starting";
+    updateFaceCameraControls();
+
+    try {
+        const secondaryCameras = await getFaceCameraDevices({ warnIfMissing: true });
+
+        if (!secondaryCameras.length) {
+            faceCameraStatus = "off";
+            updateFaceCameraControls();
+            return;
+        }
+
+        const requestedDeviceId = faceCameraSelect?.value || faceCameraDeviceId || secondaryCameras[0].deviceId;
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: requestedDeviceId } },
+            audio: false
+        });
+
+        stopFaceCamera({ silent: true });
+
+        faceCameraStream = stream;
+        faceCameraStatus = "on";
+        faceCameraDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || requestedDeviceId;
+        localStorage.setItem("magicSelectedFaceCamera", faceCameraDeviceId);
+
+        faceCameraStream.getVideoTracks().forEach(track => {
+            track.onended = () => {
+                if (faceCameraStream) {
+                    stopFaceCamera({ silent: true });
+                    showRoomToast("FaceCam desconectada.");
+                }
+            };
+        });
+
+        if (faceCameraSelect && faceCameraDeviceId) {
+            faceCameraSelect.value = faceCameraDeviceId;
+        }
+
+        updateFaceCameraControls();
+        renderFloatingMarkers();
+
+        try {
+            window.startFaceCamBroadcast?.(faceCameraStream, {
+                roomId,
+                playerNumber: myPlayerNumber,
+                name: googleRoomProfile?.name || playerNameInput?.value?.trim() || `Jogador ${myPlayerNumber || ""}`
+            });
+        } catch (broadcastError) {
+            console.warn("FaceCam local ativa, mas transmissão remota falhou:", broadcastError);
+            showRoomToast("FaceCam local ativa. Transmissão remota indisponível.");
+        }
+    } catch (error) {
+        console.warn("Erro ao ativar câmera de rosto:", error);
+
+        faceCameraStatus = "error";
+        updateFaceCameraControls();
+
+        if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
+            showRoomToast("Permissão da câmera de rosto negada.");
+        } else if (error?.name === "NotFoundError" || error?.name === "OverconstrainedError" || error?.name === "DevicesNotFoundError") {
+            showRoomToast("Nenhuma segunda câmera encontrada.");
+        } else {
+            showRoomToast("Não foi possível ativar a câmera de rosto.");
+        }
+
+        setTimeout(() => {
+            if (faceCameraStatus === "error") {
+                faceCameraStatus = "off";
+                updateFaceCameraControls();
+            }
+        }, 1800);
+    }
+}
+
+function stopFaceCamera({ silent = false } = {}) {
+    window.stopFaceCamBroadcast?.({ roomId });
+
+    if (faceCameraStream) {
+        faceCameraStream.getTracks().forEach(track => track.stop());
+    }
+
+    faceCameraStream = null;
+    faceCameraStatus = "off";
+    updateFaceCameraControls();
+    renderFloatingMarkers();
+
+    if (!silent) {
+        showRoomToast("Câmera de rosto desligada.");
+    }
+}
+
+window.releaseFaceCamForMainCamera = async function(cameraId) {
+    const activeFaceDeviceId = getActiveFaceCameraDeviceId();
+
+    if (!faceCameraStream || !cameraId || activeFaceDeviceId !== cameraId) {
+        return false;
+    }
+
+    stopFaceCamera({ silent: true });
+    showRoomToast("FaceCam desligada para liberar a câmera principal.");
+    await new Promise(resolve => setTimeout(resolve, 80));
+    return true;
+};
+
+window.updateRemoteFaceCam = function(playerNumber, stream, info = {}) {
+    const normalizedPlayer = Number(playerNumber || info.playerNumber);
+    if (![1, 2].includes(normalizedPlayer) || !stream) return;
+
+    remoteFaceCameras[normalizedPlayer] = {
+        stream,
+        name: info.name || `Jogador ${normalizedPlayer}`,
+        socketId: info.socketId || ""
+    };
+
+    renderFloatingMarkers();
+};
+
+window.removeRemoteFaceCam = function(playerNumberOrSocketId) {
+    Object.entries(remoteFaceCameras).forEach(([playerNumber, camera]) => {
+        if (
+            Number(playerNumberOrSocketId) === Number(playerNumber) ||
+            String(camera.socketId) === String(playerNumberOrSocketId)
+        ) {
+            delete remoteFaceCameras[playerNumber];
+        }
+    });
+
+    renderFloatingMarkers();
+};
+
+async function toggleFaceCamera() {
+    if (faceCameraStream) {
+        stopFaceCamera();
+        return;
+    }
+
+    await startFaceCamera();
+}
+
 if (playerRoleBtn) {
     playerRoleBtn.addEventListener("click", () => {
         selectedRole = "player";
         playerRoleBtn.classList.add("active");
         spectatorRoleBtn?.classList.remove("active");
         showPlayerFields();
+        updateFaceCameraControls();
     });
 }
 
@@ -361,6 +615,8 @@ if (spectatorRoleBtn) {
         spectatorRoleBtn.classList.add("active");
         playerRoleBtn?.classList.remove("active");
         showSpectatorFields();
+        stopFaceCamera({ silent: true });
+        updateFaceCameraControls();
     });
 }
 
@@ -477,6 +733,7 @@ if (enterRoomBtn) {
 
 socket.on("assigned-role", (data) => {
     if (data.role === "spectator") {
+        stopFaceCamera({ silent: true });
         myPlayerNumber = null;
         selectedRole = "spectator";
 
@@ -493,12 +750,14 @@ socket.on("assigned-role", (data) => {
         }
 
         showLeaveSpectatorButton();
+        updateFaceCameraControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         return;
     }
 
     if (data.role === "camera") {
+        stopFaceCamera({ silent: true });
         myPlayerNumber = null;
         selectedRole = "camera";
 
@@ -507,6 +766,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
 
         showLeaveSpectatorButton();
+        updateFaceCameraControls();
         renderAllMarkerPanels();
         return;
     }
@@ -522,6 +782,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.toggle("player-two-active", myPlayerNumber === 2);
 
         showLeaveSpectatorButton();
+        updateFaceCameraControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         syncActiveMarkersToRoom();
@@ -653,6 +914,9 @@ function updateRemoteMutedIcon(micEnabled) {
         remoteMutedIcon.classList.remove("hidden");
     }
 }
+
+window.setLocalMutedIconState = updateLocalMutedIcon;
+window.setRemoteMutedIconState = updateRemoteMutedIcon;
 
 function updateMicIconsFromState(state) {
     const players = Array.isArray(state.players) ? state.players : [];
@@ -1393,6 +1657,52 @@ if (leaveConfirmModal) {
         }
     });
 }
+
+if (toggleFaceCameraBtn) {
+    toggleFaceCameraBtn.addEventListener("click", toggleFaceCamera);
+}
+
+if (faceCameraSelect) {
+    faceCameraSelect.addEventListener("change", async () => {
+        faceCameraDeviceId = faceCameraSelect.value;
+
+        if (faceCameraDeviceId) {
+            localStorage.setItem("magicSelectedFaceCamera", faceCameraDeviceId);
+        }
+
+        if (faceCameraStream) {
+            await startFaceCamera();
+        }
+    });
+}
+
+const mainCameraSelectForFace = document.getElementById("cameraSelect");
+
+if (mainCameraSelectForFace) {
+    mainCameraSelectForFace.addEventListener("change", async () => {
+        const activeFaceDeviceId = getActiveFaceCameraDeviceId();
+
+        await getFaceCameraDevices().catch(() => {});
+
+        if (faceCameraStream && activeFaceDeviceId && activeFaceDeviceId === getMainCameraDeviceId()) {
+            stopFaceCamera({ silent: true });
+            showRoomToast("FaceCam desligada para liberar a câmera principal.");
+        }
+    });
+}
+
+const originalShutdownRoomConnection = window.shutdownRoomConnection;
+
+if (typeof originalShutdownRoomConnection === "function") {
+    window.shutdownRoomConnection = function(...args) {
+        stopFaceCamera({ silent: true });
+        return originalShutdownRoomConnection.apply(this, args);
+    };
+}
+
+window.addEventListener("beforeunload", () => {
+    stopFaceCamera({ silent: true });
+});
 
 if (copyRoomBtn) {
     copyRoomBtn.addEventListener("click", async () => {
@@ -2489,14 +2799,74 @@ function createActiveMarkerCard(playerNumber, marker) {
     return card;
 }
 
+function getFloatingPlayerColumn(root, playerNumber) {
+    const normalizedPlayer = Number(playerNumber);
+    if (![1, 2].includes(normalizedPlayer)) return root;
+
+    let column = root.querySelector(`[data-floating-player="${normalizedPlayer}"]`);
+
+    if (!column) {
+        column = document.createElement("div");
+        column.className = `floating-player-column floating-player-${normalizedPlayer}`;
+        column.dataset.floatingPlayer = String(normalizedPlayer);
+        root.appendChild(column);
+    }
+
+    return column;
+}
+
 function renderFloatingMarkers() {
     const root = document.getElementById("floatingMarkersRoot");
     if (!root) return;
 
     root.innerHTML = "";
-    root.parentElement?.classList.remove("has-floating-markers");
+    root.classList.remove("has-facecams");
+    root.parentElement?.classList.remove("has-floating-markers", "has-floating-player-1", "has-floating-player-2");
 
-    if (!isMarkerUiVisible()) return;
+    let faceCameraCount = 0;
+    const visiblePlayers = new Set();
+
+    if (selectedRole === "player" && faceCameraStream) {
+        const playerNumber = Number(myPlayerNumber);
+        const column = getFloatingPlayerColumn(root, playerNumber);
+
+        renderFaceCameraCard(column, {
+            stream: faceCameraStream,
+            playerNumber,
+            isLocal: true
+        });
+        visiblePlayers.add(playerNumber);
+        faceCameraCount++;
+    }
+
+    Object.entries(remoteFaceCameras).forEach(([playerNumber, camera]) => {
+        const normalizedPlayer = Number(playerNumber);
+        if (selectedRole === "player" && normalizedPlayer === Number(myPlayerNumber)) return;
+
+        if (renderFaceCameraCard(getFloatingPlayerColumn(root, normalizedPlayer), {
+            stream: camera.stream,
+            playerNumber: normalizedPlayer,
+            name: camera.name,
+            isLocal: false
+        })) {
+            visiblePlayers.add(normalizedPlayer);
+            faceCameraCount++;
+        }
+    });
+
+    if (!isMarkerUiVisible()) {
+        if (faceCameraCount > 0) {
+            root.classList.add("has-facecams");
+            root.parentElement?.classList.add("has-floating-markers");
+            visiblePlayers.forEach(playerNumber => {
+                root.parentElement?.classList.add(`has-floating-player-${playerNumber}`);
+            });
+        } else {
+            root.classList.remove("has-facecams");
+        }
+
+        return;
+    }
 
     let floatingCount = 0;
 
@@ -2508,13 +2878,19 @@ function renderFloatingMarkers() {
             .forEach(marker => {
                 const card = createActiveMarkerCard(playerNumber, marker);
                 card.classList.add(`floating-marker-player-${playerNumber}`);
-                root.appendChild(card);
+                getFloatingPlayerColumn(root, playerNumber).appendChild(card);
+                visiblePlayers.add(playerNumber);
                 floatingCount++;
             });
     });
 
-    if (floatingCount > 0) {
+    root.classList.toggle("has-facecams", faceCameraCount > 0);
+
+    if (faceCameraCount > 0 || floatingCount > 0) {
         root.parentElement?.classList.add("has-floating-markers");
+        visiblePlayers.forEach(playerNumber => {
+            root.parentElement?.classList.add(`has-floating-player-${playerNumber}`);
+        });
     }
 }
 
@@ -3016,6 +3392,8 @@ window.addEventListener("load", () => {
     }
 
     showLeaveSpectatorButton();
+    updateFaceCameraControls();
+    getFaceCameraDevices().catch(() => {});
 });
 
 renderDiceHistory();

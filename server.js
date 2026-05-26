@@ -251,6 +251,7 @@ function ensureRoom(roomId) {
       diceRolls: [],
       micStatus: {},
       matchScore: { 1: 0, 2: 0 },
+      faceCams: {},
       markerState: { 1: {}, 2: {} }
     };
   }
@@ -417,6 +418,7 @@ function sendRoomState(roomId) {
     diceRolls: room.diceRolls,
     micStatus: room.micStatus,
     matchScore: room.matchScore || { 1: 0, 2: 0 },
+    faceCams: Object.values(room.faceCams || {}),
     markerState: room.markerState || { 1: {}, 2: {} },
     users: buildRoomUsers(room)
   });
@@ -502,6 +504,7 @@ function resetPublicRoomIfEmpty(roomId) {
       diceRolls: [],
       micStatus: {},
       matchScore: { 1: 0, 2: 0 },
+      faceCams: {},
       markerState: { 1: {}, 2: {} }
     };
   } else {
@@ -817,6 +820,7 @@ function removeSocketFromAllRooms(socketId) {
     const removedPlayerNumbers = room.players
       .filter(p => p.socketId === socketId)
       .map(p => Number(p.playerNumber));
+    const removedFaceCam = room.faceCams?.[socketId];
     const removedLinkedCameras = room.cameraClients
       .filter(c => removedPlayerNumbers.includes(Number(c.linkedPlayer)))
       .map(c => c.socketId);
@@ -831,6 +835,16 @@ function removeSocketFromAllRooms(socketId) {
     room.diceRolls = room.diceRolls.filter(r => r.socketId !== socketId);
 
     delete room.micStatus[socketId];
+    if (room.faceCams?.[socketId]) {
+      delete room.faceCams[socketId];
+    }
+
+    if (removedFaceCam) {
+      io.to(roomId).emit("facecam-stopped", {
+        socketId,
+        playerNumber: removedFaceCam.playerNumber
+      });
+    }
     removedLinkedCameras.forEach(cameraSocketId => {
       const cameraSocket = io.sockets.sockets.get(cameraSocketId);
       if (cameraSocket) {
@@ -1388,6 +1402,76 @@ io.on("connection", (socket) => {
     room.matchScore[String(normalizedPlayerNumber)] = normalizedScore;
 
     sendRoomState(roomId);
+  });
+
+  socket.on("facecam-started", ({ roomId, playerNumber }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+
+    const normalizedPlayerNumber = Number(playerNumber || player.playerNumber);
+    if (Number(player.playerNumber) !== normalizedPlayerNumber) return;
+
+    room.faceCams = room.faceCams || {};
+    room.faceCams[socket.id] = {
+      socketId: socket.id,
+      playerNumber: normalizedPlayerNumber,
+      name: player.name || `Jogador ${normalizedPlayerNumber}`,
+      photo: player.photo || "/assets/default-avatar.png",
+      mediaType: "facecam"
+    };
+
+    socket.to(roomId).emit("facecam-started", room.faceCams[socket.id]);
+    socket.emit("facecam-list", {
+      faceCams: Object.values(room.faceCams)
+    });
+    sendRoomState(roomId);
+  });
+
+  socket.on("facecam-stopped", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room?.faceCams?.[socket.id]) return;
+
+    const stopped = room.faceCams[socket.id];
+    delete room.faceCams[socket.id];
+
+    io.to(roomId).emit("facecam-stopped", {
+      socketId: socket.id,
+      playerNumber: stopped.playerNumber
+    });
+    sendRoomState(roomId);
+  });
+
+  socket.on("facecam-offer", ({ target, offer }) => {
+    if (!target || !offer) return;
+
+    io.to(target).emit("facecam-offer", {
+      offer,
+      sender: socket.id,
+      senderInfo: getClientInfo(socket.id)
+    });
+  });
+
+  socket.on("facecam-answer", ({ target, answer }) => {
+    if (!target || !answer) return;
+
+    io.to(target).emit("facecam-answer", {
+      answer,
+      sender: socket.id,
+      senderInfo: getClientInfo(socket.id)
+    });
+  });
+
+  socket.on("facecam-ice-candidate", ({ target, candidate, side }) => {
+    if (!target || !candidate) return;
+
+    io.to(target).emit("facecam-ice-candidate", {
+      candidate,
+      sender: socket.id,
+      side
+    });
   });
 
   socket.on("offer", ({ target, offer }) => {

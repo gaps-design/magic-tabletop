@@ -1370,16 +1370,37 @@ body:has(.bottom-bar:not(.collapsed)) .marker-bar{
     position:absolute;
     top:0;
     left:0;
+    right:0;
+    bottom:0;
     z-index:80;
+    display:block;
+    pointer-events:none;
+}
+
+.floating-player-column{
+    position:absolute;
+    top:0;
     display:flex;
     flex-direction:column;
     gap:8px;
-    width:170px;
+    width:188px;
     pointer-events:auto;
 }
 
-.video-area.has-floating-markers{
-    padding-left:184px;
+.floating-player-1{
+    left:0;
+}
+
+.floating-player-2{
+    right:0;
+}
+
+.video-area.has-floating-player-1{
+    padding-left:202px;
+}
+
+.video-area.has-floating-player-2{
+    padding-right:202px;
 }
 
 .floating-markers-root .dynamic-marker-card{
@@ -1389,6 +1410,55 @@ body:has(.bottom-bar:not(.collapsed)) .marker-bar{
 
 .floating-markers-root .dynamic-marker-header{
     margin-bottom:5px;
+}
+
+.face-camera-card{
+    overflow:hidden;
+    border:1px solid rgba(34,211,238,0.35);
+    border-radius:14px;
+    background:rgba(3,11,21,0.88);
+    box-shadow:0 12px 34px rgba(0,0,0,0.34), 0 0 22px rgba(34,211,238,0.16);
+    backdrop-filter:blur(12px);
+    animation:markerPanelIn .18s ease;
+}
+
+.face-camera-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:7px 8px;
+    color:#e0f2fe;
+    font-size:12px;
+    font-weight:900;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+}
+
+.face-camera-header button{
+    width:26px;
+    height:24px;
+    border:none;
+    border-radius:8px;
+    background:rgba(15,23,42,0.85);
+    color:#bfdbfe;
+    font-weight:900;
+    cursor:pointer;
+}
+
+.face-camera-header button:hover{
+    background:rgba(239,68,68,0.22);
+    color:#fecaca;
+}
+
+.face-camera-card video{
+    display:block;
+    width:100%;
+    aspect-ratio:4 / 3;
+    max-height:154px;
+    object-fit:cover;
+    border:0;
+    border-radius:0;
+    background:#020617;
 }
 
 body.spectator-mode .dynamic-marker-area,
@@ -1402,6 +1472,10 @@ body.camera-mode .notes-small-btn,
 body.camera-mode .table-notes-panel,
 body.camera-mode .life-history-floating-panel{
     display:none !important;
+}
+
+body.spectator-mode .floating-markers-root.has-facecams{
+    display:flex !important;
 }
 
 @keyframes markerPanelIn{
@@ -1649,15 +1723,17 @@ body.clean-mode .layout-buttons button.active,
 }
 
 .bottom-bar{
-    height:90px;
-    padding:0 24px;
+    min-height:74px;
+    height:auto;
+    padding:8px 14px;
     border-top:1px solid rgba(255,255,255,0.08);
     background:rgba(6,16,29,0.96);
     backdrop-filter:blur(10px);
     display:flex;
+    flex-direction:column;
     align-items:center;
-    justify-content:space-between;
-    gap:16px;
+    justify-content:center;
+    gap:6px;
     position:fixed;
     bottom:0;
     left:0;
@@ -1674,34 +1750,86 @@ body.clean-mode .layout-buttons button.active,
 .main-controls{
     display:flex;
     align-items:center;
-    gap:12px;
+    gap:6px;
+    flex-wrap:wrap;
+}
+
+.device-controls{
+    width:100%;
+    justify-content:center;
+}
+
+.main-controls{
+    width:100%;
+    justify-content:center;
 }
 
 .control-item{
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:6px;
     background:#08182a;
-    padding:10px 14px;
+    padding:7px 8px;
     border-radius:10px;
+}
+
+.status-control{
+    min-width:96px;
+}
+
+.status-control strong{
+    display:block;
+    font-size:12px;
+    line-height:1.1;
+    white-space:nowrap;
 }
 
 .control-item span{
     display:block;
     color:#22c55e;
-    font-size:13px;
-    margin-top:4px;
+    font-size:12px;
+    margin-top:2px;
 }
 
 .select-control{
-    padding:0;
-    background:transparent;
+    gap:6px;
+    padding:6px 8px;
+}
+
+.media-select-control{
+    flex-direction:column;
+    align-items:flex-start;
+    background:rgba(8,24,42,0.72);
+    border:1px solid rgba(125,211,252,0.12);
+}
+
+.select-label{
+    margin:0 !important;
+    color:#93c5fd !important;
+    font-size:11px !important;
+    font-weight:900;
+    line-height:1;
+    text-transform:uppercase;
+    letter-spacing:.02em;
 }
 
 #cameraSelect,
-#microphoneSelect{
-    min-width:270px;
-    max-width:340px;
+#microphoneSelect,
+#faceCameraSelect{
+    min-width:145px;
+    max-width:170px;
+    height:32px;
+    font-size:11px;
+}
+
+.main-controls button{
+    padding:7px 8px;
+    font-size:11.5px;
+    white-space:nowrap;
+}
+
+#dualViewBtnBottom{
+    display:none !important;
 }
 
 .leave-btn{
@@ -2496,7 +2624,8 @@ body.spectator-mode .life{
     }
 
     #cameraSelect,
-    #microphoneSelect{
+    #microphoneSelect,
+    #faceCameraSelect{
         width:100%;
         min-width:260px;
     }
@@ -2535,15 +2664,28 @@ body.spectator-mode .life{
         top:auto;
         left:auto;
         right:auto;
+        bottom:auto;
         width:100%;
-        flex-direction:row;
+        display:flex;
+        align-items:flex-start;
         overflow-x:auto;
         gap:6px;
         grid-column:1 / -1;
     }
 
-    .video-area.has-floating-markers{
+    .floating-player-column{
+        position:relative;
+        top:auto;
+        left:auto;
+        right:auto;
+        flex:0 0 168px;
+        width:168px;
+    }
+
+    .video-area.has-floating-player-1,
+    .video-area.has-floating-player-2{
         padding-left:0;
+        padding-right:0;
     }
 
     .floating-markers-root .dynamic-marker-card{
@@ -2654,7 +2796,8 @@ body.spectator-mode .life{
     }
 
     #cameraSelect,
-    #microphoneSelect{
+    #microphoneSelect,
+    #faceCameraSelect{
         width:100%;
         min-width:260px;
     }

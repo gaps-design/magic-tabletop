@@ -518,18 +518,32 @@
                 </div>
             </button>
 
-            <div class="control-item select-control">
+            <button id="toggleFaceCameraBtn" class="control-item status-control">
+                FC
+                <div>
+                    <strong>FaceCam</strong>
+                    <span id="faceCameraStatusText">Desativada</span>
+                </div>
+            </button>
+
+            <div class="control-item select-control media-select-control">
+                <span class="select-label">Camera campo</span>
                 <select id="cameraSelect"></select>
             </div>
 
-            <div class="control-item select-control">
+            <div class="control-item select-control media-select-control face-camera-select-control hidden">
+                <span class="select-label">FaceCam</span>
+                <select id="faceCameraSelect" aria-label="Selecionar câmera de rosto"></select>
+            </div>
+
+            <div class="control-item select-control media-select-control">
+                <span class="select-label">Microfone</span>
                 <select id="microphoneSelect"></select>
             </div>
         </div>
 
         <div class="main-controls">
             <button id="fullscreenBtn">⛶ Tela cheia</button>
-            <button id="cleanModeBtnBottom">Clean</button>
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
             <button onclick="copyCameraLink()">📷 Celular como câmera</button>
             <button id="toggleChatBtn">💬 Chat</button>
