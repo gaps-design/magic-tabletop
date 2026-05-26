@@ -72,6 +72,7 @@ const cleanLeaveRoomBtn = document.getElementById("cleanLeaveRoomBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 const toggleChatBtn = document.getElementById("toggleChatBtn");
+const closeChatBtn = document.getElementById("closeChatBtn");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -471,6 +472,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
         document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
+        closePlayerChatPanel();
 
         if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
         if (requestSpectatorMicBtn) {
@@ -2375,12 +2377,36 @@ function injectSpectatorEmotes() {
     });
 }
 
+function toggleChatPanel(forceOpen = null) {
+    const container = document.getElementById("chatContainer");
+    if (!container) return;
+
+    if (forceOpen === true) {
+        container.classList.remove("hidden");
+        return;
+    }
+
+    if (forceOpen === false) {
+        container.classList.add("hidden");
+        return;
+    }
+
+    container.classList.toggle("hidden");
+}
+
+function closePlayerChatPanel() {
+    document.getElementById("chatContainer")?.classList.add("hidden");
+}
+
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener("click", () => {
-        const container = document.getElementById("chatContainer");
-        if (!container) return;
+        toggleChatPanel();
+    });
+}
 
-        container.classList.toggle("hidden");
+if (closeChatBtn) {
+    closeChatBtn.addEventListener("click", () => {
+        closePlayerChatPanel();
     });
 }
 
