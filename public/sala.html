@@ -164,6 +164,12 @@
 
         <section class="match-tools top-timer">
             <div class="timer-box compact-timer">
+                <div class="layout-buttons">
+                    <button id="cleanModeBtn">Clean</button>
+                    <button id="dualViewBtn">Dual View</button>
+                    <button id="focusViewBtn">Focus Mode</button>
+                </div>
+
                 <div id="timerDisplay" class="timer-display">50:00</div>
 
                 <button id="timerSettingsBtn" class="timer-toggle" onclick="toggleTimerControls()">⚙️</button>
@@ -467,12 +473,6 @@
             <h2 id="roomUsersTitle">Pessoas na sala</h2>
             <div id="roomUsersList" class="room-users-list"></div>
         </div>
-    </div>
-
-    <div class="layout-buttons">
-        <button id="cleanModeBtn">Clean</button>
-        <button id="dualViewBtn">Dual View</button>
-        <button id="focusViewBtn">Focus Mode</button>
     </div>
 
     <div id="cleanExitBar" class="clean-exit-bar" aria-label="Menu do modo clean">

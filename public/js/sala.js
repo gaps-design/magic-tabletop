@@ -123,6 +123,11 @@ let currentLifeHistory = [];
 let localOpponentLifeHistory = [];
 let lastRoomToastKey = "";
 let lastRoomToastAt = 0;
+let lastTimerRemaining = null;
+let timerAudioContext = null;
+const timerAlertMarks = [1200, 900, 600, 300];
+const firedTimerAlerts = new Set();
+let timerSirenPlayed = false;
 const CHAT_HISTORY_LIMIT = 80;
 const MATCH_EVENTS_LIMIT = 60;
 
@@ -1703,16 +1708,143 @@ function formatTimer(seconds) {
     return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
+function getTimerAudioContext() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+
+    if (!timerAudioContext) {
+        timerAudioContext = new AudioContextClass();
+    }
+
+    if (timerAudioContext.state === "suspended") {
+        timerAudioContext.resume().catch(() => {});
+    }
+
+    return timerAudioContext;
+}
+
+function playTimerBeep() {
+    try {
+        const ctx = getTimerAudioContext();
+        if (!ctx) return;
+
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const now = ctx.currentTime;
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(880, now);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.24);
+    } catch (error) {
+        console.warn("Alerta sonoro do timer bloqueado:", error);
+    }
+}
+
+function playTimerSiren() {
+    try {
+        const ctx = getTimerAudioContext();
+        if (!ctx) return;
+
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const now = ctx.currentTime;
+        const duration = 5;
+
+        oscillator.type = "sawtooth";
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.16, now + 0.08);
+
+        for (let i = 0; i <= duration * 4; i++) {
+            const time = now + i * 0.25;
+            oscillator.frequency.setValueAtTime(i % 2 === 0 ? 620 : 920, time);
+        }
+
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start(now);
+        oscillator.stop(now + duration);
+    } catch (error) {
+        console.warn("Sirene do timer bloqueada:", error);
+    }
+}
+
+function resetTimerAlerts() {
+    firedTimerAlerts.clear();
+    timerSirenPlayed = false;
+    lastTimerRemaining = null;
+}
+
+function applyTimerVisualState(remaining) {
+    const timerDisplay = document.getElementById("timerDisplay");
+    if (!timerDisplay) return;
+
+    timerDisplay.classList.remove("timer-warning", "timer-danger", "timer-ended");
+
+    if (remaining <= 0) {
+        timerDisplay.classList.add("timer-ended");
+        return;
+    }
+
+    if (remaining <= 300) {
+        timerDisplay.classList.add("timer-danger");
+        return;
+    }
+
+    if (remaining <= 1200) {
+        timerDisplay.classList.add("timer-warning");
+    }
+}
+
+function processTimerAlerts(remaining, isRunning) {
+    if (lastTimerRemaining !== null && remaining > lastTimerRemaining + 1) {
+        resetTimerAlerts();
+    }
+
+    applyTimerVisualState(remaining);
+
+    if (!isRunning || lastTimerRemaining === null) {
+        lastTimerRemaining = remaining;
+        return;
+    }
+
+    timerAlertMarks.forEach(mark => {
+        if (lastTimerRemaining > mark && remaining <= mark && !firedTimerAlerts.has(mark)) {
+            firedTimerAlerts.add(mark);
+            playTimerBeep();
+        }
+    });
+
+    if (lastTimerRemaining > 0 && remaining <= 0 && !timerSirenPlayed) {
+        timerSirenPlayed = true;
+        playTimerSiren();
+    }
+
+    lastTimerRemaining = remaining;
+}
+
 function updateTimerDisplay(timer) {
     const timerDisplay = document.getElementById("timerDisplay");
     if (!timerDisplay) return;
 
     if (!timer) {
         timerDisplay.innerText = "50:00";
+        resetTimerAlerts();
+        applyTimerVisualState(3000);
         return;
     }
 
-    timerDisplay.innerText = formatTimer(timer.remaining);
+    const remaining = Number(timer.remaining || 0);
+    timerDisplay.innerText = formatTimer(remaining);
+    processTimerAlerts(remaining, timer.running === true);
 }
 
 window.setTimer = function() {
@@ -1728,6 +1860,7 @@ window.setTimer = function() {
         return;
     }
 
+    resetTimerAlerts();
     socket.emit("set-timer", { roomId, minutes });
 };
 
@@ -1743,6 +1876,7 @@ window.pauseTimer = function() {
 
 window.resetTimer = function() {
     if (selectedRole !== "player") return;
+    resetTimerAlerts();
     socket.emit("reset-timer", { roomId });
 };
 

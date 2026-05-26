@@ -131,12 +131,16 @@ button:hover{
 
 .timer-box.compact-timer{
     position:relative;
-    min-width:220px;
+    min-width:420px;
     background:rgba(15,25,40,0.92);
     border:1px solid rgba(80,180,255,0.28);
     border-radius:16px;
     padding:6px 78px 6px 16px;
     box-shadow:0 0 16px rgba(0,0,0,0.25);
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:14px;
 }
 
 .timer-display{
@@ -146,6 +150,33 @@ button:hover{
     color:#45c8ff;
     text-align:center;
     text-shadow:0 0 12px rgba(69,200,255,0.55);
+    transition:color .2s ease, text-shadow .2s ease, transform .2s ease;
+    min-width:94px;
+}
+
+.timer-display.timer-warning{
+    color:#facc15;
+    text-shadow:0 0 16px rgba(250,204,21,0.58);
+}
+
+.timer-display.timer-danger,
+.timer-display.timer-ended{
+    color:#f87171;
+    text-shadow:0 0 18px rgba(248,113,113,0.72);
+    animation:timerUrgentPulse .9s ease-in-out infinite;
+}
+
+.timer-display.timer-ended{
+    transform:scale(1.04);
+}
+
+@keyframes timerUrgentPulse{
+    0%, 100%{
+        opacity:1;
+    }
+    50%{
+        opacity:.42;
+    }
 }
 
 .timer-toggle{
@@ -199,6 +230,34 @@ button:hover{
     background:linear-gradient(135deg,#1e90ff,#00c2ff);
     color:white;
     font-weight:800;
+}
+
+@media(max-width:900px){
+    .timer-box.compact-timer{
+        min-width:0;
+        width:100%;
+        max-width:calc(100vw - 28px);
+        justify-content:center;
+        flex-wrap:wrap;
+        padding:8px 78px 8px 12px;
+        gap:8px;
+    }
+
+    .timer-box.compact-timer .layout-buttons{
+        order:2;
+        width:100%;
+    }
+
+    .timer-display{
+        order:1;
+        font-size:30px;
+        line-height:34px;
+    }
+
+    .layout-buttons button{
+        padding:7px 10px;
+        font-size:12px;
+    }
 }
 
 .room-toast-container{
@@ -1235,14 +1294,10 @@ body.camera-mode .life-history-floating-panel{
 /* BOTÕES DE LAYOUT */
 
 .layout-buttons{
-    position:fixed;
-    bottom:18px;
-    left:50%;
-    transform:translateX(-50%);
-    z-index:30;
     display:flex;
     justify-content:center;
-    gap:12px;
+    gap:8px;
+    flex-wrap:wrap;
     transition:0.3s;
 }
 
@@ -1251,12 +1306,11 @@ body.camera-mode .life-history-floating-panel{
     backdrop-filter:blur(8px);
     border:1px solid rgba(255,255,255,0.12);
     color:white;
-    padding:9px 14px;
-    border-radius:12px;
-}
-
-body:has(.bottom-bar:not(.collapsed)) .layout-buttons{
-    bottom:104px;
+    padding:8px 12px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:800;
+    white-space:nowrap;
 }
 
 /* FOCUS MODE */
