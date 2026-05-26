@@ -250,6 +250,7 @@ function ensureRoom(roomId) {
       timer: createDefaultTimer(),
       diceRolls: [],
       micStatus: {},
+      matchScore: { 1: 0, 2: 0 },
       markerState: { 1: {}, 2: {} }
     };
   }
@@ -415,6 +416,7 @@ function sendRoomState(roomId) {
     format: room.format || "Formato livre",
     diceRolls: room.diceRolls,
     micStatus: room.micStatus,
+    matchScore: room.matchScore || { 1: 0, 2: 0 },
     markerState: room.markerState || { 1: {}, 2: {} },
     users: buildRoomUsers(room)
   });
@@ -499,6 +501,7 @@ function resetPublicRoomIfEmpty(roomId) {
       timer: createDefaultTimer(),
       diceRolls: [],
       micStatus: {},
+      matchScore: { 1: 0, 2: 0 },
       markerState: { 1: {}, 2: {} }
     };
   } else {
@@ -1365,6 +1368,24 @@ io.on("connection", (socket) => {
         time: new Date().toLocaleTimeString("pt-BR")
       });
     }
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("match-score-update", ({ roomId, playerNumber, score }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!isPlayerInRoom(room, socket.id)) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    const normalizedPlayerNumber = Number(playerNumber);
+    const normalizedScore = Math.max(0, Math.min(3, Number(score) || 0));
+
+    if (!player || Number(player.playerNumber) !== normalizedPlayerNumber) return;
+    if (![1, 2].includes(normalizedPlayerNumber)) return;
+
+    room.matchScore = room.matchScore || { 1: 0, 2: 0 };
+    room.matchScore[String(normalizedPlayerNumber)] = normalizedScore;
 
     sendRoomState(roomId);
   });

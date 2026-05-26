@@ -370,6 +370,131 @@ button:hover{
     gap:10px;
 }
 
+.match-score{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+}
+
+.match-score-own{
+    margin:0 0 8px;
+}
+
+.match-score-opponent{
+    margin:9px 0 2px;
+}
+
+.match-score-slot{
+    width:22px;
+    height:22px;
+    border-radius:7px;
+    border:1px solid rgba(255,255,255,0.14);
+    background:rgba(30,41,59,0.75);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.22);
+    transition:background .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+
+.match-score.is-editable .match-score-slot{
+    cursor:pointer;
+}
+
+.match-score.is-editable .match-score-slot:hover,
+.match-score.is-editable .match-score-slot:focus-visible{
+    transform:translateY(-1px);
+    border-color:rgba(74,222,128,0.65);
+    outline:none;
+}
+
+.match-score-slot.is-filled{
+    border-color:rgba(74,222,128,0.86);
+    background:linear-gradient(135deg,#16a34a,#4ade80);
+    box-shadow:0 0 14px rgba(74,222,128,0.45);
+}
+
+.victory-overlay{
+    position:fixed;
+    inset:0;
+    z-index:100001;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    pointer-events:none;
+    background:radial-gradient(circle, rgba(34,197,94,0.18), rgba(2,6,15,0.02) 58%);
+}
+
+.victory-card{
+    min-width:min(360px, 90vw);
+    padding:30px 28px;
+    border:1px solid rgba(74,222,128,0.36);
+    border-radius:18px;
+    background:rgba(5,10,18,0.9);
+    box-shadow:0 28px 90px rgba(0,0,0,0.62), 0 0 44px rgba(74,222,128,0.24);
+    text-align:center;
+    backdrop-filter:blur(12px);
+    transform:scale(.82) translateY(18px);
+    opacity:0;
+}
+
+.victory-overlay.is-showing .victory-card{
+    animation:victoryPop 4.2s ease-out forwards;
+}
+
+.victory-emoji{
+    font-size:72px;
+    line-height:1;
+    margin-bottom:10px;
+    animation:victoryEmojiDance .9s ease-in-out infinite;
+    filter:drop-shadow(0 10px 22px rgba(0,0,0,.38));
+}
+
+.victory-name{
+    display:block;
+    color:white;
+    font-size:clamp(24px, 5vw, 40px);
+    line-height:1.08;
+    overflow-wrap:anywhere;
+}
+
+.victory-text{
+    display:block;
+    margin-top:8px;
+    color:#4ade80;
+    font-size:clamp(26px, 6vw, 48px);
+    font-weight:1000;
+    letter-spacing:.08em;
+    text-shadow:0 0 20px rgba(74,222,128,0.55);
+}
+
+@keyframes victoryPop{
+    0%{
+        opacity:0;
+        transform:scale(.82) translateY(18px);
+    }
+    12%{
+        opacity:1;
+        transform:scale(1.04) translateY(0);
+    }
+    20%, 82%{
+        opacity:1;
+        transform:scale(1) translateY(0);
+    }
+    100%{
+        opacity:0;
+        transform:scale(.94) translateY(-10px);
+    }
+}
+
+@keyframes victoryEmojiDance{
+    0%, 100%{
+        transform:rotate(-7deg) scale(1);
+    }
+    50%{
+        transform:rotate(7deg) scale(1.08);
+    }
+}
+
 .life-delta{
     position:absolute;
     left:calc(50% + 44px);

@@ -108,6 +108,9 @@ let currentSpectators = [];
 let currentQueue = [];
 let isQueuedInResenha = false;
 let currentRoomMarkerState = { 1: {}, 2: {} };
+let currentMatchScore = { 1: 0, 2: 0 };
+let hasReceivedMatchScore = false;
+let victoryOverlayTimer = null;
 const previousOfficialLife = {};
 const lifeDeltaTimers = {};
 let hasSeenLoggedUser = false;
@@ -491,6 +494,7 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
+        renderMatchScore(currentMatchScore);
         return;
     }
 
@@ -519,6 +523,7 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         renderAllMarkerPanels();
+        renderMatchScore(currentMatchScore);
         syncActiveMarkersToRoom();
     }
 });
@@ -572,6 +577,7 @@ socket.on("room-state", (state) => {
     updateCameraTitles(p1, p2);
 
     applyRoomMarkerState(state.markerState || {});
+    renderMatchScore(state.matchScore || {});
     renderLifeHistory(state.lifeHistory || []);
     renderSpectatorMarkerSummary(state.markerState || {});
     updateTimerDisplay(state.timer);
@@ -888,6 +894,155 @@ function getOpponentPlayerNumber() {
 
     return null;
 }
+
+function normalizeMatchScore(score = {}) {
+    return {
+        1: Math.max(0, Math.min(3, Number(score[1] ?? score["1"]) || 0)),
+        2: Math.max(0, Math.min(3, Number(score[2] ?? score["2"]) || 0))
+    };
+}
+
+function renderScoreGroup(group, value, editable = false) {
+    if (!group) return;
+
+    group.classList.toggle("is-editable", editable);
+
+    group.querySelectorAll(".match-score-slot").forEach(slot => {
+        const slotValue = Number(slot.dataset.scoreSlot || 0);
+        const filled = slotValue <= value;
+
+        slot.classList.toggle("is-filled", filled);
+        slot.setAttribute("aria-pressed", filled ? "true" : "false");
+        slot.setAttribute("role", editable ? "button" : "img");
+        slot.tabIndex = editable ? 0 : -1;
+    });
+}
+
+function renderMatchScore(score = {}) {
+    const previousScore = { ...currentMatchScore };
+    const nextScore = normalizeMatchScore(score);
+
+    if (hasReceivedMatchScore) {
+        [1, 2].forEach(playerNumber => {
+            if ((previousScore[playerNumber] || 0) < 2 && nextScore[playerNumber] === 2) {
+                showVictoryOverlay(playerNumber);
+            }
+        });
+    }
+
+    currentMatchScore = nextScore;
+    hasReceivedMatchScore = true;
+
+    document.querySelectorAll("[data-score-player]").forEach(group => {
+        const playerNumber = Number(group.dataset.scorePlayer);
+        renderScoreGroup(
+            group,
+            currentMatchScore[playerNumber] || 0,
+            selectedRole === "player" && Number(myPlayerNumber) === playerNumber && isActivePlayer()
+        );
+    });
+
+    document.querySelectorAll("[data-opponent-score-for]").forEach(group => {
+        const panelPlayerNumber = Number(group.dataset.opponentScoreFor);
+        const opponentPlayerNumber = panelPlayerNumber === 1 ? 2 : 1;
+        renderScoreGroup(group, currentMatchScore[opponentPlayerNumber] || 0, false);
+    });
+}
+
+function playVictorySound() {
+    try {
+        const ctx = getTimerAudioContext();
+        if (!ctx) return;
+
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        const now = ctx.currentTime;
+
+        notes.forEach((frequency, index) => {
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const start = now + index * 0.12;
+
+            oscillator.type = "triangle";
+            oscillator.frequency.setValueAtTime(frequency, start);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.exponentialRampToValueAtTime(0.12, start + 0.025);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.start(start);
+            oscillator.stop(start + 0.24);
+        });
+    } catch (error) {
+        console.warn("Som de vitória bloqueado:", error);
+    }
+}
+
+function showVictoryOverlay(playerNumber) {
+    const playerName = getPlayerNameByNumber(playerNumber);
+    let overlay = document.getElementById("victoryOverlay");
+
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "victoryOverlay";
+        overlay.className = "victory-overlay hidden";
+        overlay.innerHTML = `
+            <div class="victory-card">
+                <div class="victory-emoji" aria-hidden="true">🎉</div>
+                <strong class="victory-name"></strong>
+                <span class="victory-text">WINS</span>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    overlay.querySelector(".victory-name").innerText = playerName;
+    overlay.classList.remove("hidden");
+    overlay.classList.remove("is-showing");
+    void overlay.offsetWidth;
+    overlay.classList.add("is-showing");
+
+    playVictorySound();
+
+    if (victoryOverlayTimer) {
+        clearTimeout(victoryOverlayTimer);
+    }
+
+    victoryOverlayTimer = setTimeout(() => {
+        overlay.classList.add("hidden");
+        overlay.classList.remove("is-showing");
+    }, 4200);
+}
+
+function updateMyMatchScoreFromSlot(slot) {
+    if (!isActivePlayer()) return;
+
+    const group = slot.closest("[data-score-player]");
+    const playerNumber = Number(group?.dataset.scorePlayer || 0);
+    const slotValue = Number(slot.dataset.scoreSlot || 0);
+
+    if (playerNumber !== Number(myPlayerNumber)) return;
+    if (![1, 2, 3].includes(slotValue)) return;
+
+    const currentValue = currentMatchScore[playerNumber] || 0;
+    const nextValue = currentValue >= slotValue ? slotValue - 1 : slotValue;
+
+    socket.emit("match-score-update", {
+        roomId,
+        playerNumber,
+        score: nextValue
+    });
+}
+
+document.querySelectorAll("[data-score-player] .match-score-slot").forEach(slot => {
+    slot.addEventListener("click", () => updateMyMatchScoreFromSlot(slot));
+    slot.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+
+        event.preventDefault();
+        updateMyMatchScoreFromSlot(slot);
+    });
+});
 
 function showLifeDeltaBesideElement(timerKey, lifeElement, delta) {
     const amount = Number(delta);
