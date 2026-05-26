@@ -61,8 +61,12 @@
       </div>
 
       <nav class="top-links">
-        <a href="/privacidade.html">Privacidade</a>
+        <a href="/salas.html">Salão de Jogos</a>
+        <a href="#mesa-resenha">Mesa da Resenha</a>
+        <a href="#" aria-label="Discord em breve">Discord</a>
+        <a href="/privacidade.html">Política de Privacidade</a>
         <a href="/termos.html">Termos de Uso</a>
+
         <a href="/nao-afiliacao.html">Não Afiliação</a>
       </nav>
 
@@ -75,6 +79,21 @@
       <div class="hero-content">
         <h1>Jogue seu card game favorito<br><span>à distância</span></h1>
         <p>Mesas com câmera, vida, cronômetro e espectadores em tempo real.</p>
+
+        <div class="hero-stats-card" aria-label="Resumo do lobby">
+          <div>
+            <span>⚓ Convés</span>
+            <strong data-presence-count="conves">0</strong>
+          </div>
+          <div>
+            <span>👤 Jogadores</span>
+            <strong data-presence-count="calabouco">0</strong>
+          </div>
+          <div>
+            <span>👁️ Espectadores</span>
+            <strong data-presence-count="proa">0</strong>
+          </div>
+        </div>
 
         <div class="join-box">
           <input id="roomCodeInput" type="text" placeholder="Digite o código da mesa">
@@ -90,6 +109,12 @@
         <button id="createPrivateRoom" class="create-btn">Criar sala privada +</button>
       </div>
 
+      <div class="hero-ship-scene" aria-hidden="true">
+        <div class="ship-glow"></div>
+      </div>
+    </section>
+
+    <section class="feature-cards-section" aria-label="Recursos do ResenhaON">
       <div class="feature-cards">
         <div class="feature-card purple">
           <div class="feature-icon">👥</div>
@@ -111,7 +136,27 @@
       </div>
     </section>
 
-    <section class="tables-section">
+    <section class="home-lobby-actions" aria-label="Acessos principais">
+      <a class="home-action-card game-hall-card" href="/salas.html">
+        <span>⚓ Salão de Jogos</span>
+        <strong>Mesas públicas</strong>
+        <p>Veja todas as mesas abertas, formatos, jogadores e espectadores.</p>
+      </a>
+
+      <div id="mesa-resenha" class="home-action-card resenha-home-card room-card" data-room="mtg-1002" data-special="resenha">
+        <span>🎲 Mesa da Resenha</span>
+        <strong>Comunidade</strong>
+        <p>Entre direto na mesa principal da resenha.</p>
+        <div class="room-info">
+          <div><span>👥</span><strong>0</strong><small>Jogadores</small></div>
+          <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+          <div><span>🎥</span><strong>0</strong><small>Câmeras</small></div>
+        </div>
+        <button class="enter-table-btn">Entrar na resenha →</button>
+      </div>
+    </section>
+
+    <section id="mesas" class="tables-section home-hidden-tables">
       <div class="section-title">
         <h2>Mesas disponíveis</h2>
         <button id="refreshRooms" class="refresh-btn">⟳ Atualizar</button>

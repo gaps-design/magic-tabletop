@@ -13,6 +13,15 @@ const convesCard = document.getElementById("convesCard");
 const convesModal = document.getElementById("convesModal");
 const closeConves = document.getElementById("closeConves");
 
+if (joinRoomBtn) joinRoomBtn.innerText = "Entrar na Sala";
+if (createPrivateRoomButton) createPrivateRoomButton.innerText = "Criar Sala Privada";
+document.querySelector('[data-presence-count="conves"]')?.previousElementSibling?.replaceChildren("Online");
+document.querySelector('[data-presence-count="calabouco"]')?.previousElementSibling?.replaceChildren("Jogando");
+document.querySelector('[data-presence-count="proa"]')?.previousElementSibling?.replaceChildren("Assistindo");
+document.querySelectorAll('a[href="/nao-afiliacao.html"]').forEach(link => {
+  link.innerText = "Aviso Legal";
+});
+
 let selectedRoomId = null;
 let lobbyTables = {};
 let lastOnlineUid = null;
@@ -297,6 +306,16 @@ function renderPresence(presence = {}) {
   if (proaCount) proaCount.innerText = proa.length;
   if (convesCount) convesCount.innerText = conves.length;
   if (calaboucoCount) calaboucoCount.innerText = calabouco.length;
+
+  document.querySelectorAll('[data-presence-count="proa"]').forEach(item => {
+    item.innerText = proa.length;
+  });
+  document.querySelectorAll('[data-presence-count="conves"]').forEach(item => {
+    item.innerText = conves.length;
+  });
+  document.querySelectorAll('[data-presence-count="calabouco"]').forEach(item => {
+    item.innerText = calabouco.length;
+  });
 
   if (proaList) proaList.innerHTML = renderUserList(proa, "👁️");
   if (convesList) convesList.innerHTML = renderUserList(conves, "⚔️");

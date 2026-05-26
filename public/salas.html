@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salão de Jogos | ResenhaON</title>
+  <meta name="description" content="Mesas públicas do ResenhaON para jogar card games online com câmera.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/css/home.css">
+</head>
+
+<body class="game-hall-page">
+  <div class="page-bg"></div>
+  <div class="overlay"></div>
+
+  <main class="home">
+    <header class="topbar">
+      <a href="/" class="brand">
+        <img src="/assets/logo-resenhaon.png" class="logo" alt="ResenhaON">
+      </a>
+
+      <div id="convesCard" class="conves-card">
+        <span class="conves-card-title">⚓ Convés</span>
+        <div class="mini-presence-counts" aria-label="Status dos usuários online">
+          <div class="mini-presence-item" title="Espectadores na Proa">
+            <span class="mini-presence-icon">👁️</span>
+            <strong id="proaCount">0</strong>
+          </div>
+          <div class="mini-presence-item" title="Jogadores ativos no Convés">
+            <span class="mini-presence-icon">⚔️</span>
+            <strong id="convesCount">0</strong>
+          </div>
+          <div class="mini-presence-item" title="Logados sem mesa no Calabouço">
+            <span class="mini-presence-icon">👻</span>
+            <strong id="calaboucoCount">0</strong>
+          </div>
+        </div>
+      </div>
+
+      <nav class="top-links">
+        <a href="/">Voltar ao Lobby</a>
+        <a href="/salas.html">Salão de Jogos</a>
+        <a href="/#mesa-resenha">Mesa da Resenha</a>
+        <a href="#" aria-label="Discord em breve">Discord</a>
+        <a href="/privacidade.html">Política de Privacidade</a>
+        <a href="/termos.html">Termos de Uso</a>
+        <a href="/nao-afiliacao.html">Aviso Legal</a>
+      </nav>
+
+      <button id="googleLoginBtn" class="google-login-btn">
+        Entrar com Google
+      </button>
+    </header>
+
+    <section class="game-hall-hero">
+      <span>⚓ Salão de Jogos</span>
+      <h1>Mesas públicas</h1>
+      <p>Escolha uma mesa, veja o formato ativo e entre como jogador ou espectador.</p>
+    </section>
+
+    <section id="mesas" class="tables-section game-hall-tables">
+      <div class="section-title">
+        <h2>Mesas disponíveis</h2>
+        <button id="refreshRooms" class="refresh-btn">⟳ Atualizar</button>
+      </div>
+
+      <div class="resenha-area">
+        <div id="mesa-resenha" class="room-card resenha-card" data-room="mtg-1002" data-special="resenha">
+          <div class="format-badge">Mesa da Resenha</div>
+          <h3>MTG-1002</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 02"><strong>02</strong></div>
+          <p class="resenha-text">A lendária mesa sem ponta. Os antigos sabem...</p>
+          <div class="room-info">
+            <div><span>👥</span><strong>0</strong><small>Jogadores</small></div>
+            <div><span>👁️</span><strong>0</strong><small>Espectadores</small></div>
+            <div><span>🎥</span><strong>0</strong><small>Câmeras</small></div>
+          </div>
+          <button class="enter-table-btn">Entrar na resenha →</button>
+        </div>
+      </div>
+
+      <div class="rooms-list">
+        <div class="room-card" data-room="mtg-1001">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1001</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 01"><strong>01</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1003">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1003</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 03"><strong>03</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1004">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1004</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 04"><strong>04</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1005">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1005</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 05"><strong>05</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1006">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1006</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 06"><strong>06</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1007">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1007</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 07"><strong>07</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1008">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1008</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 08"><strong>08</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1009">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1009</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 09"><strong>09</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1010">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1010</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 10"><strong>10</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+
+        <div class="room-card" data-room="mtg-1011">
+          <div class="format-badge">Formato livre</div>
+          <h3>MTG-1011</h3>
+          <div class="table-image"><img src="/assets/mesa.jpg" alt="Mesa 11"><strong>11</strong></div>
+          <div class="room-info"><div><span>👥</span><strong>0/2</strong><small>Jogadores</small></div><div><span>👁️</span><strong>0</strong><small>Espectadores</small></div></div>
+          <button class="enter-table-btn">Entrar na mesa →</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="legal-warning">
+        ResenhaON não possui qualquer afiliação com Wizards of the Coast,
+        Hasbro ou qualquer outra detentora de marcas de jogos de cartas.
+      </p>
+      <div class="footer-links">
+        <a href="/privacidade.html">Política de Privacidade</a>
+        <a href="/termos.html">Termos de Uso</a>
+        <a href="/nao-afiliacao.html">Aviso Legal</a>
+      </div>
+      <small>desenvolvido por gaps-design © 2026 ResenhaON</small>
+    </footer>
+  </main>
+
+  <div id="formatModal" class="format-modal hidden">
+    <div class="format-box">
+      <h2>Escolha o formato</h2>
+      <p>Esse formato aparecerá no topo da mesa.</p>
+      <select id="formatSelect">
+        <option value="Modern">Modern</option>
+        <option value="Pauper">Pauper</option>
+        <option value="Commander">Commander</option>
+        <option value="Standard">Standard</option>
+        <option value="Casual">Casual</option>
+        <option value="Limitado">Limitado</option>
+      </select>
+      <div class="format-actions">
+        <button id="cancelFormat">Cancelar</button>
+        <button id="confirmFormat">Entrar na mesa</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="convesModal" class="conves-modal hidden">
+    <div class="conves-ship">
+      <div class="conves-header">
+        <h2>⚓ Convés ResenhaON</h2>
+        <button id="closeConves">✕</button>
+      </div>
+      <div class="ship-section"><h3>👁️ Proa — Espectadores</h3><div id="proaList"></div></div>
+      <div class="ship-section"><h3>⚔️ Convés — Jogadores ativos</h3><div id="convesList"></div></div>
+      <div class="ship-section"><h3>⛓️ Calabouço — Logados sem mesa</h3><div id="calaboucoList"></div></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script src="/js/home.js"></script>
+</body>
+</html>
