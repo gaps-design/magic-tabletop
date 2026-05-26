@@ -918,20 +918,45 @@ function updateRemoteMutedIcon(micEnabled) {
 window.setLocalMutedIconState = updateLocalMutedIcon;
 window.setRemoteMutedIconState = updateRemoteMutedIcon;
 
+function getPlayerMicSocketId(player, cameras) {
+    if (!player) return "";
+
+    const linkedCamera = cameras.find(c => Number(c.linkedPlayer) === Number(player.playerNumber));
+    return linkedCamera?.socketId || player.socketId || "";
+}
+
+function updateMutedIconForPlayer(playerNumber, micEnabled) {
+    if (Number(playerNumber) === 1) {
+        updateLocalMutedIcon(micEnabled);
+    } else if (Number(playerNumber) === 2) {
+        updateRemoteMutedIcon(micEnabled);
+    }
+}
+
 function updateMicIconsFromState(state) {
     const players = Array.isArray(state.players) ? state.players : [];
     const cameras = Array.isArray(state.cameraClients) ? state.cameraClients : [];
     const micStatus = state.micStatus || {};
 
+    if (selectedRole === "spectator") {
+        [1, 2].forEach(playerNumber => {
+            const player = players.find(p => Number(p.playerNumber) === Number(playerNumber));
+            const micId = getPlayerMicSocketId(player, cameras);
+
+            if (micId && micStatus[micId] !== undefined) {
+                updateMutedIconForPlayer(playerNumber, micStatus[micId]);
+            } else {
+                updateMutedIconForPlayer(playerNumber, true);
+            }
+        });
+        return;
+    }
+
     const me = players.find(p => Number(p.playerNumber) === myPlayerNumber);
     const remote = players.find(p => Number(p.playerNumber) !== myPlayerNumber);
-    const myCamera = cameras.find(c => Number(c.linkedPlayer) === Number(myPlayerNumber));
-    const remoteCamera = remote
-        ? cameras.find(c => Number(c.linkedPlayer) === Number(remote.playerNumber))
-        : null;
 
-    const localMicId = myCamera?.socketId || me?.socketId;
-    const remoteMicId = remoteCamera?.socketId || remote?.socketId;
+    const localMicId = getPlayerMicSocketId(me, cameras);
+    const remoteMicId = getPlayerMicSocketId(remote, cameras);
 
     if (localMicId && micStatus[localMicId] !== undefined) {
         updateLocalMutedIcon(micStatus[localMicId]);
@@ -948,6 +973,11 @@ socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
     }
 
     const linkedPlayer = Number(info?.linkedPlayer || info?.playerNumber || 0);
+
+    if (selectedRole === "spectator") {
+        updateMutedIconForPlayer(linkedPlayer, micEnabled);
+        return;
+    }
 
     if (socketId === socket.id || (myPlayerNumber && linkedPlayer === Number(myPlayerNumber))) {
         updateLocalMutedIcon(micEnabled);
