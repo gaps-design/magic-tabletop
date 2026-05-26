@@ -521,9 +521,19 @@
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
             <button onclick="copyCameraLink()">📷 Celular como câmera</button>
             <button id="toggleChatBtn">💬 Chat</button>
-            <button class="leave-btn" onclick="leaveRoom()">📞 Sair da sala</button>
+            <button class="leave-btn" onclick="confirmLeaveRoom()">📞 Sair da sala</button>
         </div>
     </footer>
+
+    <div id="leaveConfirmModal" class="leave-confirm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="leaveConfirmTitle">
+        <div class="leave-confirm-box">
+            <h2 id="leaveConfirmTitle">Deseja realmente sair da sala?</h2>
+            <div class="leave-confirm-actions">
+                <button id="cancelLeaveRoomBtn" type="button">Cancelar</button>
+                <button id="confirmLeaveRoomBtn" class="danger" type="button">Sair da sala</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         function toggleBottomBar() {

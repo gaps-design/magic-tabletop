@@ -1322,6 +1322,63 @@ body.focus-mode.player-two-active .camera-player-1{
     display:flex;
 }
 
+.leave-confirm-modal{
+    position:fixed;
+    inset:0;
+    z-index:100000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(2,6,15,0.72);
+    backdrop-filter:blur(8px);
+}
+
+.leave-confirm-box{
+    width:min(360px, 100%);
+    padding:22px;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,0.12);
+    background:linear-gradient(180deg,#0f172a,#07111f);
+    box-shadow:0 24px 80px rgba(0,0,0,0.5);
+}
+
+.leave-confirm-box h2{
+    margin:0 0 18px;
+    color:white;
+    font-size:20px;
+    text-align:center;
+}
+
+.leave-confirm-actions{
+    display:flex;
+    gap:10px;
+}
+
+.leave-confirm-actions button{
+    flex:1;
+    min-height:44px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.14);
+    background:#0f1d31;
+    color:white;
+    font-weight:900;
+    cursor:pointer;
+}
+
+.leave-confirm-actions button:hover{
+    background:#172844;
+}
+
+.leave-confirm-actions .danger{
+    border-color:rgba(248,113,113,0.45);
+    background:linear-gradient(135deg,#7f1d1d,#dc2626);
+}
+
+.leave-confirm-actions .danger:hover{
+    background:linear-gradient(135deg,#991b1b,#ef4444);
+}
+
 body.clean-mode .topbar,
 body.clean-mode .bottom-bar,
 body.clean-mode .bottom-toggle,
@@ -1741,6 +1798,29 @@ body.clean-mode .layout-buttons button.active,
     animation:emojiFloat 5s linear forwards;
     pointer-events:none;
     filter:drop-shadow(0 8px 18px rgba(0,0,0,.45));
+}
+
+.floating-emoji-symbol,
+.floating-emoji-author{
+    display:block;
+    text-align:center;
+}
+
+.floating-emoji-author{
+    margin-top:4px;
+    max-width:150px;
+    padding:4px 10px;
+    border-radius:999px;
+    background:rgba(2,6,15,0.72);
+    color:white;
+    font-size:13px;
+    font-weight:900;
+    line-height:1.15;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    backdrop-filter:blur(6px);
+    text-shadow:0 1px 4px rgba(0,0,0,0.55);
 }
 
 @keyframes emojiFloat{

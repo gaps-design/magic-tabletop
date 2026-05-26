@@ -69,6 +69,9 @@ const cleanFocusBtn = document.getElementById("cleanFocusBtn");
 const cleanDualBtn = document.getElementById("cleanDualBtn");
 const cleanCopyRoomBtn = document.getElementById("cleanCopyRoomBtn");
 const cleanLeaveRoomBtn = document.getElementById("cleanLeaveRoomBtn");
+const leaveConfirmModal = document.getElementById("leaveConfirmModal");
+const cancelLeaveRoomBtn = document.getElementById("cancelLeaveRoomBtn");
+const confirmLeaveRoomBtn = document.getElementById("confirmLeaveRoomBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 const toggleChatBtn = document.getElementById("toggleChatBtn");
@@ -1189,18 +1192,45 @@ window.leaveRoom = function() {
     closeRoomTabOrHome(300);
 };
 
+window.confirmLeaveRoom = function() {
+    if (!leaveConfirmModal) {
+        window.leaveRoom?.();
+        return;
+    }
+
+    leaveConfirmModal.classList.remove("hidden");
+};
+
+function closeLeaveConfirmModal() {
+    leaveConfirmModal?.classList.add("hidden");
+}
+
 socket.on("left-room", () => {
     closeRoomTabOrHome(0);
 });
 
 if (leaveSpectatorBtn) {
     leaveSpectatorBtn.addEventListener("click", () => {
-        if (typeof window.shutdownRoomConnection === "function") {
-            window.shutdownRoomConnection();
-        }
+        window.confirmLeaveRoom?.();
+    });
+}
 
-        socket.emit("leave-room", { roomId });
-        closeRoomTabOrHome(300);
+if (cancelLeaveRoomBtn) {
+    cancelLeaveRoomBtn.addEventListener("click", closeLeaveConfirmModal);
+}
+
+if (confirmLeaveRoomBtn) {
+    confirmLeaveRoomBtn.addEventListener("click", () => {
+        closeLeaveConfirmModal();
+        window.leaveRoom?.();
+    });
+}
+
+if (leaveConfirmModal) {
+    leaveConfirmModal.addEventListener("click", (event) => {
+        if (event.target === leaveConfirmModal) {
+            closeLeaveConfirmModal();
+        }
     });
 }
 
@@ -1589,7 +1619,7 @@ if (cleanCopyRoomBtn) {
 
 if (cleanLeaveRoomBtn) {
     cleanLeaveRoomBtn.addEventListener("click", () => {
-        window.leaveRoom?.();
+        window.confirmLeaveRoom?.();
     });
 }
 
@@ -2506,7 +2536,7 @@ socket.on("chat-message", (data) => {
 });
 
 socket.on("floating-emoji", (data) => {
-    spawnFloatingEmoji(data?.message || data?.emoji);
+    spawnFloatingEmoji(data?.message || data?.emoji, data?.name);
 });
 
 function showRoomToast(message) {
@@ -2639,13 +2669,23 @@ function scrollToLatest(container) {
     });
 }
 
-function spawnFloatingEmoji(emoji) {
+function spawnFloatingEmoji(emoji, authorName = "") {
     if (!emoji) return;
 
     const el = document.createElement("div");
+    const emojiEl = document.createElement("span");
+    const nameEl = document.createElement("strong");
+    const safeAuthorName = String(authorName || "").trim();
 
     el.className = "floating-emoji";
-    el.innerText = emoji;
+    emojiEl.className = "floating-emoji-symbol";
+    emojiEl.innerText = emoji;
+
+    nameEl.className = "floating-emoji-author";
+    nameEl.innerText = safeAuthorName || "Jogador";
+
+    el.appendChild(emojiEl);
+    el.appendChild(nameEl);
     el.style.left = `${Math.floor(Math.random() * 80) + 10}%`;
     el.style.setProperty("--emoji-drift", `${Math.floor(Math.random() * 121) - 60}px`);
 
