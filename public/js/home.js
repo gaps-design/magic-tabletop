@@ -15,9 +15,9 @@ const closeConves = document.getElementById("closeConves");
 
 if (joinRoomBtn) joinRoomBtn.innerText = "Entrar na Sala";
 if (createPrivateRoomButton) createPrivateRoomButton.innerText = "Criar Sala Privada";
-document.querySelector('[data-presence-count="conves"]')?.previousElementSibling?.replaceChildren("Online");
-document.querySelector('[data-presence-count="calabouco"]')?.previousElementSibling?.replaceChildren("Jogando");
-document.querySelector('[data-presence-count="proa"]')?.previousElementSibling?.replaceChildren("Assistindo");
+document.querySelector('[data-presence-count="online"]')?.previousElementSibling?.replaceChildren("Online");
+document.querySelector('[data-presence-count="playing"]')?.previousElementSibling?.replaceChildren("Jogando");
+document.querySelector('[data-presence-count="spectating"]')?.previousElementSibling?.replaceChildren("Assistindo");
 document.querySelectorAll('a[href="/nao-afiliacao.html"]').forEach(link => {
   link.innerText = "Aviso Legal";
 });
@@ -294,6 +294,7 @@ function renderPresence(presence = {}) {
   const proa = Array.isArray(presence.proa) ? presence.proa : [];
   const conves = Array.isArray(presence.conves) ? presence.conves : [];
   const calabouco = Array.isArray(presence.calabouco) ? presence.calabouco : [];
+  const onlineTotal = proa.length + conves.length + calabouco.length;
 
   const proaCount = document.getElementById("proaCount");
   const convesCount = document.getElementById("convesCount");
@@ -307,14 +308,19 @@ function renderPresence(presence = {}) {
   if (convesCount) convesCount.innerText = conves.length;
   if (calaboucoCount) calaboucoCount.innerText = calabouco.length;
 
-  document.querySelectorAll('[data-presence-count="proa"]').forEach(item => {
-    item.innerText = proa.length;
-  });
-  document.querySelectorAll('[data-presence-count="conves"]').forEach(item => {
-    item.innerText = conves.length;
-  });
-  document.querySelectorAll('[data-presence-count="calabouco"]').forEach(item => {
-    item.innerText = calabouco.length;
+  const presenceCounts = {
+    online: onlineTotal,
+    playing: conves.length,
+    spectating: proa.length,
+    proa: proa.length,
+    conves: conves.length,
+    calabouco: calabouco.length
+  };
+
+  Object.entries(presenceCounts).forEach(([key, value]) => {
+    document.querySelectorAll(`[data-presence-count="${key}"]`).forEach(item => {
+      item.innerText = value;
+    });
   });
 
   if (proaList) proaList.innerHTML = renderUserList(proa, "👁️");

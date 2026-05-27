@@ -895,7 +895,7 @@ body{
 .hero-content{
   align-items:flex-start;
   text-align:left;
-  max-width:850px;
+  max-width:min(760px,44vw);
 }
 
 .hero-ship-scene{
@@ -906,14 +906,14 @@ body{
 
 .hero-stats-card{
   order:-1;
-  width:min(690px,100%);
+  width:min(640px,100%);
   margin:0 0 20px;
 }
 
 .hero h1{
-  max-width:900px;
-  font-size:clamp(46px,4.7vw,86px);
-  line-height:.9;
+  max-width:100%;
+  font-size:clamp(44px,4.25vw,78px);
+  line-height:.92;
 }
 
 .hero h1 span{
@@ -963,6 +963,10 @@ body{
   .hero{
     min-height:auto;
     grid-template-columns:1fr;
+  }
+
+  .hero-content{
+    max-width:100%;
   }
 
   .hero::before{
@@ -2054,6 +2058,10 @@ body{
     grid-template-columns:1fr;
   }
 
+  .hero-content{
+    max-width:100%;
+  }
+
   .hero::before{
     inset:32% -10% 0 15%;
     opacity:.55;
@@ -2798,7 +2806,7 @@ body{
 .hero-content{
   align-items:flex-start;
   text-align:left;
-  max-width:850px;
+  max-width:min(760px,44vw);
 }
 
 .hero-ship-scene{
@@ -2809,14 +2817,14 @@ body{
 
 .hero-stats-card{
   order:-1;
-  width:min(690px,100%);
+  width:min(640px,100%);
   margin:0 0 20px;
 }
 
 .hero h1{
-  max-width:900px;
-  font-size:clamp(46px,4.7vw,86px);
-  line-height:.9;
+  max-width:100%;
+  font-size:clamp(44px,4.25vw,78px);
+  line-height:.92;
 }
 
 .hero h1 span{
