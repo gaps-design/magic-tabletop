@@ -52,8 +52,6 @@ const usersCountBtn = document.getElementById("usersCountBtn");
 const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
 const resenhaBecomeSpectatorBtn = document.getElementById("resenhaBecomeSpectatorBtn");
 const resenhaBecomePlayerBtn = document.getElementById("resenhaBecomePlayerBtn");
-const tableThemeSelect = document.getElementById("tableThemeSelect");
-const toggleTableSkinsBtn = document.getElementById("toggleTableSkinsBtn");
 const roomUsersPanel = document.getElementById("roomUsersPanel");
 const closeRoomUsersPanel = document.getElementById("closeRoomUsersPanel");
 const roomUsersTitle = document.getElementById("roomUsersTitle");
@@ -138,23 +136,6 @@ let chatMessagesSent = 0;
 let chatCooldown = false;
 let cleanModeEnabled = false;
 let cleanHudHidden = false;
-const TABLE_THEME_STORAGE_KEY = "resenhaon-table-theme";
-const TABLE_SKINS_VISIBILITY_STORAGE_KEY = "resenhaon-show-table-skins";
-const TABLE_THEME_CLASS_PREFIX = "theme-";
-const TABLE_SKINS = {
-    none: {
-        label: "Sem skin",
-        className: ""
-    },
-    "living-end": {
-        label: "Living End",
-        className: "theme-living-end",
-        assetsPath: "/assets/skins/living-end/"
-    }
-};
-const AVAILABLE_TABLE_THEMES = new Set(Object.keys(TABLE_SKINS));
-let currentPlayerThemes = { 1: "none", 2: "none" };
-let showTableSkins = localStorage.getItem(TABLE_SKINS_VISIBILITY_STORAGE_KEY) !== "false";
 const CAMERA_FRAMING_STORAGE_KEY = "resenhaon-camera-framing";
 const CAMERA_FRAMING_DEFAULT = { zoom: 1, x: 0, y: 0 };
 const cameraFramingLimits = {
@@ -184,114 +165,6 @@ const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
-
-function normalizeTableTheme(theme) {
-    return AVAILABLE_TABLE_THEMES.has(theme) ? theme : "none";
-}
-
-function getCameraCardForPlayer(playerNumber) {
-    return document.querySelector(`.camera-player-${Number(playerNumber)}`);
-}
-
-function applyCameraThemeClass(card, theme) {
-    if (!card) return;
-
-    Array.from(card.classList).forEach((className) => {
-        if (className.startsWith(TABLE_THEME_CLASS_PREFIX)) {
-            card.classList.remove(className);
-        }
-    });
-
-    const skin = TABLE_SKINS[normalizeTableTheme(theme)] || TABLE_SKINS.none;
-
-    if (skin.className) {
-        card.classList.add(skin.className);
-    }
-}
-
-function applyPlayerThemes(playerThemes = currentPlayerThemes) {
-    currentPlayerThemes = {
-        1: normalizeTableTheme(playerThemes[1] || playerThemes["1"]),
-        2: normalizeTableTheme(playerThemes[2] || playerThemes["2"])
-    };
-
-    [1, 2].forEach(playerNumber => {
-        applyCameraThemeClass(getCameraCardForPlayer(playerNumber), currentPlayerThemes[playerNumber]);
-    });
-
-    if (tableThemeSelect) {
-        const myTheme = myPlayerNumber ? currentPlayerThemes[myPlayerNumber] : "none";
-        tableThemeSelect.value = myTheme;
-    }
-}
-
-function updateTableSkinsToggle() {
-    if (!toggleTableSkinsBtn) return;
-
-    toggleTableSkinsBtn.innerText = showTableSkins ? "Ocultar skins" : "Mostrar skins";
-    toggleTableSkinsBtn.setAttribute("aria-pressed", showTableSkins ? "true" : "false");
-    toggleTableSkinsBtn.classList.toggle("is-off", !showTableSkins);
-    document.body.classList.toggle("hide-table-skins", !showTableSkins);
-}
-
-function updateTableThemeControls() {
-    if (!tableThemeSelect) return;
-
-    const canChooseTheme = selectedRole === "player" && !!myPlayerNumber && !isQueuedInResenha;
-    tableThemeSelect.disabled = !canChooseTheme;
-
-    if (!canChooseTheme) {
-        tableThemeSelect.value = "none";
-    } else {
-        tableThemeSelect.value = currentPlayerThemes[myPlayerNumber] || "none";
-    }
-}
-
-function setTableSkinsVisibility(visible) {
-    showTableSkins = visible;
-    localStorage.setItem(TABLE_SKINS_VISIBILITY_STORAGE_KEY, visible ? "true" : "false");
-    updateTableSkinsToggle();
-    applyPlayerThemes(currentPlayerThemes);
-}
-
-function updateMyTableTheme(theme) {
-    const normalizedTheme = normalizeTableTheme(theme);
-
-    localStorage.setItem(TABLE_THEME_STORAGE_KEY, normalizedTheme);
-
-    if (tableThemeSelect) {
-        tableThemeSelect.value = normalizedTheme;
-    }
-
-    if (!myPlayerNumber || selectedRole !== "player") {
-        return;
-    }
-
-    currentPlayerThemes[myPlayerNumber] = normalizedTheme;
-    applyPlayerThemes(currentPlayerThemes);
-
-    socket.emit("player-theme-update", {
-        roomId,
-        playerNumber: myPlayerNumber,
-        theme: normalizedTheme
-    });
-}
-
-updateTableSkinsToggle();
-updateTableThemeControls();
-
-if (tableThemeSelect) {
-    tableThemeSelect.value = normalizeTableTheme(localStorage.getItem(TABLE_THEME_STORAGE_KEY) || "none");
-    tableThemeSelect.addEventListener("change", () => {
-        updateMyTableTheme(tableThemeSelect.value);
-    });
-}
-
-if (toggleTableSkinsBtn) {
-    toggleTableSkinsBtn.addEventListener("click", () => {
-        setTableSkinsVisibility(!showTableSkins);
-    });
-}
 
 function redirectHomeOnce(delay = 250) {
     if (isRedirectingHome) return;
@@ -962,7 +835,6 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         updateFaceCameraControls();
-        updateTableThemeControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         return;
@@ -979,7 +851,6 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         updateFaceCameraControls();
-        updateTableThemeControls();
         renderAllMarkerPanels();
         return;
     }
@@ -996,11 +867,9 @@ socket.on("assigned-role", (data) => {
 
         showLeaveSpectatorButton();
         updateFaceCameraControls();
-        updateTableThemeControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         syncActiveMarkersToRoom();
-        updateMyTableTheme(localStorage.getItem(TABLE_THEME_STORAGE_KEY) || "none");
     }
 });
 
@@ -1051,8 +920,6 @@ socket.on("room-state", (state) => {
     updatePlayerPanel(1, p1);
     updatePlayerPanel(2, p2);
     updateCameraTitles(p1, p2);
-    applyPlayerThemes(state.playerThemes || {});
-    updateTableThemeControls();
 
     applyRoomMarkerState(state.markerState || {});
     renderMatchScore(state.matchScore || {});
@@ -1064,11 +931,6 @@ socket.on("room-state", (state) => {
     if (state.micStatus) {
         updateMicIconsFromState(state);
     }
-});
-
-socket.on("player-themes-update", ({ playerThemes = {} } = {}) => {
-    applyPlayerThemes(playerThemes);
-    updateTableThemeControls();
 });
 
 function updatePlayerPanel(playerNumber, playerData) {
