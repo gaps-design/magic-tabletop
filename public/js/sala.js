@@ -73,6 +73,15 @@ const leaveConfirmModal = document.getElementById("leaveConfirmModal");
 const cancelLeaveRoomBtn = document.getElementById("cancelLeaveRoomBtn");
 const confirmLeaveRoomBtn = document.getElementById("confirmLeaveRoomBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
+const localVideoElement = document.getElementById("localVideo");
+const cameraFramingBtn = document.getElementById("cameraFramingBtn");
+const cameraFramingPanel = document.getElementById("cameraFramingPanel");
+const closeCameraFramingBtn = document.getElementById("closeCameraFramingBtn");
+const cameraZoomRange = document.getElementById("cameraZoomRange");
+const cameraXRange = document.getElementById("cameraXRange");
+const cameraYRange = document.getElementById("cameraYRange");
+const resetCameraFramingBtn = document.getElementById("resetCameraFramingBtn");
+const saveCameraFramingBtn = document.getElementById("saveCameraFramingBtn");
 
 const toggleChatBtn = document.getElementById("toggleChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
@@ -126,6 +135,13 @@ let chatMessagesSent = 0;
 let chatCooldown = false;
 let cleanModeEnabled = false;
 let cleanHudHidden = false;
+const CAMERA_FRAMING_STORAGE_KEY = "resenhaon-camera-framing";
+const CAMERA_FRAMING_DEFAULT = { zoom: 1, x: 0, y: 0 };
+const cameraFramingLimits = {
+    zoom: { min: 1, max: 2.5, step: 0.1 },
+    offset: { min: -200, max: 200, step: 10 }
+};
+let cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
 let currentLifeHistory = [];
 let localOpponentLifeHistory = [];
 let lastRoomToastKey = "";
@@ -353,6 +369,72 @@ function showLeaveSpectatorButton() {
         leaveSpectatorBtn.classList.add("hidden");
     }
 }
+
+function clampCameraFramingValue(value, min, max) {
+    return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function normalizeCameraFraming(rawValue = {}) {
+    return {
+        zoom: clampCameraFramingValue(rawValue.zoom ?? CAMERA_FRAMING_DEFAULT.zoom, cameraFramingLimits.zoom.min, cameraFramingLimits.zoom.max),
+        x: clampCameraFramingValue(rawValue.x ?? CAMERA_FRAMING_DEFAULT.x, cameraFramingLimits.offset.min, cameraFramingLimits.offset.max),
+        y: clampCameraFramingValue(rawValue.y ?? CAMERA_FRAMING_DEFAULT.y, cameraFramingLimits.offset.min, cameraFramingLimits.offset.max)
+    };
+}
+
+function loadCameraFraming() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(CAMERA_FRAMING_STORAGE_KEY) || "{}");
+        cameraFraming = normalizeCameraFraming(saved);
+    } catch (error) {
+        cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
+    }
+}
+
+function syncCameraFramingControls() {
+    if (cameraZoomRange) cameraZoomRange.value = String(cameraFraming.zoom);
+    if (cameraXRange) cameraXRange.value = String(cameraFraming.x);
+    if (cameraYRange) cameraYRange.value = String(cameraFraming.y);
+}
+
+function applyCameraFraming() {
+    if (!localVideoElement) return;
+
+    const { zoom, x, y } = normalizeCameraFraming(cameraFraming);
+    cameraFraming = { zoom, x, y };
+    localVideoElement.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+}
+
+function saveCameraFraming({ notify = true } = {}) {
+    localStorage.setItem(CAMERA_FRAMING_STORAGE_KEY, JSON.stringify(cameraFraming));
+    if (notify) showRoomToast("Ajuste da câmera salvo.");
+}
+
+function setCameraFraming(nextValue, { persist = false } = {}) {
+    cameraFraming = normalizeCameraFraming({
+        ...cameraFraming,
+        ...nextValue
+    });
+    syncCameraFramingControls();
+    applyCameraFraming();
+    if (persist) saveCameraFraming({ notify: false });
+}
+
+function resetCameraFraming() {
+    setCameraFraming(CAMERA_FRAMING_DEFAULT);
+    saveCameraFraming({ notify: false });
+}
+
+function toggleCameraFramingPanel(forceOpen) {
+    if (!cameraFramingPanel) return;
+
+    const shouldOpen = forceOpen ?? cameraFramingPanel.classList.contains("hidden");
+    cameraFramingPanel.classList.toggle("hidden", !shouldOpen);
+}
+
+loadCameraFraming();
+syncCameraFramingControls();
+applyCameraFraming();
 
 function getMainCameraDeviceId() {
     const mainCameraSelect = document.getElementById("cameraSelect");
@@ -1685,6 +1767,58 @@ if (leaveConfirmModal) {
         if (event.target === leaveConfirmModal) {
             closeLeaveConfirmModal();
         }
+    });
+}
+
+if (cameraFramingBtn) {
+    cameraFramingBtn.addEventListener("click", () => toggleCameraFramingPanel());
+}
+
+if (closeCameraFramingBtn) {
+    closeCameraFramingBtn.addEventListener("click", () => toggleCameraFramingPanel(false));
+}
+
+if (cameraZoomRange) {
+    cameraZoomRange.addEventListener("input", () => {
+        setCameraFraming({ zoom: Number(cameraZoomRange.value) });
+    });
+}
+
+if (cameraXRange) {
+    cameraXRange.addEventListener("input", () => {
+        setCameraFraming({ x: Number(cameraXRange.value) });
+    });
+}
+
+if (cameraYRange) {
+    cameraYRange.addEventListener("input", () => {
+        setCameraFraming({ y: Number(cameraYRange.value) });
+    });
+}
+
+document.querySelectorAll("[data-camera-move]").forEach(button => {
+    button.addEventListener("click", () => {
+        const direction = button.dataset.cameraMove;
+        const step = cameraFramingLimits.offset.step;
+        const nextValue = { ...cameraFraming };
+
+        if (direction === "up") nextValue.y -= step;
+        if (direction === "down") nextValue.y += step;
+        if (direction === "left") nextValue.x -= step;
+        if (direction === "right") nextValue.x += step;
+
+        setCameraFraming(nextValue);
+    });
+});
+
+if (resetCameraFramingBtn) {
+    resetCameraFramingBtn.addEventListener("click", resetCameraFraming);
+}
+
+if (saveCameraFramingBtn) {
+    saveCameraFramingBtn.addEventListener("click", () => {
+        saveCameraFraming();
+        toggleCameraFramingPanel(false);
     });
 }
 
