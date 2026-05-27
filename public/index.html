@@ -40,6 +40,10 @@
         <img src="/assets/logo-resenhaon.png" class="logo" alt="ResenhaON">
       </a>
 
+      <button class="mobile-menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" data-mobile-menu-target=".top-links">
+        ☰
+      </button>
+
       <div id="convesCard" class="conves-card">
         <span class="conves-card-title">⚓ Convés</span>
         <div class="mini-presence-counts" aria-label="Status dos usuários online">
@@ -74,6 +78,7 @@
         Entrar com Google
       </button>
     </header>
+    <div class="mobile-menu-backdrop" data-mobile-menu-backdrop></div>
 
     <section class="hero">
       <div class="hero-content">
@@ -383,6 +388,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/auth.js"></script>
+  <script src="/js/mobile-menu.js"></script>
   <script src="/js/home.js"></script>
 </body>
 </html>

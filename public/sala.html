@@ -162,6 +162,10 @@
             </div>
         </div>
 
+        <button class="mobile-menu-toggle room-mobile-menu-toggle" type="button" aria-label="Abrir ações da sala" aria-expanded="false" data-mobile-menu-target=".top-actions">
+            ☰
+        </button>
+
         <section class="match-tools top-timer">
             <div class="timer-box compact-timer">
                 <div class="layout-buttons">
@@ -199,6 +203,7 @@
 </button>
         </div>
     </header>
+    <div class="mobile-menu-backdrop" data-mobile-menu-backdrop></div>
 
     <div id="roomToastContainer" class="room-toast-container" aria-live="polite"></div>
 
@@ -672,6 +677,8 @@
 <script src="/socket.io/socket.io.js"></script>
 
 <script type="module" src="/js/auth.js"></script>
+
+<script src="/js/mobile-menu.js"></script>
 
 <script src="/js/webrtc.js"></script>
 
