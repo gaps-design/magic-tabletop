@@ -82,6 +82,10 @@
         document
             .querySelectorAll(".table-skin-layer")
             .forEach(layer => layer.remove());
+
+        document
+            .querySelectorAll(".camera-card.table-skin-active")
+            .forEach(card => card.classList.remove("table-skin-active"));
     }
 
     async function assetExists(src) {
@@ -157,6 +161,7 @@
         layer.setAttribute("aria-hidden", "true");
 
         appendFrame(layer, skin.frame);
+        card.classList.add("table-skin-active");
         card.appendChild(layer);
         appendOptionalEffects(layer, skin.effects);
     }
