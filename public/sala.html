@@ -190,6 +190,16 @@
         </section>
 
         <div class="top-actions">
+            <label class="table-theme-control">
+                <span>Skin da Mesa</span>
+                <select id="tableThemeSelect" aria-label="Selecionar skin visual da sua mesa">
+                    <option value="none">Sem skin</option>
+                    <option value="living-end">Living End</option>
+                </select>
+            </label>
+            <button id="toggleTableSkinsBtn" class="table-skins-toggle" type="button" aria-pressed="true">
+                Mostrar skins
+            </button>
             <button id="copyRoomBtn">🔗 Copiar link da sala</button>
             <button id="usersCountBtn">👥 0</button>
             <button id="spectatorsCountBtn">👁️ 0</button>
@@ -327,6 +337,11 @@
                 </div>
 
                 <video id="localVideo" autoplay playsinline muted></video>
+                <div class="skin-layer skin-frame" aria-hidden="true"></div>
+                <div class="skin-layer skin-fog" aria-hidden="true"></div>
+                <div class="skin-layer skin-particles" aria-hidden="true"></div>
+                <div class="skin-layer skin-corner-left" aria-hidden="true"></div>
+                <div class="skin-layer skin-corner-right" aria-hidden="true"></div>
 
                 <div id="localMutedIcon" class="muted-icon hidden" aria-label="Microfone mutado">
                     <span class="muted-mic-symbol">🎙</span>
@@ -372,6 +387,11 @@
                 <button class="rotate-btn">Inverter Mesa</button>
 
                 <video id="remoteVideo" autoplay playsinline></video>
+                <div class="skin-layer skin-frame" aria-hidden="true"></div>
+                <div class="skin-layer skin-fog" aria-hidden="true"></div>
+                <div class="skin-layer skin-particles" aria-hidden="true"></div>
+                <div class="skin-layer skin-corner-left" aria-hidden="true"></div>
+                <div class="skin-layer skin-corner-right" aria-hidden="true"></div>
 
                 <div id="remoteMutedIcon" class="muted-icon hidden" aria-label="Microfone mutado">
                     <span class="muted-mic-symbol">🎙</span>

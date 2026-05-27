@@ -52,6 +52,8 @@ const MARKER_LABELS = {
   "mana-colorless": "Mana Incolor"
 };
 
+const PLAYER_THEMES = new Set(["none", "living-end"]);
+
 const PUBLIC_TABLES = [
   "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
   "mtg-1006", "mtg-1007", "mtg-1008", "mtg-1009", "mtg-1010", "mtg-1011"
@@ -230,6 +232,14 @@ function createCameraKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function normalizePlayerTheme(theme) {
+  return PLAYER_THEMES.has(theme) ? theme : "none";
+}
+
+function createDefaultPlayerThemes() {
+  return { 1: "none", 2: "none" };
+}
+
 function publicTimer(timer) {
   return {
     duration: timer.duration,
@@ -252,8 +262,13 @@ function ensureRoom(roomId) {
       micStatus: {},
       matchScore: { 1: 0, 2: 0 },
       faceCams: {},
-      markerState: { 1: {}, 2: {} }
+      markerState: { 1: {}, 2: {} },
+      playerThemes: createDefaultPlayerThemes()
     };
+  }
+
+  if (!rooms[roomId].playerThemes) {
+    rooms[roomId].playerThemes = createDefaultPlayerThemes();
   }
 
   return rooms[roomId];
@@ -420,6 +435,7 @@ function sendRoomState(roomId) {
     matchScore: room.matchScore || { 1: 0, 2: 0 },
     faceCams: Object.values(room.faceCams || {}),
     markerState: room.markerState || { 1: {}, 2: {} },
+    playerThemes: room.playerThemes || createDefaultPlayerThemes(),
     users: buildRoomUsers(room)
   });
 }
@@ -505,7 +521,8 @@ function resetPublicRoomIfEmpty(roomId) {
       micStatus: {},
       matchScore: { 1: 0, 2: 0 },
       faceCams: {},
-      markerState: { 1: {}, 2: {} }
+      markerState: { 1: {}, 2: {} },
+      playerThemes: createDefaultPlayerThemes()
     };
   } else {
     delete rooms[roomId];
@@ -738,6 +755,9 @@ function moveActiveResenhaPlayerToQueue(socket, roomId) {
   if (!player) return false;
 
   room.players = room.players.filter(p => p.socketId !== socket.id);
+  if (room.playerThemes) {
+    room.playerThemes[player.playerNumber] = "none";
+  }
   removeLinkedCamerasForPlayer(room, roomId, player.playerNumber);
 
   if (!room.queue.some(item => item.socketId === socket.id)) {
@@ -790,6 +810,9 @@ function moveResenhaUserToSpectator(socket, roomId) {
 
   if (player) {
     room.players = room.players.filter(p => p.socketId !== socket.id);
+    if (room.playerThemes) {
+      room.playerThemes[player.playerNumber] = "none";
+    }
     removeLinkedCamerasForPlayer(room, roomId, player.playerNumber);
     delete room.micStatus[socket.id];
     io.to(roomId).emit("user-disconnected", socket.id);
@@ -833,6 +856,11 @@ function removeSocketFromAllRooms(socketId) {
     );
     room.queue = (room.queue || []).filter(item => item.socketId !== socketId);
     room.diceRolls = room.diceRolls.filter(r => r.socketId !== socketId);
+    removedPlayerNumbers.forEach(playerNumber => {
+      if (room.playerThemes) {
+        room.playerThemes[playerNumber] = "none";
+      }
+    });
 
     delete room.micStatus[socketId];
     if (room.faceCams?.[socketId]) {
@@ -1210,6 +1238,25 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       micEnabled: !!micEnabled,
       info: getClientInfo(socket.id)
+    });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("player-theme-update", ({ roomId, playerNumber, theme }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+    if (Number(player.playerNumber) !== Number(playerNumber)) return;
+
+    const normalizedTheme = normalizePlayerTheme(theme);
+    room.playerThemes = room.playerThemes || createDefaultPlayerThemes();
+    room.playerThemes[player.playerNumber] = normalizedTheme;
+
+    io.to(roomId).emit("player-themes-update", {
+      playerThemes: room.playerThemes
     });
 
     sendRoomState(roomId);

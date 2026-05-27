@@ -72,6 +72,52 @@ body{
     gap:12px;
 }
 
+.table-theme-control{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 8px 6px 12px;
+    border:1px solid rgba(147,197,253,0.18);
+    border-radius:12px;
+    background:rgba(8,19,34,0.78);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.table-theme-control span{
+    color:#cbd5e1;
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    white-space:nowrap;
+}
+
+.table-theme-control select{
+    min-width:118px;
+    padding:7px 10px;
+    border-radius:9px;
+    color:#ecfdf5;
+    background:rgba(10,22,38,0.96);
+}
+
+.table-theme-control select:disabled{
+    opacity:.58;
+    cursor:not-allowed;
+}
+
+.table-skins-toggle{
+    padding:8px 12px;
+    border-color:rgba(248,113,113,0.22);
+    background:rgba(18,24,38,0.84);
+    color:#fecaca;
+    font-weight:800;
+}
+
+.table-skins-toggle.is-off{
+    border-color:rgba(148,163,184,0.22);
+    color:#cbd5e1;
+}
+
 .spectator-view-btn{
     display:none;
 }
@@ -116,6 +162,118 @@ select{
 
 button:hover{
     background:#172844;
+}
+
+/* SKINS DE MESA: camadas somente no card da camera de jogo */
+
+.camera-card.theme-living-end{
+    isolation:isolate;
+    border-color:rgba(126,64,162,0.34);
+    box-shadow:
+        inset 0 0 0 1px rgba(126,64,162,0.12),
+        0 0 30px rgba(64,32,96,0.14),
+        0 20px 42px rgba(0,0,0,0.35);
+}
+
+.camera-card .skin-layer{
+    position:absolute;
+    inset:0;
+    display:none;
+    pointer-events:none;
+    border-radius:14px;
+    background-repeat:no-repeat;
+    background-position:center;
+    background-size:100% 100%;
+}
+
+.camera-card.theme-living-end .skin-layer{
+    display:block;
+}
+
+body.hide-table-skins .skin-layer{
+    display:none !important;
+}
+
+.camera-card.theme-living-end .skin-frame{
+    z-index:3;
+    opacity:.88;
+    background-image:url("/assets/skins/living-end/frame.png");
+}
+
+.camera-card.theme-living-end .skin-fog{
+    z-index:4;
+    opacity:.44;
+    background-image:url("/assets/skins/living-end/fog.png");
+    background-size:115% 115%;
+    animation:livingEndFogMove 18s ease-in-out infinite alternate;
+}
+
+.camera-card.theme-living-end .skin-particles{
+    z-index:5;
+    opacity:.48;
+    background-image:url("/assets/skins/living-end/particles.png");
+    animation:livingEndParticlesFloat 9s linear infinite;
+}
+
+.camera-card.theme-living-end .skin-corner-left{
+    z-index:6;
+    opacity:.72;
+    background-image:url("/assets/skins/living-end/corner-left.png");
+}
+
+.camera-card.theme-living-end .skin-corner-right{
+    z-index:6;
+    opacity:.72;
+    background-image:url("/assets/skins/living-end/corner-right.png");
+}
+
+.camera-card.theme-living-end video{
+    position:relative;
+    z-index:2;
+    border-color:#241a2f;
+    box-shadow:
+        0 0 0 2px rgba(0,0,0,0.56),
+        0 0 26px rgba(126,64,162,0.1);
+}
+
+.camera-card.theme-living-end .camera-title,
+.camera-card.theme-living-end .camera-status,
+.camera-card.theme-living-end .rotate-btn,
+.camera-card.theme-living-end .camera-framing-btn,
+.camera-card.theme-living-end .camera-framing-panel,
+.camera-card.theme-living-end .muted-icon{
+    z-index:8;
+}
+
+.camera-card.theme-living-end .camera-title{
+    position:relative;
+}
+
+@keyframes livingEndFogMove{
+    0%{
+        transform:translate3d(-2%, 0, 0) scale(1.04);
+        opacity:.28;
+    }
+    100%{
+        transform:translate3d(2%, -1.5%, 0) scale(1.1);
+        opacity:.52;
+    }
+}
+
+@keyframes livingEndParticlesFloat{
+    0%{
+        transform:translate3d(0, 1.5%, 0);
+    }
+    100%{
+        transform:translate3d(0, -1.5%, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce){
+    .camera-card.theme-living-end .skin-fog,
+    .camera-card.theme-living-end .skin-particles{
+        animation:none;
+    }
 }
 
 /* CRONÔMETRO TOPO */
@@ -3722,6 +3880,16 @@ body.spectator-mode .readonly-marker-summary{
         min-height:46px;
         justify-content:center;
         white-space:normal;
+    }
+
+    .top-actions .table-theme-control{
+        width:100%;
+        justify-content:space-between;
+    }
+
+    .top-actions .table-theme-control select{
+        flex:1;
+        min-width:0;
     }
 
     .match-tools.top-timer{
