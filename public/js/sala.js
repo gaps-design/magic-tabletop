@@ -108,6 +108,7 @@ const leaveSpectatorBtn = document.getElementById("leaveSpectatorBtn");
 const spectatorChatInput = document.getElementById("spectatorChatInput");
 const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
 const requestSpectatorMicBtn = document.getElementById("requestSpectatorMicBtn");
+const spectatorMobileChatBtn = document.getElementById("spectatorMobileChatBtn");
 const spectatorMicStatus = document.getElementById("spectatorMicStatus");
 const spectatorMarkersList = document.getElementById("spectatorMarkersList");
 
@@ -822,6 +823,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.add("spectator-mode");
         document.body.classList.remove("camera-mode");
         document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
+        document.body.classList.remove("spectator-mobile-chat-open");
         closePlayerChatPanel();
 
         if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
@@ -3357,6 +3359,12 @@ if (requestSpectatorMicBtn) {
         if (spectatorMicStatus) spectatorMicStatus.innerText = "Solicitação enviada";
         requestSpectatorMicBtn.innerText = "Solicitação enviada";
         requestSpectatorMicBtn.disabled = true;
+    });
+}
+
+if (spectatorMobileChatBtn) {
+    spectatorMobileChatBtn.addEventListener("click", () => {
+        document.body.classList.toggle("spectator-mobile-chat-open");
     });
 }
 
