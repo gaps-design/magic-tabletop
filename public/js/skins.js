@@ -7,49 +7,35 @@
             frame: null,
             effects: []
         },
+
         "mono-white": {
             label: "Mono White",
             frame: "/assets/skins/mono-white/frame.png",
-            effects: [
-                "/assets/skins/mono-white/birds.webm",
-                "/assets/skins/mono-white/sand.webm",
-                "/assets/skins/mono-white/horses.webm"
-            ]
+            effects: []
         },
+
         "mono-blue": {
             label: "Mono Blue",
             frame: "/assets/skins/mono-blue/frame.png",
-            effects: [
-                "/assets/skins/mono-blue/waves.webm",
-                "/assets/skins/mono-blue/clouds.webm",
-                "/assets/skins/mono-blue/whales.webm"
-            ]
+            effects: []
         },
+
         "mono-black": {
             label: "Mono Black",
             frame: "/assets/skins/mono-black/frame.png",
-            effects: [
-                "/assets/skins/mono-black/fog.webm",
-                "/assets/skins/mono-black/souls.webm"
-            ]
+            effects: []
         },
+
         "mono-red": {
             label: "Mono Red",
             frame: "/assets/skins/mono-red/frame.png",
-            effects: [
-                "/assets/skins/mono-red/fire.webm",
-                "/assets/skins/mono-red/smoke.webm",
-                "/assets/skins/mono-red/lightning.webm"
-            ]
+            effects: []
         },
+
         "mono-green": {
             label: "Mono Green",
             frame: "/assets/skins/mono-green/frame.png",
-            effects: [
-                "/assets/skins/mono-green/leaves.webm",
-                "/assets/skins/mono-green/birds.webm",
-                "/assets/skins/mono-green/wind.webm"
-            ]
+            effects: []
         }
     };
 
@@ -60,22 +46,37 @@
     }
 
     function getLocalCameraCard() {
-        if (document.body.classList.contains("player-one-active")) {
-            return document.querySelector(".camera-player-1");
+        const selectors = [
+            ".camera-card.local-player",
+            ".camera-card.local",
+            ".camera-card.player-local",
+            ".camera-player-1",
+            ".camera-player-2",
+            "#player1Card",
+            "#player2Card",
+            "[data-player='1']",
+            "[data-player='2']"
+        ];
+
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+
+            if (element && element.offsetParent !== null) {
+                console.log("[SKIN] câmera encontrada:", selector);
+                return element;
+            }
         }
 
-        if (document.body.classList.contains("player-two-active")) {
-            return document.querySelector(".camera-player-2");
+        const cards = [...document.querySelectorAll(".camera-card")]
+            .filter(card => card.offsetParent !== null);
+
+        if (cards.length > 0) {
+            console.log("[SKIN] usando primeiro camera-card visível");
+            return cards[0];
         }
 
-        if (
-            document.body.classList.contains("spectator-mode") ||
-            document.body.classList.contains("camera-mode")
-        ) {
-            return null;
-        }
-
-        return document.querySelector(".camera-player-1");
+        console.warn("[SKIN] nenhuma câmera encontrada");
+        return null;
     }
 
     function removeCurrentLayer() {
@@ -84,108 +85,107 @@
             .forEach(layer => layer.remove());
 
         document
-            .querySelectorAll(".camera-card.table-skin-active")
+            .querySelectorAll(".table-skin-active")
             .forEach(card => card.classList.remove("table-skin-active"));
-    }
-
-    async function assetExists(src) {
-        try {
-            const response = await fetch(src, {
-                method: "HEAD",
-                cache: "force-cache"
-            });
-            return response.ok;
-        } catch (error) {
-            return false;
-        }
     }
 
     function appendFrame(layer, src) {
         const frame = document.createElement("img");
+
         frame.className = "table-skin-frame";
-        frame.alt = "";
-        frame.decoding = "async";
-        frame.draggable = false;
         frame.src = src;
-        frame.addEventListener("error", () => {
+        frame.alt = "";
+        frame.draggable = false;
+
+        frame.onload = () => {
+            console.log("[SKIN] frame carregado:", src);
+        };
+
+        frame.onerror = () => {
+            console.error("[SKIN] erro ao carregar:", src);
             layer.remove();
-        }, { once: true });
+        };
+
         layer.appendChild(frame);
-    }
-
-    async function appendOptionalEffects(layer, effects = []) {
-        for (const src of effects) {
-            if (!await assetExists(src)) continue;
-
-            const effect = document.createElement("video");
-            effect.className = "table-skin-effect";
-            effect.autoplay = true;
-            effect.muted = true;
-            effect.loop = true;
-            effect.playsInline = true;
-            effect.src = src;
-            effect.addEventListener("error", () => {
-                effect.remove();
-            }, { once: true });
-            layer.appendChild(effect);
-        }
     }
 
     function updateControlState() {
         if (!skinSelect) return;
 
-        const isPlayer = document.body.classList.contains("player-one-active") ||
+        const isPlayer =
+            document.body.classList.contains("player-one-active") ||
             document.body.classList.contains("player-two-active");
-        const isNonPlayerMode = document.body.classList.contains("spectator-mode") ||
-            document.body.classList.contains("camera-mode");
-        skinSelect.disabled = !isPlayer && isNonPlayerMode;
+
+        skinSelect.disabled = !isPlayer;
     }
 
-    async function applySelectedSkin(skinId) {
+    function applySelectedSkin(skinId) {
         const normalizedSkinId = normalizeSkin(skinId);
         const skin = TABLE_SKINS[normalizedSkinId];
 
         localStorage.setItem(STORAGE_KEY, normalizedSkinId);
-        if (skinSelect) skinSelect.value = normalizedSkinId;
+
+        if (skinSelect) {
+            skinSelect.value = normalizedSkinId;
+        }
 
         removeCurrentLayer();
+
         updateControlState();
 
-        if (!skin.frame) return;
+        if (!skin.frame) {
+            console.log("[SKIN] removida");
+            return;
+        }
 
         const card = getLocalCameraCard();
-        if (!card) return;
+
+        if (!card) {
+            console.warn("[SKIN] câmera não encontrada");
+            return;
+        }
 
         const layer = document.createElement("div");
         layer.className = "table-skin-layer";
         layer.setAttribute("aria-hidden", "true");
 
         appendFrame(layer, skin.frame);
+
         card.classList.add("table-skin-active");
         card.appendChild(layer);
-        appendOptionalEffects(layer, skin.effects);
+
+        console.log("[SKIN] aplicada:", normalizedSkinId);
     }
 
     function refreshSkin() {
-        applySelectedSkin(localStorage.getItem(STORAGE_KEY) || "none");
+        applySelectedSkin(
+            localStorage.getItem(STORAGE_KEY) || "none"
+        );
     }
 
     if (skinSelect) {
-        skinSelect.value = normalizeSkin(localStorage.getItem(STORAGE_KEY) || "none");
+        skinSelect.value = normalizeSkin(
+            localStorage.getItem(STORAGE_KEY) || "none"
+        );
+
         skinSelect.addEventListener("change", () => {
             applySelectedSkin(skinSelect.value);
         });
     }
 
-    const bodyObserver = new MutationObserver(() => {
-        refreshSkin();
+    const observer = new MutationObserver(() => {
+        setTimeout(refreshSkin, 250);
     });
 
-    bodyObserver.observe(document.body, {
+    observer.observe(document.body, {
         attributes: true,
         attributeFilter: ["class"]
     });
 
-    updateControlState();
-    refreshSkin();
+    window.resenhaApplySkin = applySelectedSkin;
+    window.resenhaRefreshSkin = refreshSkin;
+
+    setTimeout(refreshSkin, 500);
+    setTimeout(refreshSkin, 1500);
+
 })();
