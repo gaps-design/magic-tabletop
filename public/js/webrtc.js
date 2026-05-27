@@ -36,6 +36,9 @@ const faceCamSources = {};
 const remoteFaceCamStreams = {};
 let localFaceCamStream = null;
 let localFaceCamMeta = null;
+let cameraWakeLock = null;
+let cameraRecoveryInProgress = false;
+let cameraRecoveryTimer = null;
 
 const RTC_DEBUG = true;
 let lastMediaAccessError = null;
@@ -228,6 +231,145 @@ function clearSavedMediaDevices({ camera = false, microphone = false } = {}) {
     }
 }
 
+function isPhoneCameraMode() {
+    return currentRole === "camera";
+}
+
+async function requestCameraWakeLock() {
+    if (!isPhoneCameraMode()) return;
+    if (document.visibilityState !== "visible") return;
+    if (cameraWakeLock) return;
+
+    if (!navigator.wakeLock?.request) {
+        cameraLog("Screen Wake Lock API indisponivel neste navegador.", {}, "warn");
+        return;
+    }
+
+    try {
+        cameraWakeLock = await navigator.wakeLock.request("screen");
+        cameraLog("Wake Lock adquirido");
+
+        cameraWakeLock.addEventListener("release", () => {
+            cameraWakeLock = null;
+            cameraLog("Wake Lock perdido", {
+                visibilityState: document.visibilityState
+            }, "warn");
+        });
+    } catch (error) {
+        cameraLog("Falha ao adquirir Wake Lock", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        }, "warn");
+    }
+}
+
+async function releaseCameraWakeLock() {
+    if (!cameraWakeLock) return;
+
+    try {
+        await cameraWakeLock.release();
+    } catch (error) {
+        cameraLog("Falha ao liberar Wake Lock", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        }, "warn");
+    } finally {
+        cameraWakeLock = null;
+    }
+}
+
+function replaceLocalTracksOnPeers() {
+    if (!localStream) return;
+
+    ["video", "audio"].forEach(kind => {
+        const track = localStream.getTracks().find(item => item.kind === kind);
+        if (track) {
+            replaceTrackOnPeers(kind, track);
+        }
+    });
+}
+
+function monitorCameraModeTrack(stream = localStream) {
+    if (!isPhoneCameraMode() || !stream) return;
+
+    stream.getVideoTracks().forEach(track => {
+        track.onended = () => {
+            cameraLog("Camera track encerrada", {
+                trackId: track.id,
+                readyState: track.readyState
+            }, "warn");
+            scheduleCameraModeRecovery("track-ended");
+        };
+    });
+}
+
+function hasLiveCameraModeTrack() {
+    const videoTrack = localStream?.getVideoTracks?.()[0];
+    return !!videoTrack && videoTrack.readyState === "live";
+}
+
+function scheduleCameraModeRecovery(reason = "unknown", delay = 600) {
+    if (!isPhoneCameraMode()) return;
+    if (cameraRecoveryTimer) return;
+
+    cameraLog("Reconexão iniciada", { reason });
+
+    cameraRecoveryTimer = setTimeout(() => {
+        cameraRecoveryTimer = null;
+        recoverCameraModeMedia(reason).catch(error => {
+            cameraLog("Reconexão da câmera falhou", {
+                reason,
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        });
+    }, delay);
+}
+
+async function recoverCameraModeMedia(reason = "manual") {
+    if (!isPhoneCameraMode()) return;
+    if (cameraRecoveryInProgress) return;
+
+    cameraRecoveryInProgress = true;
+
+    try {
+        await requestCameraWakeLock();
+
+        if (hasLiveCameraModeTrack()) {
+            routeLocalPreview();
+            replaceLocalTracksOnPeers();
+            cameraLog("Reconexão concluída", {
+                reason,
+                status: "camera-track-live"
+            });
+            return;
+        }
+
+        await startWebcam();
+        replaceLocalTracksOnPeers();
+        routeAllStreams();
+
+        cameraLog("Reconexão concluída", {
+            reason,
+            hasVideoTrack: !!localStream?.getVideoTracks?.().length,
+            peerCount: Object.keys(peerConnections).length
+        });
+    } finally {
+        cameraRecoveryInProgress = false;
+    }
+}
+
+function refreshCameraModeResilience(reason = "refresh") {
+    if (!isPhoneCameraMode()) return;
+
+    requestCameraWakeLock();
+    monitorCameraModeTrack();
+
+    if (!hasLiveCameraModeTrack()) {
+        scheduleCameraModeRecovery(reason);
+    }
+}
+
 async function getUserMediaWithDeviceFallback(constraints, fallbackConstraints, resetOptions) {
     if (!navigator.mediaDevices?.getUserMedia) {
         const error = new Error("navigator.mediaDevices.getUserMedia indisponivel.");
@@ -411,6 +553,8 @@ async function startWebcam(
         }
     }
 
+    monitorCameraModeTrack(localStream);
+    requestCameraWakeLock();
     updateMediaStatus();
 }
 
@@ -474,6 +618,7 @@ async function switchCamera(cameraId) {
     routeLocalPreview();
 
     replaceTrackOnPeers("video", newVideoTrack);
+    monitorCameraModeTrack(localStream);
     mediaErrorAlertShown = false;
     updateMediaStatus();
 }
@@ -830,6 +975,14 @@ function createPeerConnection(targetId) {
             iceGatheringState: peer.iceGatheringState,
             signalingState: peer.signalingState
         });
+
+        if (
+            isPhoneCameraMode() &&
+            !peer.__resenhaClosing &&
+            ["failed", "disconnected", "closed"].includes(peer.iceConnectionState)
+        ) {
+            schedulePeerReconnect(targetId, peer.iceConnectionState === "disconnected" ? 5000 : 1200);
+        }
     };
 
     peer.onicegatheringstatechange = () => {
@@ -850,6 +1003,12 @@ function createPeerConnection(targetId) {
         });
 
         if (peer.connectionState === "connected") {
+            if (isPhoneCameraMode() && reconnectAttempts[targetId] > 0) {
+                cameraLog("Reconexão concluída", {
+                    targetId,
+                    connectionState: peer.connectionState
+                });
+            }
             reconnectAttempts[targetId] = 0;
             routeAllStreams();
             logSelectedCandidatePair(targetId, peer);
@@ -861,6 +1020,11 @@ function createPeerConnection(targetId) {
 
         if (peer.connectionState === "disconnected") {
             schedulePeerReconnect(targetId, 5000);
+        }
+
+        if (isPhoneCameraMode() && peer.connectionState === "closed" && !peer.__resenhaClosing) {
+            schedulePeerReconnect(targetId, 1200);
+            return;
         }
 
         if (peer.connectionState === "closed") {
@@ -1095,6 +1259,14 @@ function schedulePeerReconnect(targetId, baseDelay = 1200) {
         attempt: reconnectAttempts[targetId],
         baseDelay
     });
+    if (isPhoneCameraMode()) {
+        cameraLog("Reconexão iniciada", {
+            targetId,
+            attempt: reconnectAttempts[targetId],
+            baseDelay,
+            remoteRole: info.role
+        });
+    }
 
     reconnectTimers[targetId] = setTimeout(async () => {
         delete reconnectTimers[targetId];
@@ -1110,6 +1282,13 @@ function schedulePeerReconnect(targetId, baseDelay = 1200) {
             await createOffer(targetId, info);
         } catch (error) {
             console.warn("Falha ao renegociar WebRTC:", error);
+            if (isPhoneCameraMode()) {
+                cameraLog("Reconexão falhou", {
+                    targetId,
+                    errorName: error?.name,
+                    errorMessage: error?.message
+                }, "warn");
+            }
         }
     }, baseDelay * reconnectAttempts[targetId]);
 }
@@ -1137,6 +1316,7 @@ function cleanupPeer(socketId) {
     }
 
     if (peerConnection) {
+        peerConnection.__resenhaClosing = true;
         peerConnection.close();
     }
 
@@ -1229,6 +1409,8 @@ window.shutdownRoomConnection = function() {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
+
+    releaseCameraWakeLock();
 
     if (localVideo) localVideo.srcObject = null;
     if (remoteVideo) remoteVideo.srcObject = null;
@@ -1455,6 +1637,10 @@ async function joinRoom(roomId, user) {
         await getDevices();
     }
 
+    if (isCameraMode) {
+        refreshCameraModeResilience("join-room");
+    }
+
     let loggedUser = null;
 
     if (!isCameraMode) {
@@ -1523,6 +1709,10 @@ socket.on("assigned-role", async (data) => {
 
     routeLocalPreview();
     routeAllStreams();
+
+    if (data.role === "camera") {
+        refreshCameraModeResilience("assigned-role");
+    }
 });
 
 socket.on("connect", async () => {
@@ -1544,6 +1734,7 @@ socket.on("connect", async () => {
         }
 
         routeLocalPreview();
+        refreshCameraModeResilience("socket-reconnect");
         socket.emit("join-room", lastJoinPayload);
     } catch (error) {
         console.warn("Falha ao restaurar sala após reconexão:", error);
@@ -1571,6 +1762,13 @@ socket.io?.on?.("reconnect_attempt", (attempt) => {
         attempt,
         peerCount: Object.keys(peerConnections).length
     });
+
+    if (isPhoneCameraMode()) {
+        cameraLog("Reconexão iniciada", {
+            reason: "socket-reconnect",
+            attempt
+        });
+    }
 });
 
 socket.io?.on?.("reconnect", (attempt) => {
@@ -1579,6 +1777,13 @@ socket.io?.on?.("reconnect", (attempt) => {
         socketId: socket.id,
         peerCount: Object.keys(peerConnections).length
     });
+
+    if (isPhoneCameraMode()) {
+        cameraLog("Reconexão concluída", {
+            reason: "socket-reconnect",
+            attempt
+        });
+    }
 });
 
 socket.io?.on?.("reconnect_error", (error) => {
@@ -2106,6 +2311,23 @@ if (toggleCameraBtn) {
 
 navigator.mediaDevices?.addEventListener?.("devicechange", async () => {
     await getDevices();
+    refreshCameraModeResilience("devicechange");
+});
+
+document.addEventListener("visibilitychange", () => {
+    if (!isPhoneCameraMode()) return;
+
+    if (document.visibilityState === "visible") {
+        refreshCameraModeResilience("visibility-visible");
+    }
+});
+
+window.addEventListener("pageshow", () => {
+    refreshCameraModeResilience("pageshow");
+});
+
+window.addEventListener("beforeunload", () => {
+    releaseCameraWakeLock();
 });
 
 updateMediaStatus();
