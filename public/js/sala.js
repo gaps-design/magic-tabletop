@@ -138,6 +138,30 @@ let cleanModeEnabled = false;
 let cleanHudHidden = false;
 const CAMERA_FRAMING_STORAGE_KEY = "resenhaon-camera-framing";
 const CAMERA_FRAMING_DEFAULT = { zoom: 1, x: 0, y: 0 };
+
+function getMyPlayerProfile() {
+    if (!myPlayerNumber) return null;
+    return currentPlayers.find(player => Number(player.playerNumber) === Number(myPlayerNumber)) || null;
+}
+
+function emitRoomStateForExtensions() {
+    window.dispatchEvent(new CustomEvent("resenhaon-room-state", {
+        detail: window.ResenhaONRoom?.getState?.() || {}
+    }));
+}
+
+window.ResenhaONRoom = {
+    getState() {
+        const profile = getMyPlayerProfile();
+
+        return {
+            roomId,
+            selectedRole,
+            myPlayerNumber,
+            playerName: profile?.name || playerNameInput?.value?.trim() || "Jogador"
+        };
+    }
+};
 const cameraFramingLimits = {
     zoom: { min: 1, max: 2.5, step: 0.1 },
     offset: { min: -200, max: 200, step: 10 }
@@ -837,6 +861,7 @@ socket.on("assigned-role", (data) => {
         updateFaceCameraControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
+        emitRoomStateForExtensions();
         return;
     }
 
@@ -852,6 +877,7 @@ socket.on("assigned-role", (data) => {
         showLeaveSpectatorButton();
         updateFaceCameraControls();
         renderAllMarkerPanels();
+        emitRoomStateForExtensions();
         return;
     }
 
@@ -870,6 +896,7 @@ socket.on("assigned-role", (data) => {
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         syncActiveMarkersToRoom();
+        emitRoomStateForExtensions();
     }
 });
 
@@ -898,6 +925,7 @@ socket.on("room-state", (state) => {
     currentQueue = Array.isArray(state.queueList) ? state.queueList : [];
     isQueuedInResenha = roomId === "mtg-1002" && currentQueue.some(item => item.socketId === socket.id);
     currentPlayersCount = players.length;
+    emitRoomStateForExtensions();
 
     const formatText = document.getElementById("formatText");
     if (formatText && state.format) {

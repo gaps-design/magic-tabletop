@@ -23,6 +23,9 @@ const socketPresence = new Map();
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
+const CARD_SCAN_MESSAGE_LIMIT = 650;
+const CARD_SCAN_FIELD_LIMIT = 180;
+const CARD_SCAN_ORACLE_LIMIT = 420;
 const FLOATING_EMOJIS = new Set([
   "\u{1F525}",
   "\u{1F602}",
@@ -39,6 +42,26 @@ const FLOATING_EMOJIS = new Set([
   "\u{1F928}",
   "\u{1F914}"
 ]);
+
+function limitText(value, limit) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
+function sanitizeCardScan(card = {}) {
+  const imageUrl = limitText(card.imageUrl, 500);
+
+  return {
+    id: limitText(card.id, 80),
+    name: limitText(card.name, CARD_SCAN_FIELD_LIMIT),
+    manaCost: limitText(card.manaCost, 80),
+    typeLine: limitText(card.typeLine, CARD_SCAN_FIELD_LIMIT),
+    oracleText: limitText(card.oracleText, CARD_SCAN_ORACLE_LIMIT),
+    imageUrl: /^https:\/\/cards\.scryfall\.io\//.test(imageUrl) ? imageUrl : ""
+  };
+}
 
 const MARKER_LABELS = {
   storm: "Storm",
@@ -1598,6 +1621,73 @@ io.on("connection", (socket) => {
         time: new Date().toLocaleTimeString("pt-BR")
       });
     }
+
+    if (control.count >= CHAT_LIMIT) {
+      control.count = 0;
+      control.blockedUntil = now + CHAT_BLOCK_MS;
+    }
+  });
+
+  socket.on("card-scan-confirmed", ({ roomId, card }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const inside =
+      room.players.some(p => p.socketId === socket.id) ||
+      room.spectators.includes(socket.id);
+
+    if (!inside) return;
+
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player) return;
+
+    const now = Date.now();
+
+    if (!chatControl[socket.id]) {
+      chatControl[socket.id] = {
+        count: 0,
+        blockedUntil: 0
+      };
+    }
+
+    const control = chatControl[socket.id];
+
+    if (control.blockedUntil && now < control.blockedUntil) {
+      socket.emit("chat-cooldown", {
+        remaining: Math.ceil((control.blockedUntil - now) / 1000)
+      });
+      return;
+    }
+
+    const safeCard = sanitizeCardScan(card);
+    if (!safeCard.name) return;
+
+    const playerName = limitText(clientProfiles[socket.id]?.name || player.name || "Jogador", 80);
+    const oracleSummary = limitText(safeCard.oracleText, 360);
+    const message = limitText(
+      `${playerName} escaneou: ${safeCard.name} — ${safeCard.typeLine || "Carta"}. ${oracleSummary}`,
+      CARD_SCAN_MESSAGE_LIMIT
+    );
+
+    io.to(roomId).emit("card-scan-shown", {
+      playerName,
+      card: safeCard,
+      time: new Date().toLocaleTimeString("pt-BR")
+    });
+
+    io.to(roomId).emit("chat-message", {
+      name: "Oráculo ON",
+      message,
+      type: "card-scan",
+      time: new Date().toLocaleTimeString("pt-BR")
+    });
+
+    io.to(roomId).emit("system-event", {
+      message: `${playerName} escaneou a carta ${safeCard.name}`,
+      time: new Date().toLocaleTimeString("pt-BR")
+    });
+
+    control.count++;
 
     if (control.count >= CHAT_LIMIT) {
       control.count = 0;
