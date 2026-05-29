@@ -171,6 +171,7 @@
             <div class="timer-box compact-timer">
                 <div class="layout-buttons">
                     <button id="cleanModeBtn">Clean</button>
+                    <button id="cardScannerBtn" class="scanner-card-btn hidden" type="button">🔎 Scanner</button>
                     <button id="dualViewBtn">Dual View</button>
                     <button id="focusViewBtn">Focus Mode</button>
                 </div>
@@ -614,6 +615,48 @@
         </div>
     </div>
 
+    <div id="cardScannerModal" class="card-scanner-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cardScannerTitle">
+        <div class="card-scanner-box">
+            <button id="cardScannerCloseBtn" class="card-scanner-close" type="button" aria-label="Fechar scanner">×</button>
+
+            <div class="card-scanner-header">
+                <h2 id="cardScannerTitle">Oráculo ON — Scanner de Carta</h2>
+                <p>Posicione a carta na câmera, evite reflexo e mantenha o nome visível.</p>
+            </div>
+
+            <div class="card-scanner-body">
+                <div class="card-scanner-preview">
+                    <canvas id="cardScannerCanvas" width="640" height="420" aria-label="Prévia do frame capturado"></canvas>
+                    <div class="card-scanner-guide">
+                        <span>Nome da carta aqui</span>
+                    </div>
+                </div>
+
+                <div class="card-scanner-panel">
+                    <p id="cardScannerStatus" class="card-scanner-status">Aponte a câmera para a carta ou digite o nome manualmente.</p>
+
+                    <div class="card-scanner-actions">
+                        <button id="cardScannerCaptureBtn" type="button">Capturar carta</button>
+                    </div>
+
+                    <label class="card-scanner-manual">
+                        Digite o nome da carta
+                        <input id="cardScannerManualInput" type="text" placeholder="Ex: Lightning Bolt">
+                    </label>
+
+                    <div class="card-scanner-actions">
+                        <button id="cardScannerManualBtn" type="button">Buscar manualmente</button>
+                        <button id="cardScannerRetryBtn" type="button">Tentar novamente</button>
+                    </div>
+
+                    <div id="cardScannerResult" class="card-scanner-result hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cardScanPublicLayer" class="card-scan-public-layer" aria-live="polite"></div>
+
     <script>
         function toggleBottomBar() {
             const bottomBar = document.getElementById("bottomBar");
@@ -700,6 +743,8 @@
 <link rel="stylesheet" href="/css/skins.css?v=4">
 
 <script src="/js/skins.js?v=4"></script>
+<script src="/js/card-scanner.js"></script>
+
 
 <script>
     (() => {

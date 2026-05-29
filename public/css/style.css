@@ -2011,6 +2011,23 @@ body.clean-mode .layout-buttons button.active,
     white-space:nowrap;
 }
 
+.scanner-card-btn{
+    border-color:rgba(34,211,238,0.7);
+    color:#a5f3fc;
+    background:rgba(8,47,73,0.72);
+    box-shadow:0 0 16px rgba(34,211,238,0.12);
+}
+
+.scanner-card-btn:hover{
+    border-color:#67e8f9;
+    color:#ffffff;
+}
+
+body.spectator-mode .scanner-card-btn,
+body.camera-mode .scanner-card-btn{
+    display:none !important;
+}
+
 #dualViewBtnBottom{
     display:none !important;
 }
@@ -2018,6 +2035,340 @@ body.clean-mode .layout-buttons button.active,
 .leave-btn{
     border-color:#dc2626;
     color:#f87171;
+}
+
+/* SCANNER DE CARTA / ORACULO ON */
+
+.card-scanner-modal{
+    position:fixed;
+    inset:0;
+    z-index:10050;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:rgba(2,8,18,0.72);
+    backdrop-filter:blur(8px);
+}
+
+.card-scanner-box{
+    position:relative;
+    width:min(960px,96vw);
+    max-height:92vh;
+    overflow:auto;
+    border:1px solid rgba(103,232,249,0.42);
+    border-radius:14px;
+    background:linear-gradient(180deg,rgba(15,23,42,0.98),rgba(3,10,22,0.98));
+    box-shadow:0 24px 80px rgba(0,0,0,0.52),0 0 28px rgba(34,211,238,0.12);
+    padding:18px;
+}
+
+.card-scanner-close,
+.card-scan-public-close{
+    position:absolute;
+    top:10px;
+    right:10px;
+    width:34px;
+    height:34px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,0.22);
+    background:rgba(2,6,15,0.85);
+    color:#ffffff;
+    font-size:22px;
+    line-height:1;
+    z-index:5;
+}
+
+.card-scanner-header{
+    padding-right:40px;
+    margin-bottom:14px;
+}
+
+.card-scanner-header h2{
+    margin:0 0 6px;
+    color:#e0f2fe;
+    font-size:22px;
+}
+
+.card-scanner-header p{
+    margin:0;
+    color:#bae6fd;
+    font-size:14px;
+}
+
+.card-scanner-body{
+    display:grid;
+    grid-template-columns:minmax(280px,1.1fr) minmax(280px,0.9fr);
+    gap:16px;
+    align-items:start;
+}
+
+.card-scanner-preview{
+    position:relative;
+    overflow:hidden;
+    border:1px solid rgba(125,211,252,0.24);
+    border-radius:12px;
+    background:#06101d;
+    aspect-ratio:16/10;
+}
+
+.card-scanner-preview canvas{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.card-scanner-guide{
+    position:absolute;
+    inset:12% 18%;
+    border:2px dashed rgba(103,232,249,0.72);
+    border-radius:10px;
+    box-shadow:0 0 0 999px rgba(2,6,15,0.28);
+    pointer-events:none;
+}
+
+.card-scanner-guide span{
+    position:absolute;
+    top:8px;
+    left:50%;
+    transform:translateX(-50%);
+    padding:4px 8px;
+    border-radius:999px;
+    background:rgba(2,6,15,0.86);
+    color:#cffafe;
+    font-size:12px;
+    font-weight:800;
+    white-space:nowrap;
+}
+
+.card-scanner-panel{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.card-scanner-status{
+    min-height:42px;
+    margin:0;
+    padding:10px;
+    border:1px solid rgba(125,211,252,0.18);
+    border-radius:10px;
+    color:#dbeafe;
+    background:rgba(8,24,42,0.7);
+    font-size:13px;
+    line-height:1.35;
+}
+
+.card-scanner-status[data-tone="warn"]{
+    border-color:rgba(251,191,36,0.52);
+    color:#fde68a;
+}
+
+.card-scanner-status[data-tone="ok"]{
+    border-color:rgba(34,197,94,0.48);
+    color:#bbf7d0;
+}
+
+.card-scanner-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+.card-scanner-actions button{
+    padding:9px 11px;
+    border-radius:10px;
+    border:1px solid rgba(103,232,249,0.45);
+    background:rgba(8,47,73,0.82);
+    color:#e0f2fe;
+    font-weight:800;
+}
+
+.card-scanner-actions button:disabled{
+    opacity:.55;
+    cursor:wait;
+}
+
+.card-scanner-manual{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    color:#bae6fd;
+    font-size:13px;
+    font-weight:800;
+}
+
+.card-scanner-manual input{
+    height:40px;
+    border-radius:10px;
+    border:1px solid rgba(125,211,252,0.24);
+    background:#06101d;
+    color:#ffffff;
+    padding:0 12px;
+}
+
+.card-scanner-result{
+    display:grid;
+    grid-template-columns:130px 1fr;
+    gap:12px;
+    padding:12px;
+    border:1px solid rgba(103,232,249,0.28);
+    border-radius:12px;
+    background:rgba(2,8,18,0.72);
+}
+
+.card-scanner-result img{
+    width:100%;
+    border-radius:8px;
+}
+
+.card-scanner-result h3{
+    margin:0;
+    color:#ffffff;
+    font-size:18px;
+}
+
+.card-scanner-meta,
+.card-scanner-oracle,
+.card-scan-public-type,
+.card-scan-public-oracle{
+    margin:7px 0 0;
+    color:#dbeafe;
+    font-size:13px;
+    line-height:1.35;
+}
+
+.card-scanner-meta,
+.card-scan-public-type{
+    color:#67e8f9;
+    font-weight:800;
+}
+
+/* Camada pública */
+.card-scan-public-layer{
+    position:fixed;
+    inset:0;
+    z-index:10020;
+    pointer-events:none;
+}
+
+/* Card público */
+.card-scan-public-card{
+    position:fixed;
+    left:18px;
+    top:92px;
+
+    display:grid;
+    grid-template-columns:120px 1fr;
+    gap:12px;
+
+    width:430px;
+    min-width:360px;
+    min-height:220px;
+
+    max-width:90vw;
+    max-height:85vh;
+
+    padding:12px;
+    padding-right:44px;
+
+    border:1px solid rgba(103,232,249,0.42);
+    border-radius:14px;
+
+    background:rgba(3,10,22,0.94);
+
+    box-shadow:
+        0 18px 50px rgba(0,0,0,0.46),
+        0 0 20px rgba(34,211,238,0.14);
+
+    pointer-events:auto;
+    z-index:10025;
+
+    resize:both;
+    overflow:auto;
+
+    cursor:grab;
+}
+
+.card-scan-public-card:active{
+    cursor:grabbing;
+}
+
+.card-scan-public-card::after{
+    content:"↘";
+    position:absolute;
+    right:8px;
+    bottom:4px;
+    font-size:22px;
+    font-weight:900;
+    color:rgba(103,232,249,0.9);
+    pointer-events:none;
+}
+
+.card-scan-public-card img{
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    align-self:start;
+}
+
+.card-scan-public-content{
+    min-width:0;
+}
+
+.card-scan-public-card h3{
+    margin:0;
+    color:#ffffff;
+    font-size:22px;
+    line-height:1.15;
+}
+
+.card-scan-public-type{
+    font-size:16px;
+}
+
+.card-scan-public-oracle{
+    font-size:15px;
+}
+
+.card-scan-public-author{
+    display:block;
+    margin-bottom:4px;
+    color:#93c5fd;
+    font-size:12px;
+    font-weight:900;
+    text-transform:uppercase;
+}
+
+@media(max-width:760px){
+    .card-scanner-body,
+    .card-scanner-result{
+        grid-template-columns:1fr;
+    }
+
+    .card-scanner-box{
+        padding:14px;
+    }
+
+    .card-scanner-result img{
+        width:min(190px,70vw);
+        justify-self:center;
+    }
+
+    .card-scan-public-card{
+        left:14px;
+        top:76px;
+        width:calc(100vw - 28px);
+        min-width:0;
+        max-width:calc(100vw - 28px);
+        grid-template-columns:110px 1fr;
+    }
+
+    .card-scan-public-card img{
+        width:100%;
+        justify-self:center;
+    }
 }
 
 /* MODAL ENTRADA */
