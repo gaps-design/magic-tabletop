@@ -4402,3 +4402,183 @@ body.spectator-mode .readonly-marker-summary{
         display:none !important;
     }
 }
+
+/* AJUSTE CHAT ESPECTADOR */
+
+.chat-panel,
+.room-chat,
+.chat-box,
+#chatPanel,
+#chatContainer{
+    position:relative;
+}
+
+/* Linha "Você está como espectador..." */
+.chat-spectator-status,
+.spectator-chat-status,
+.chat-muted-warning,
+#spectatorAudioStatus{
+    font-size:11px !important;
+    opacity:.75;
+    padding:4px 8px !important;
+    line-height:1.2 !important;
+    max-width:70%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+/* AJUSTE CHAT ESPECTADOR */
+
+.spectator-status-box{
+    display:flex !important;
+    align-items:center !important;
+    gap:10px !important;
+    flex-wrap:nowrap !important;
+
+    padding:6px 10px !important;
+    margin-bottom:6px !important;
+
+    border-radius:10px !important;
+    background:rgba(255,255,255,0.03) !important;
+}
+
+#spectatorModeBadge,
+#spectatorMicStatus{
+    font-size:12px !important;
+    color:#d8e7ff !important;
+
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+}
+
+#requestSpectatorMicBtn{
+    margin-left:auto !important;
+
+    position:static !important;
+
+    height:28px !important;
+    min-height:28px !important;
+    padding:0 10px !important;
+
+    border:none !important;
+    border-radius:8px !important;
+
+    background:#4f8cff !important;
+    color:white !important;
+
+    font-size:11px !important;
+    font-weight:700 !important;
+
+    cursor:pointer !important;
+    flex-shrink:0 !important;
+}
+
+/* Garante espaço para o botão sem quebrar o chat */
+.chat-header,
+.chat-top-bar,
+.chat-status-row{
+    position:relative;
+    min-height:32px !important;
+    padding-right:140px !important;
+}
+
+/* Mensagens do chat mais legíveis */
+.chat-messages,
+#chatMessages{
+    max-height:150px;
+    overflow-y:auto;
+}
+
+/* Mensagem do Oráculo não estourar a largura */
+.chat-message,
+.chat-message-row,
+.chat-item{
+    word-break:break-word;
+    overflow-wrap:anywhere;
+}
+/* AJUSTE FINO CHAT ESPECTADOR */
+
+.spectator-status-box{
+    display:grid !important;
+    grid-template-columns:1fr auto !important;
+    grid-template-areas:
+        "status button" !important;
+
+    align-items:center !important;
+    gap:8px !important;
+
+    padding:5px 8px !important;
+    margin-bottom:4px !important;
+}
+
+#spectatorModeBadge,
+#spectatorMicStatus{
+    font-size:11px !important;
+    line-height:1.1 !important;
+}
+
+#spectatorModeBadge{
+    grid-area:status !important;
+}
+
+#spectatorMicStatus{
+    display:none !important;
+}
+
+#requestSpectatorMicBtn{
+    grid-area:button !important;
+    position:static !important;
+
+    width:auto !important;
+    max-width:120px !important;
+
+    height:26px !important;
+    min-height:26px !important;
+
+    padding:0 8px !important;
+    font-size:10px !important;
+
+    white-space:nowrap !important;
+}
+
+/* Chat não deixa mensagem virar linha gigante */
+#spectatorChatMessages{
+    max-height:96px !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+}
+
+#spectatorChatMessages *{
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+}
+
+/* Mensagem do Oráculo mais compacta */
+#spectatorChatMessages .chat-message,
+#spectatorChatMessages .chat-item,
+#spectatorChatMessages div{
+    font-size:11px !important;
+    line-height:1.25 !important;
+    padding:4px 6px !important;
+}
+
+/* Campo de digitação menor */
+.spectator-chat-input-area{
+    gap:6px !important;
+}
+
+#spectatorChatInput{
+    height:32px !important;
+    min-height:32px !important;
+    font-size:12px !important;
+}
+
+#sendSpectatorChatBtn{
+    height:32px !important;
+    min-height:32px !important;
+    padding:0 12px !important;
+    font-size:12px !important;
+}
