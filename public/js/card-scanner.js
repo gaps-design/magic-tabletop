@@ -19,6 +19,7 @@
     let currentCard = null;
     let isBusy = false;
     let tesseractLoader = null;
+    let previewLoopId = null;
 
     function getRoomState() {
         return window.ResenhaONRoom?.getState?.() || {};
@@ -52,33 +53,42 @@
         });
     }
 
-    function openModal() {
-        if (!isPlayer()) return;
-        modal?.classList.remove("hidden");
-        currentCard = null;
-        renderResult(null);
-        setStatus("Aponte a câmera para a carta ou digite o nome manualmente.");
-        drawVideoFrame();
-        manualInput?.focus();
-    }
+    function getScannerVideo() {
+        const localVideo = document.getElementById("localVideo");
 
-    function closeModal() {
-        modal?.classList.add("hidden");
+        if (
+            localVideo &&
+            localVideo.srcObject &&
+            localVideo.readyState >= 2 &&
+            localVideo.videoWidth > 0 &&
+            localVideo.videoHeight > 0
+        ) {
+            return localVideo;
+        }
+
+        return Array.from(document.querySelectorAll("video"))
+            .find(video =>
+                video.srcObject &&
+                video.readyState >= 2 &&
+                video.videoWidth > 0 &&
+                video.videoHeight > 0
+            ) || null;
     }
 
     function drawVideoFrame() {
-        const video = document.getElementById("localVideo");
+        const video = getScannerVideo();
         if (!canvas || !ctx) return false;
 
         const width = video?.videoWidth || 640;
         const height = video?.videoHeight || 420;
-        canvas.width = width;
-        canvas.height = height;
+
+        if (canvas.width !== width) canvas.width = width;
+        if (canvas.height !== height) canvas.height = height;
 
         ctx.fillStyle = "#06101d";
         ctx.fillRect(0, 0, width, height);
 
-        if (!video || video.readyState < 2 || !video.srcObject) {
+        if (!video) {
             ctx.fillStyle = "#9cc7e7";
             ctx.font = "24px Arial";
             ctx.textAlign = "center";
@@ -86,8 +96,119 @@
             return false;
         }
 
-        ctx.drawImage(video, 0, 0, width, height);
-        return true;
+        try {
+            ctx.drawImage(video, 0, 0, width, height);
+            drawScannerGuide(width, height);
+            return true;
+        } catch (error) {
+            console.warn("Falha ao desenhar frame da câmera:", error);
+            return false;
+        }
+    }
+
+    function drawScannerGuide(width, height) {
+        const crop = getNameCropArea(width, height);
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(103, 232, 249, 0.95)";
+        ctx.lineWidth = Math.max(3, Math.round(width * 0.006));
+        ctx.setLineDash([12, 8]);
+        ctx.strokeRect(crop.x, crop.y, crop.w, crop.h);
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
+        ctx.font = `${Math.max(14, Math.round(width * 0.03))}px Arial`;
+        ctx.textAlign = "center";
+        ctx.fillText("Nome da carta aqui", crop.x + crop.w / 2, crop.y - 10);
+        ctx.restore();
+    }
+
+    function getNameCropArea(width, height) {
+        return {
+            x: width * 0.18,
+            y: height * 0.18,
+            w: width * 0.64,
+            h: height * 0.22
+        };
+    }
+
+    function prepareNameAreaForOcr() {
+        const source = canvas;
+        const ocrCanvas = document.createElement("canvas");
+        const ocrCtx = ocrCanvas.getContext("2d");
+
+        const crop = getNameCropArea(source.width, source.height);
+
+        ocrCanvas.width = 1200;
+        ocrCanvas.height = 300;
+
+        ocrCtx.fillStyle = "#ffffff";
+        ocrCtx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+
+        ocrCtx.drawImage(
+            source,
+            crop.x,
+            crop.y,
+            crop.w,
+            crop.h,
+            0,
+            0,
+            ocrCanvas.width,
+            ocrCanvas.height
+        );
+
+        const imageData = ocrCtx.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11;
+            const contrast = gray > 145 ? 255 : 0;
+
+            data[i] = contrast;
+            data[i + 1] = contrast;
+            data[i + 2] = contrast;
+        }
+
+        ocrCtx.putImageData(imageData, 0, 0);
+
+        return ocrCanvas;
+    }
+
+    function startPreviewLoop() {
+        stopPreviewLoop();
+
+        const loop = () => {
+            if (!modal || modal.classList.contains("hidden")) {
+                stopPreviewLoop();
+                return;
+            }
+
+            drawVideoFrame();
+            previewLoopId = requestAnimationFrame(loop);
+        };
+
+        loop();
+    }
+
+    function stopPreviewLoop() {
+        if (previewLoopId) {
+            cancelAnimationFrame(previewLoopId);
+            previewLoopId = null;
+        }
+    }
+
+    function openModal() {
+        if (!isPlayer()) return;
+        modal?.classList.remove("hidden");
+        currentCard = null;
+        renderResult(null);
+        setStatus("Aponte a câmera para a carta ou digite o nome manualmente.");
+        startPreviewLoop();
+        manualInput?.focus();
+    }
+
+    function closeModal() {
+        stopPreviewLoop();
+        modal?.classList.add("hidden");
     }
 
     function loadTesseract() {
@@ -114,11 +235,7 @@
             .filter(line => line.length >= 3 && line.length <= 42)
             .filter(line => !ignore.test(line));
 
-        lines.sort((a, b) => {
-            const aScore = scoreNameLine(a);
-            const bScore = scoreNameLine(b);
-            return bScore - aScore;
-        });
+        lines.sort((a, b) => scoreNameLine(b) - scoreNameLine(a));
 
         return lines[0] || "";
     }
@@ -143,17 +260,24 @@
 
         try {
             const hasFrame = drawVideoFrame();
+
             if (!hasFrame) {
                 setStatus("Não consegui acessar a câmera principal. Digite o nome da carta manualmente.", "warn");
                 return;
             }
 
+            const ocrCanvas = prepareNameAreaForOcr();
             const Tesseract = await loadTesseract();
-            const { data } = await Tesseract.recognize(canvas, "eng");
+
+            const { data } = await Tesseract.recognize(ocrCanvas, "eng", {
+                tessedit_pageseg_mode: "7",
+                tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,'’- "
+            });
+
             const probableName = cleanOcrText(data?.text);
 
             if (!probableName) {
-                setStatus("Não consegui identificar a carta. Aproxime a carta da câmera, evite reflexo e tente novamente.", "warn");
+                setStatus("Não consegui identificar a carta. Aproxime o topo da carta da área marcada, evite reflexo e tente novamente.", "warn");
                 return;
             }
 
@@ -169,6 +293,7 @@
 
     async function searchCard(rawName) {
         const query = String(rawName || "").trim();
+
         if (!query) {
             setStatus("Digite o nome da carta para buscar.", "warn");
             return;
@@ -179,6 +304,7 @@
 
         try {
             const response = await fetch(`${SCRYFALL_NAMED_URL}${encodeURIComponent(query)}`);
+
             if (!response.ok) {
                 setStatus("Carta não encontrada. Tente aproximar mais o nome da carta da câmera.", "warn");
                 renderResult(null);
@@ -220,8 +346,10 @@
 
     function renderResult(card) {
         if (!resultEl) return;
+
         resultEl.innerHTML = "";
         resultEl.classList.toggle("hidden", !card);
+
         if (!card) return;
 
         const image = document.createElement("img");
@@ -260,12 +388,117 @@
         if (!currentCard || !roomSocket) return;
 
         const state = getRoomState();
+
         roomSocket.emit("card-scan-confirmed", {
             roomId: state.roomId,
             card: currentCard
         });
 
         closeModal();
+    }
+
+    function makePublicCardInteractive(card, resizeHandle) {
+        let dragging = false;
+        let resizing = false;
+
+        let startX = 0;
+        let startY = 0;
+
+        let startLeft = 0;
+        let startTop = 0;
+
+        let startWidth = 0;
+        let startHeight = 0;
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function updateScale(width) {
+            const scale = clamp(width / 430, 0.85, 2.4);
+            card.style.setProperty("--scan-scale", scale.toFixed(2));
+
+            const imageColumn = Math.round(120 * scale);
+            card.style.gridTemplateColumns = `${imageColumn}px 1fr`;
+        }
+
+        card.addEventListener("mousedown", event => {
+            if (
+                event.target === resizeHandle ||
+                event.target.closest(".card-scan-public-close") ||
+                event.target.closest(".card-scan-resize-handle")
+            ) {
+                return;
+            }
+
+            dragging = true;
+
+            const rect = card.getBoundingClientRect();
+
+            startX = event.clientX;
+            startY = event.clientY;
+            startLeft = rect.left;
+            startTop = rect.top;
+
+            card.style.left = `${rect.left}px`;
+            card.style.top = `${rect.top}px`;
+            card.style.right = "auto";
+            card.style.bottom = "auto";
+
+            event.preventDefault();
+        });
+
+        resizeHandle.addEventListener("mousedown", event => {
+            event.stopPropagation();
+            event.preventDefault();
+
+            resizing = true;
+
+            const rect = card.getBoundingClientRect();
+
+            startX = event.clientX;
+            startY = event.clientY;
+            startWidth = rect.width;
+            startHeight = rect.height;
+
+            card.style.left = `${rect.left}px`;
+            card.style.top = `${rect.top}px`;
+            card.style.right = "auto";
+            card.style.bottom = "auto";
+        });
+
+        document.addEventListener("mousemove", event => {
+            if (dragging) {
+                const maxLeft = window.innerWidth - card.offsetWidth - 8;
+                const maxTop = window.innerHeight - card.offsetHeight - 8;
+
+                const nextLeft = clamp(startLeft + event.clientX - startX, 8, Math.max(8, maxLeft));
+                const nextTop = clamp(startTop + event.clientY - startY, 8, Math.max(8, maxTop));
+
+                card.style.left = `${nextLeft}px`;
+                card.style.top = `${nextTop}px`;
+            }
+
+            if (resizing) {
+                const maxWidth = Math.max(360, window.innerWidth - card.getBoundingClientRect().left - 8);
+                const maxHeight = Math.max(220, window.innerHeight - card.getBoundingClientRect().top - 8);
+
+                const nextWidth = clamp(startWidth + event.clientX - startX, 360, maxWidth);
+                const nextHeight = clamp(startHeight + event.clientY - startY, 220, maxHeight);
+
+                card.style.width = `${nextWidth}px`;
+                card.style.minHeight = `${nextHeight}px`;
+
+                updateScale(nextWidth);
+            }
+        });
+
+        document.addEventListener("mouseup", () => {
+            dragging = false;
+            resizing = false;
+        });
+
+        updateScale(card.getBoundingClientRect().width || 430);
     }
 
     function renderPublicCard(payload) {
@@ -304,9 +537,15 @@
         oracle.className = "card-scan-public-oracle";
         oracle.innerText = summarizeOracle(card.oracleText, 260);
 
+        const resizeHandle = document.createElement("div");
+        resizeHandle.className = "card-scan-resize-handle";
+        resizeHandle.innerText = "↘";
+
         content.append(author, title, type, oracle);
-        wrapper.append(close, image, content);
+        wrapper.append(close, image, content, resizeHandle);
+
         publicLayer.prepend(wrapper);
+        makePublicCardInteractive(wrapper, resizeHandle);
 
         while (publicLayer.children.length > 2) {
             publicLayer.lastElementChild?.remove();
@@ -316,13 +555,16 @@
     button?.addEventListener("click", openModal);
     closeBtn?.addEventListener("click", closeModal);
     captureBtn?.addEventListener("click", captureAndScan);
+
     retryBtn?.addEventListener("click", () => {
         currentCard = null;
         renderResult(null);
         setStatus("Aponte a câmera para a carta ou digite o nome manualmente.");
-        drawVideoFrame();
+        startPreviewLoop();
     });
+
     manualBtn?.addEventListener("click", () => searchCard(manualInput?.value));
+
     manualInput?.addEventListener("keydown", event => {
         if (event.key === "Enter") searchCard(manualInput.value);
     });
