@@ -4753,3 +4753,7 @@ body.spectator-mode .readonly-marker-summary{
     flex: 1;
     overflow-y: auto;
 }
+.chat-container .chat-header {
+    cursor: move !important;
+    user-select: none;
+}

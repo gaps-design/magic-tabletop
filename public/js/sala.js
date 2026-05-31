@@ -3552,52 +3552,144 @@ function toggleChatPanel(forceOpen = null) {
     container.classList.toggle("hidden");
 }
 
-function closePlayerChatPanel() {
-    document.getElementById("chatContainer")?.classList.add("hidden");
-}
 function initPlayerChatUX() {
     const chat = document.getElementById("chatContainer");
     const header = chat?.querySelector(".chat-header");
+    const closeBtn = document.getElementById("closeChatBtn");
+
     if (!chat || !header) return;
+    if (chat.dataset.chatUxReady === "true") return;
+
+    chat.dataset.chatUxReady = "true";
+    chat.classList.add("chat-floating-ux");
+
+    // Remove botões duplicados antigos
+    header.querySelectorAll("#chatExpandBtn, #chatResetBtn").forEach(btn => btn.remove());
+
+    const title = header.querySelector("span");
+
+    const resetBtn = document.createElement("button");
+    resetBtn.id = "chatResetBtn";
+    resetBtn.type = "button";
+    resetBtn.className = "chat-reset-btn";
+    resetBtn.innerText = "↺";
+    resetBtn.title = "Resetar posição";
+
+    const expandBtn = document.createElement("button");
+    expandBtn.id = "chatExpandBtn";
+    expandBtn.type = "button";
+    expandBtn.className = "chat-expand-btn";
+    expandBtn.innerText = "⛶";
+    expandBtn.title = "Expandir/recolher chat";
+
+    header.innerHTML = "";
+    if (title) header.appendChild(title);
+    header.appendChild(resetBtn);
+    header.appendChild(expandBtn);
+    if (closeBtn) header.appendChild(closeBtn);
 
     const STORAGE_KEY = "resenhaon:playerChatUX";
 
-    chat.classList.add("chat-floating-ux");
-
-    if (!document.getElementById("chatExpandBtn")) {
-        const expandBtn = document.createElement("button");
-        expandBtn.id = "chatExpandBtn";
-        expandBtn.type = "button";
-        expandBtn.className = "chat-expand-btn";
-        expandBtn.innerText = "⛶";
-        expandBtn.title = "Expandir/recolher chat";
-
-        const resetBtn = document.createElement("button");
-        resetBtn.id = "chatResetBtn";
-        resetBtn.type = "button";
-        resetBtn.className = "chat-reset-btn";
-        resetBtn.innerText = "↺";
-        resetBtn.title = "Resetar posição";
-
-        const closeBtn = document.getElementById("closeChatBtn");
-        header.appendChild(expandBtn);
-        header.appendChild(resetBtn);
-        if (closeBtn) header.appendChild(closeBtn);
-
-        expandBtn.addEventListener("click", () => {
-            chat.classList.toggle("chat-expanded");
-            saveChatState();
-        });
-
-        resetBtn.addEventListener("click", () => {
-            localStorage.removeItem(STORAGE_KEY);
-            chat.style.left = "";
-            chat.style.top = "";
-            chat.style.width = "";
-            chat.style.height = "";
-            chat.classList.remove("chat-expanded");
-        });
+    function saveChatState() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            left: chat.style.left,
+            top: chat.style.top,
+            width: chat.style.width,
+            height: chat.style.height,
+            expanded: chat.classList.contains("chat-expanded")
+        }));
     }
+
+    function applySavedState() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+
+            if (saved.left) chat.style.left = saved.left;
+            if (saved.top) chat.style.top = saved.top;
+            if (saved.width) chat.style.width = saved.width;
+            if (saved.height) chat.style.height = saved.height;
+            if (saved.expanded) chat.classList.add("chat-expanded");
+
+            if (saved.left || saved.top) {
+                chat.style.right = "auto";
+                chat.style.bottom = "auto";
+            }
+        } catch {}
+    }
+
+    applySavedState();
+
+    expandBtn.addEventListener("click", () => {
+        chat.classList.toggle("chat-expanded");
+        saveChatState();
+    });
+
+    resetBtn.addEventListener("click", () => {
+        localStorage.removeItem(STORAGE_KEY);
+        chat.style.left = "";
+        chat.style.top = "";
+        chat.style.right = "";
+        chat.style.bottom = "";
+        chat.style.width = "";
+        chat.style.height = "";
+        chat.classList.remove("chat-expanded");
+    });
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+
+    header.addEventListener("pointerdown", (event) => {
+        if (event.target.closest("button")) return;
+
+        const rect = chat.getBoundingClientRect();
+
+        dragging = true;
+        startX = event.clientX;
+        startY = event.clientY;
+        startLeft = rect.left;
+        startTop = rect.top;
+
+        chat.style.left = `${rect.left}px`;
+        chat.style.top = `${rect.top}px`;
+        chat.style.right = "auto";
+        chat.style.bottom = "auto";
+
+        chat.classList.add("chat-dragging");
+        header.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+    });
+
+    header.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+
+        const nextLeft = Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, startLeft + event.clientX - startX));
+        const nextTop = Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, startTop + event.clientY - startY));
+
+        chat.style.left = `${nextLeft}px`;
+        chat.style.top = `${nextTop}px`;
+        chat.style.right = "auto";
+        chat.style.bottom = "auto";
+    });
+
+    header.addEventListener("pointerup", (event) => {
+        if (!dragging) return;
+
+        dragging = false;
+        chat.classList.remove("chat-dragging");
+        header.releasePointerCapture?.(event.pointerId);
+        saveChatState();
+    });
+
+    header.addEventListener("pointercancel", () => {
+        dragging = false;
+        chat.classList.remove("chat-dragging");
+    });
+
+    console.log("[CHAT-UX] initialized");
+}
 
     function saveChatState() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -3624,44 +3716,57 @@ function initPlayerChatUX() {
     let startLeft = 0;
     let startTop = 0;
 
-    header.addEventListener("mousedown", (event) => {
-        if (event.target.closest("button")) return;
+   header.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("button")) return;
 
-        dragging = true;
-        startX = event.clientX;
-        startY = event.clientY;
+    dragging = true;
 
-        const rect = chat.getBoundingClientRect();
-        startLeft = rect.left;
-        startTop = rect.top;
+    const rect = chat.getBoundingClientRect();
 
-        chat.classList.add("chat-dragging");
-        event.preventDefault();
-    });
+    startX = event.clientX;
+    startY = event.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
 
-    document.addEventListener("mousemove", (event) => {
-        if (!dragging) return;
+    chat.style.left = `${rect.left}px`;
+    chat.style.top = `${rect.top}px`;
+    chat.style.right = "auto";
+    chat.style.bottom = "auto";
 
-        const nextLeft = startLeft + event.clientX - startX;
-        const nextTop = startTop + event.clientY - startY;
+    chat.classList.add("chat-dragging");
+    header.setPointerCapture?.(event.pointerId);
 
-        chat.style.left = `${Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, nextLeft))}px`;
-        chat.style.top = `${Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, nextTop))}px`;
-        chat.style.right = "auto";
-        chat.style.bottom = "auto";
-    });
+    event.preventDefault();
+});
 
-    document.addEventListener("mouseup", () => {
-        if (!dragging) return;
-        dragging = false;
-        chat.classList.remove("chat-dragging");
-        saveChatState();
-    });
+header.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
 
-    chat.addEventListener("mouseup", saveChatState);
+    const nextLeft = startLeft + event.clientX - startX;
+    const nextTop = startTop + event.clientY - startY;
+
+    chat.style.left = `${Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, nextLeft))}px`;
+    chat.style.top = `${Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, nextTop))}px`;
+    chat.style.right = "auto";
+    chat.style.bottom = "auto";
+});
+
+header.addEventListener("pointerup", (event) => {
+    if (!dragging) return;
+
+    dragging = false;
+    chat.classList.remove("chat-dragging");
+    header.releasePointerCapture?.(event.pointerId);
+    saveChatState();
+});
+
+header.addEventListener("pointercancel", () => {
+    dragging = false;
+    chat.classList.remove("chat-dragging");
+});
 
     console.log("[CHAT-UX] initialized");
-}
+
 
 document.addEventListener("DOMContentLoaded", initPlayerChatUX);
 
