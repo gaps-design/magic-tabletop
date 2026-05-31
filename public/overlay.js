@@ -76,6 +76,7 @@
     if (video.srcObject !== stream) video.srcObject = stream;
     video.muted = !!mutedPlayers[playerNumber];
     video.volume = mutedPlayers[playerNumber] ? 0 : 1;
+    video.closest(".player-block")?.classList.add("has-stream");
     video.play?.().catch(() => {});
   }
 
@@ -240,6 +241,9 @@
     el(`player${number}Name`).innerText = player?.name || `Jogador ${number}`;
     el(`player${number}Deck`).innerText = player?.deck || "Deck nao informado";
     el(`player${number}Life`).innerText = Number(player?.life ?? 20);
+    el(`topPlayer${number}Name`).innerText = player?.name || `Jogador ${number}`;
+    el(`topPlayer${number}Deck`).innerText = player?.deck || "Deck nao informado";
+    el(`topPlayer${number}Life`).innerText = Number(player?.life ?? 20);
 
     const link = el(`player${number}Decklist`);
     if (player?.decklistUrl) {
@@ -266,6 +270,12 @@
       const root = el(`player${playerNumber}Markers`);
       root.innerHTML = "";
       const entries = Object.entries(markerState[playerNumber] || markerState[String(playerNumber)] || {});
+      const topMarkers = el(`topPlayer${playerNumber}Markers`);
+      if (topMarkers) {
+        topMarkers.innerText = entries.length
+          ? entries.map(([id, marker]) => `${markerLabels[id] || id}: ${Number(marker.value) || 0}`).join("\n")
+          : "Marcadores: nenhum";
+      }
       entries.forEach(([id, marker]) => {
         const chip = document.createElement("span");
         chip.className = "marker-chip";

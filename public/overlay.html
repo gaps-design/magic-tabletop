@@ -7,14 +7,43 @@
   <link rel="stylesheet" href="/overlay.css">
 </head>
 <body>
+  <header class="broadcast-title">
+    <h1>OVERLAY <span>RESENHAON</span> PARA OBS</h1>
+    <p>Layout 16:9 - Tudo que o OBS precisa capturar</p>
+  </header>
+
   <main id="overlayRoot" class="obs-overlay">
     <header class="overlay-top">
-      <div>
+      <section class="top-player top-player-one">
+        <div>
+          <strong id="topPlayer1Name">Jogador 1</strong>
+          <span id="topPlayer1Deck">Deck nao informado</span>
+        </div>
+        <div class="top-life top-life-blue">
+          <span id="topPlayer1Life">20</span>
+        </div>
+        <div id="topPlayer1Markers" class="top-markers">Marcadores: nenhum</div>
+      </section>
+
+      <section class="match-center">
         <span class="eyebrow">ResenhaON OBS</span>
         <strong id="roomLabel">Sala</strong>
-      </div>
-      <div id="scoreLine" class="score-line">0 x 0</div>
-      <div id="timerDisplay" class="timer-display">50:00</div>
+        <div id="scoreLine" class="score-line">0 x 0</div>
+        <div class="score-subtitle">MD3</div>
+        <div id="timerDisplay" class="timer-display">50:00</div>
+        <div class="timer-label">Tempo de partida</div>
+      </section>
+
+      <section class="top-player top-player-two">
+        <div>
+          <strong id="topPlayer2Name">Jogador 2</strong>
+          <span id="topPlayer2Deck">Deck nao informado</span>
+        </div>
+        <div class="top-life top-life-purple">
+          <span id="topPlayer2Life">20</span>
+        </div>
+        <div id="topPlayer2Markers" class="top-markers">Marcadores: nenhum</div>
+      </section>
     </header>
 
     <section class="players-grid" id="playersGrid">
@@ -29,7 +58,10 @@
             <strong id="player1Life">20</strong>
           </div>
         </div>
+        <div class="camera-label">Jogador 1 - Mesa</div>
         <video id="player1Video" autoplay playsinline></video>
+        <div class="camera-placeholder">Aguardando câmera J1</div>
+        <div class="camera-status"><span></span> Câmera ativa</div>
         <video id="player1FaceCam" class="facecam-video hidden" autoplay playsinline muted></video>
         <div id="player1Markers" class="marker-row"></div>
         <a id="player1Decklist" class="decklist-link disabled" target="_blank" rel="noopener noreferrer">Lista nao informada</a>
@@ -46,7 +78,10 @@
             <strong id="player2Life">20</strong>
           </div>
         </div>
+        <div class="camera-label">Jogador 2 - Mesa</div>
         <video id="player2Video" autoplay playsinline></video>
+        <div class="camera-placeholder">Aguardando câmera J2</div>
+        <div class="camera-status"><span></span> Câmera ativa</div>
         <video id="player2FaceCam" class="facecam-video hidden" autoplay playsinline muted></video>
         <div id="player2Markers" class="marker-row"></div>
         <a id="player2Decklist" class="decklist-link disabled" target="_blank" rel="noopener noreferrer">Lista nao informada</a>
@@ -65,8 +100,12 @@
       <section class="overlay-card scanner-card">
         <strong>Carta em destaque</strong>
         <div id="scannerCard" class="scanner-card-body empty">Nenhuma carta exibida.</div>
+      </section>
+
+      <section class="overlay-card narrator-card controls-only">
+        <strong>Scanner do narrador</strong>
         <label class="manual-card-search controls-only">
-          <span>Carta do narrador</span>
+          <span>Buscar carta</span>
           <input id="manualCardInput" type="text" placeholder="Digite uma carta">
         </label>
         <div class="card-actions controls-only">
