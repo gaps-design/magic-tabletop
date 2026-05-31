@@ -50,6 +50,11 @@ const entryError = document.getElementById("entryError");
 
 const copyRoomBtn = document.getElementById("copyRoomBtn");
 const copyOverlayBtn = document.getElementById("copyOverlayBtn");
+const obsBroadcastModal = document.getElementById("obsBroadcastModal");
+const closeObsBroadcastBtn = document.getElementById("closeObsBroadcastBtn");
+const obsBroadcastLinks = document.getElementById("obsBroadcastLinks");
+const copyAllObsLinksBtn = document.getElementById("copyAllObsLinksBtn");
+const openObsCoreLinksBtn = document.getElementById("openObsCoreLinksBtn");
 const usersCountBtn = document.getElementById("usersCountBtn");
 const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
 const resenhaBecomeSpectatorBtn = document.getElementById("resenhaBecomeSpectatorBtn");
@@ -3593,18 +3598,132 @@ if (toggleChatBtn && toggleChatBtn.dataset.playerChatBound !== "true") {
     });
 }
 
-if (copyOverlayBtn) {
-    copyOverlayBtn.addEventListener("click", async () => {
-        const overlayUrl = `${window.location.origin}/overlay.html?room=${encodeURIComponent(roomId)}`;
+function getObsBroadcastLinks() {
+    const encodedRoom = encodeURIComponent(roomId);
+    const baseUrl = window.location.origin;
 
-        try {
-            await navigator.clipboard.writeText(overlayUrl);
-            showRoomToast("Link do overlay copiado para o OBS.");
-        } catch (error) {
-            alert(`Link do overlay OBS: ${overlayUrl}`);
+    return [
+        {
+            title: "📺 Overlay Visual (OBS)",
+            description: "Tela limpa para transmissão com câmeras, vida, placar, timer, marcadores, FaceCam, chat compacto e scanner.",
+            url: `${baseUrl}/overlay-live.html?room=${encodedRoom}`
+        },
+        {
+            title: "🎙 Painel do Narrador",
+            description: "Controle completo da transmissão: áudio, foco J1/J2, scanner manual, decklists e controles futuros.",
+            url: `${baseUrl}/painel-narrador.html?room=${encodedRoom}`
+        },
+        {
+            title: "🏆 Placar Transparente",
+            description: "Somente nome dos jogadores, vida, placar e timer com fundo transparente.",
+            url: `${baseUrl}/overlay-score.html?room=${encodedRoom}`
+        },
+        {
+            title: "🎥 Mesa Jogador 1",
+            description: "Exibe apenas a mesa do Jogador 1. Ideal para cenas individuais.",
+            url: `${baseUrl}/overlay-j1.html?room=${encodedRoom}`
+        },
+        {
+            title: "🎥 Mesa Jogador 2",
+            description: "Exibe apenas a mesa do Jogador 2. Ideal para cenas individuais.",
+            url: `${baseUrl}/overlay-j2.html?room=${encodedRoom}`
+        },
+        {
+            title: "📷 FaceCams",
+            description: "Exibe apenas as FaceCams ativas dos jogadores.",
+            url: `${baseUrl}/overlay-facecams.html?room=${encodedRoom}`
+        },
+        {
+            title: "💬 Chat da Partida",
+            description: "Somente mensagens da sala com fundo transparente para sobreposição OBS.",
+            url: `${baseUrl}/overlay-chat.html?room=${encodedRoom}`
+        },
+        {
+            title: "🃏 Carta em Destaque",
+            description: "Mostra somente a carta atual do scanner com fundo transparente.",
+            url: `${baseUrl}/overlay-card.html?room=${encodedRoom}`
+        },
+        {
+            title: "🎬 Modo Diretor",
+            description: "Em desenvolvimento: alternar J1, J2, visão dupla, FaceCam e scanner atualizando o overlay visual.",
+            url: "",
+            disabled: true
         }
+    ];
+}
+
+async function copyTextToClipboard(text, successMessage = "Link copiado.") {
+    try {
+        await navigator.clipboard.writeText(text);
+        showRoomToast(successMessage);
+    } catch (error) {
+        window.prompt("Copie o link abaixo:", text);
+    }
+}
+
+function renderObsBroadcastLinks() {
+    if (!obsBroadcastLinks) return;
+
+    obsBroadcastLinks.innerHTML = "";
+    getObsBroadcastLinks().forEach(item => {
+        const card = document.createElement("article");
+        card.className = `obs-broadcast-card ${item.disabled ? "is-disabled" : ""}`;
+
+        const content = document.createElement("div");
+        const title = document.createElement("h3");
+        title.innerText = item.title;
+        const description = document.createElement("p");
+        description.innerText = item.description;
+        const url = document.createElement("code");
+        url.innerText = item.disabled ? "Em desenvolvimento" : item.url;
+
+        content.append(title, description, url);
+
+        const action = document.createElement("button");
+        action.type = "button";
+        action.innerText = item.disabled ? "Em desenvolvimento" : "Copiar Link";
+        action.disabled = !!item.disabled;
+        action.addEventListener("click", () => {
+            if (!item.disabled) {
+                copyTextToClipboard(item.url, `${item.title.replace(/^[^ ]+ /, "")} copiado.`);
+            }
+        });
+
+        card.append(content, action);
+        obsBroadcastLinks.appendChild(card);
     });
 }
+
+function openObsBroadcastModal() {
+    renderObsBroadcastLinks();
+    obsBroadcastModal?.classList.remove("hidden");
+}
+
+function closeObsBroadcastModal() {
+    obsBroadcastModal?.classList.add("hidden");
+}
+
+copyOverlayBtn?.addEventListener("click", openObsBroadcastModal);
+closeObsBroadcastBtn?.addEventListener("click", closeObsBroadcastModal);
+obsBroadcastModal?.addEventListener("click", event => {
+    if (event.target === obsBroadcastModal) {
+        closeObsBroadcastModal();
+    }
+});
+copyAllObsLinksBtn?.addEventListener("click", () => {
+    const text = getObsBroadcastLinks()
+        .filter(item => !item.disabled)
+        .map(item => `${item.title}\n${item.url}`)
+        .join("\n\n");
+
+    copyTextToClipboard(text, "Todos os links da transmissão foram copiados.");
+});
+openObsCoreLinksBtn?.addEventListener("click", () => {
+    const links = getObsBroadcastLinks();
+    [links[0], links[1]].forEach(item => {
+        if (item?.url) window.open(item.url, "_blank", "noopener,noreferrer");
+    });
+});
 
 if (closeChatBtn) closeChatBtn.addEventListener("click", closePlayerChatPanel);
 

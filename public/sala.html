@@ -209,7 +209,7 @@
                 </select>
             </label>
             <button id="copyRoomBtn">🔗 Copiar link da sala</button>
-            <button id="copyOverlayBtn" type="button">🎥 Copiar Overlay OBS</button>
+            <button id="copyOverlayBtn" type="button">🎥 Central de Transmissão OBS</button>
             <button id="usersCountBtn">👥 0</button>
             <button id="spectatorsCountBtn">👁️ 0</button>
             <button id="resenhaBecomeSpectatorBtn" class="resenha-role-btn hidden">Virar espectador</button>
@@ -228,6 +228,27 @@
     <div class="mobile-menu-backdrop" data-mobile-menu-backdrop></div>
 
     <div id="roomToastContainer" class="room-toast-container" aria-live="polite"></div>
+
+    <div id="obsBroadcastModal" class="obs-broadcast-modal hidden" role="dialog" aria-modal="true" aria-labelledby="obsBroadcastTitle">
+        <div class="obs-broadcast-box">
+            <button id="closeObsBroadcastBtn" class="obs-broadcast-close" type="button" aria-label="Fechar central OBS">×</button>
+
+            <header class="obs-broadcast-header">
+                <span>🎥</span>
+                <div>
+                    <h2 id="obsBroadcastTitle">Central de Transmissão ResenhaON</h2>
+                    <p>Utilize os links abaixo no OBS ou no navegador para controlar a transmissão da partida.</p>
+                </div>
+            </header>
+
+            <div id="obsBroadcastLinks" class="obs-broadcast-links"></div>
+
+            <footer class="obs-broadcast-footer">
+                <button id="copyAllObsLinksBtn" type="button">📋 Copiar Todos os Links</button>
+                <button id="openObsCoreLinksBtn" type="button">🚀 Abrir Tudo</button>
+            </footer>
+        </div>
+    </div>
 
     <main class="game-layout">
 

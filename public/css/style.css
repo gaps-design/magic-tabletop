@@ -4778,3 +4778,209 @@ body.spectator-mode .readonly-marker-summary{
     cursor: default !important;
     user-select: none;
 }
+
+.obs-broadcast-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(4, 8, 16, 0.74);
+    backdrop-filter: blur(12px);
+}
+
+.obs-broadcast-modal.hidden {
+    display: none !important;
+}
+
+.obs-broadcast-box {
+    position: relative;
+    width: min(1040px, 96vw);
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(244, 197, 94, 0.38);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 18% 0%, rgba(42, 169, 255, 0.18), transparent 36%),
+        linear-gradient(145deg, rgba(7, 13, 26, 0.98), rgba(12, 20, 36, 0.96));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    color: #eef6ff;
+}
+
+.obs-broadcast-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fbff;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.obs-broadcast-close:hover {
+    border-color: rgba(244, 197, 94, 0.7);
+    background: rgba(244, 197, 94, 0.16);
+}
+
+.obs-broadcast-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 28px 74px 20px 28px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.obs-broadcast-header > span {
+    display: grid;
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border: 1px solid rgba(244, 197, 94, 0.42);
+    border-radius: 14px;
+    background: rgba(244, 197, 94, 0.12);
+    font-size: 26px;
+}
+
+.obs-broadcast-header h2 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 38px);
+    line-height: 1.08;
+}
+
+.obs-broadcast-header p:last-child {
+    margin: 10px 0 0;
+    max-width: 760px;
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 15px;
+}
+
+.obs-broadcast-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 18px;
+    overflow: auto;
+}
+
+.obs-broadcast-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    min-height: 112px;
+    padding: 16px;
+    border: 1px solid rgba(70, 180, 255, 0.22);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.obs-broadcast-card:hover {
+    border-color: rgba(244, 197, 94, 0.52);
+    background: rgba(255, 255, 255, 0.075);
+}
+
+.obs-broadcast-card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    color: #ffffff;
+}
+
+.obs-broadcast-card p {
+    margin: 0 0 9px;
+    color: rgba(238, 246, 255, 0.72);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.obs-broadcast-card code {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    color: #9bd7ff;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.obs-broadcast-card button,
+.obs-broadcast-footer button {
+    border: 1px solid rgba(244, 197, 94, 0.44);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(244, 197, 94, 0.22), rgba(39, 170, 255, 0.16));
+    color: #fff7d7;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.obs-broadcast-card button {
+    min-width: 118px;
+    padding: 10px 12px;
+}
+
+.obs-broadcast-card button:hover,
+.obs-broadcast-footer button:hover {
+    border-color: rgba(244, 197, 94, 0.86);
+    transform: translateY(-1px);
+}
+
+.obs-broadcast-card.is-disabled {
+    opacity: 0.58;
+}
+
+.obs-broadcast-card.is-disabled button {
+    cursor: not-allowed;
+    transform: none;
+}
+
+.obs-broadcast-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 18px 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.obs-broadcast-footer button {
+    padding: 12px 16px;
+}
+
+@media (max-width: 760px) {
+    .obs-broadcast-modal {
+        padding: 10px;
+    }
+
+    .obs-broadcast-header {
+        padding: 22px 58px 16px 18px;
+    }
+
+    .obs-broadcast-links {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+
+    .obs-broadcast-card {
+        grid-template-columns: 1fr;
+        min-height: auto;
+    }
+
+    .obs-broadcast-card button,
+    .obs-broadcast-footer button {
+        width: 100%;
+    }
+
+    .obs-broadcast-footer {
+        flex-direction: column;
+    }
+}

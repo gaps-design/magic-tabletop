@@ -4,6 +4,7 @@
   const initialView = params.get("view") || "dual";
   const showControls = params.get("controls") === "1";
   const transparent = params.get("transparent") === "1";
+  const scene = params.get("scene") || "live";
   const socket = io();
 
   const servers = {
@@ -363,7 +364,8 @@
   function setupControls() {
     document.body.classList.toggle("controls-on", showControls);
     document.body.classList.toggle("transparent", transparent);
-    setView(initialView);
+    document.body.classList.add(`scene-${scene}`);
+    setView(scene === "j1" ? "j1" : scene === "j2" ? "j2" : initialView);
 
     document.querySelectorAll("[data-view]").forEach(button => {
       button.addEventListener("click", () => setView(button.dataset.view));

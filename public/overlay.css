@@ -509,6 +509,100 @@ body.view-j2 .player-one { display: none; }
 body.view-j1 .players-grid,
 body.view-j2 .players-grid { grid-template-columns: 1fr; }
 
+body.scene-score .broadcast-title,
+body.scene-score .players-grid,
+body.scene-score .overlay-bottom,
+body.scene-chat .broadcast-title,
+body.scene-chat .overlay-top,
+body.scene-chat .players-grid,
+body.scene-card .broadcast-title,
+body.scene-card .overlay-top,
+body.scene-card .players-grid,
+body.scene-facecams .broadcast-title,
+body.scene-facecams .overlay-top,
+body.scene-facecams .overlay-bottom {
+  display: none;
+}
+
+body.scene-score,
+body.scene-chat,
+body.scene-card,
+body.scene-facecams {
+  background: transparent;
+}
+
+body.scene-score .obs-overlay {
+  width: 100vw;
+  height: 100vh;
+  grid-template-rows: 1fr;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.scene-score .overlay-top {
+  display: grid;
+  align-self: start;
+}
+
+body.scene-chat .obs-overlay,
+body.scene-card .obs-overlay,
+body.scene-facecams .obs-overlay {
+  width: 100vw;
+  height: 100vh;
+  grid-template-rows: 1fr;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.scene-chat .overlay-bottom,
+body.scene-card .overlay-bottom {
+  display: block;
+}
+
+body.scene-chat .scanner-card,
+body.scene-chat .narrator-card,
+body.scene-card .chat-card,
+body.scene-card .narrator-card {
+  display: none !important;
+}
+
+body.scene-chat .chat-card,
+body.scene-card .scanner-card {
+  width: min(520px, 100vw - 32px);
+  margin: auto;
+}
+
+body.scene-facecams .players-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 100%;
+}
+
+body.scene-facecams .player-block {
+  border: 0;
+  background: transparent;
+}
+
+body.scene-facecams .player-block > video:not(.facecam-video),
+body.scene-facecams .player-bar,
+body.scene-facecams .camera-label,
+body.scene-facecams .camera-placeholder,
+body.scene-facecams .camera-status,
+body.scene-facecams .marker-row,
+body.scene-facecams .decklist-link {
+  display: none;
+}
+
+body.scene-facecams .facecam-video {
+  position: static;
+  display: block !important;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+}
+
 .empty-state {
   position: fixed;
   inset: 0;
