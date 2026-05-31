@@ -138,6 +138,11 @@
                         <option>Temur</option>
                     </select>
                 </label>
+
+                <label>
+                    Link da decklist (opcional)
+                    <input id="decklistInput" type="url" placeholder="https://...">
+                </label>
             </div>
 
             <button id="enterRoomBtn" class="enter-btn">Entrar na sala</button>
@@ -211,6 +216,8 @@
             <button class="spectator-view-btn" onclick="setSpectatorFocus('both')">▦ Dupla</button>
             <button class="spectator-view-btn" onclick="setSpectatorFocus('p1')">🔵 J1</button>
             <button class="spectator-view-btn" onclick="setSpectatorFocus('p2')">🟢 J2</button>
+            <button id="spectatorMutePlayer1Btn" class="spectator-audio-btn" type="button">Mutar J1</button>
+            <button id="spectatorMutePlayer2Btn" class="spectator-audio-btn" type="button">Mutar J2</button>
             <button id="spectatorMobileChatBtn" class="spectator-mobile-chat-btn" type="button">💬 Chat</button>
             <button id="leaveSpectatorBtn" class="leave-spectator-btn hidden">
     🚪 Sair
@@ -278,6 +285,8 @@
                     </div>
                 </div>
             </div>
+
+            <button id="decklistBtn1" class="decklist-link-btn" type="button" disabled>Decklist não informada</button>
 
             <div id="manualLifeBox1" class="manual-life-box hidden">
                 <input id="manualLife1" type="number" placeholder="Ex: 20">
@@ -454,6 +463,8 @@
                 </div>
             </div>
 
+            <button id="decklistBtn2" class="decklist-link-btn" type="button" disabled>Decklist não informada</button>
+
             <div id="manualLifeBox2" class="manual-life-box hidden">
                 <input id="manualLife2" type="number" placeholder="Ex: 20">
                 <button onclick="setManualLife(2)">Aplicar</button>
@@ -502,6 +513,17 @@
         </div>
     </div>
 
+    <div class="spectator-decklists-box">
+        <div class="spectator-section-title">
+            Decklists
+        </div>
+
+        <div class="spectator-decklist-actions">
+            <button id="spectatorDecklistBtn1" class="decklist-link-btn" type="button" disabled>J1: não informada</button>
+            <button id="spectatorDecklistBtn2" class="decklist-link-btn" type="button" disabled>J2: não informada</button>
+        </div>
+    </div>
+
     <div class="spectator-events-box">
         <div class="spectator-section-title">
             ⚔️ Eventos da partida
@@ -521,6 +543,8 @@
     <div id="chatContainer" class="chat-container hidden">
         <div class="chat-header">
             <span>💬 Chat da mesa</span>
+            <button id="expandChatBtn" class="chat-tool-btn" type="button" aria-label="Expandir chat">⛶</button>
+            <button id="resetChatPositionBtn" class="chat-tool-btn" type="button" aria-label="Resetar posição do chat">↺</button>
             <button id="closeChatBtn" class="chat-close-btn" type="button" aria-label="Fechar chat">×</button>
         </div>
         <div id="chatMessages" class="chat-messages"></div>
@@ -600,6 +624,7 @@
             <button id="fullscreenBtn">⛶ Tela cheia</button>
             <button id="dualViewBtnBottom">▦ Layout 2 câmeras</button>
             <button onclick="copyCameraLink()">📷 Celular como câmera</button>
+            <button id="reconnectMediaBtn" type="button">Reconectar áudio/vídeo</button>
             <button id="toggleChatBtn">💬 Chat</button>
             <button class="leave-btn" onclick="confirmLeaveRoom()">📞 Sair da sala</button>
         </div>

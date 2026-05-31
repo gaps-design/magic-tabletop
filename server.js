@@ -95,6 +95,19 @@ function normalizeUser(user = {}) {
   };
 }
 
+function sanitizeDecklistUrl(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
 function getPresenceUserId(user = {}) {
   const profile = normalizeUser(user);
   return profile.uid || profile.email || "";
@@ -391,6 +404,7 @@ function buildRoomUsers(room) {
       name: p.name,
       deck: p.deck,
       guild: p.guild,
+      decklistUrl: p.decklistUrl || "",
       photo: p.photo || "/assets/default-avatar.png"
     })),
     spectators: room.spectators.map(id => {
@@ -412,7 +426,8 @@ function buildRoomUsers(room) {
       name: item.name || "Jogador",
       photo: item.photo || "/assets/default-avatar.png",
       deck: item.deck || "---",
-      guild: item.guild || "---"
+      guild: item.guild || "---",
+      decklistUrl: item.decklistUrl || ""
     }))
   };
 }
@@ -428,6 +443,7 @@ function sendRoomState(roomId) {
       name: p.name,
       deck: p.deck,
       guild: p.guild,
+      decklistUrl: p.decklistUrl || "",
       photo: p.photo || "/assets/default-avatar.png",
       life: p.life
     })),
@@ -447,7 +463,8 @@ function sendRoomState(roomId) {
       name: item.name || "Jogador",
       photo: item.photo || "/assets/default-avatar.png",
       deck: item.deck || "---",
-      guild: item.guild || "---"
+      guild: item.guild || "---",
+      decklistUrl: item.decklistUrl || ""
     })),
     cameraClients: room.cameraClients,
     lifeHistory: room.lifeHistory,
@@ -638,6 +655,7 @@ function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
       name: data.name || profile.name || "Jogador",
       deck: data.deck || "---",
       guild: data.guild || "---",
+      decklistUrl: data.decklistUrl || "",
       photo: profile.photo || "/assets/default-avatar.png"
     });
   }
@@ -649,6 +667,7 @@ function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
     photo: profile.photo || "/assets/default-avatar.png",
     deck: data.deck || "---",
     guild: data.guild || "---",
+    decklistUrl: data.decklistUrl || "",
     micEnabled: false
   };
 
@@ -699,6 +718,7 @@ function promoteNextResenhaPlayer(roomId) {
       name: next.name,
       deck: next.deck,
       guild: next.guild,
+      decklistUrl: next.decklistUrl || "",
       photo: next.photo || "/assets/default-avatar.png",
       cameraKey: createCameraKey(),
       life: 20
@@ -713,6 +733,7 @@ function promoteNextResenhaPlayer(roomId) {
       playerNumber,
       name: next.name,
       photo: next.photo || "/assets/default-avatar.png",
+      decklistUrl: next.decklistUrl || "",
       micEnabled: true
     };
 
@@ -789,6 +810,7 @@ function moveActiveResenhaPlayerToQueue(socket, roomId) {
       name: player.name || "Jogador",
       deck: player.deck || "---",
       guild: player.guild || "---",
+      decklistUrl: player.decklistUrl || "",
       photo: player.photo || "/assets/default-avatar.png"
     });
   }
@@ -804,6 +826,7 @@ function moveActiveResenhaPlayerToQueue(socket, roomId) {
     photo: player.photo || "/assets/default-avatar.png",
     deck: player.deck || "---",
     guild: player.guild || "---",
+    decklistUrl: player.decklistUrl || "",
     micEnabled: false
   };
 
@@ -976,6 +999,7 @@ io.on("connection", (socket) => {
     const name = data.name || user.name || "Usuário";
     const deck = data.deck || "---";
     const guild = data.guild || "---";
+    const decklistUrl = sanitizeDecklistUrl(data.decklistUrl);
     const linkedPlayer = Number(data.linkedPlayer || data.cameraFor || 0);
     const cameraKey = String(data.cameraKey || "");
     const incomingFormat = data.format || "";
@@ -1082,7 +1106,7 @@ io.on("connection", (socket) => {
     }
 
     if (isResenhaRoom(roomId) && room.players.length >= 2) {
-      addToResenhaQueue(socket, roomId, { name, deck, guild }, user);
+      addToResenhaQueue(socket, roomId, { name, deck, guild, decklistUrl }, user);
       return;
     }
 
@@ -1107,6 +1131,7 @@ io.on("connection", (socket) => {
       photo: user.photo,
       deck,
       guild,
+      decklistUrl,
       cameraKey: createCameraKey(),
       life: 20
     };
@@ -1119,6 +1144,7 @@ io.on("connection", (socket) => {
       name,
       email: user.email,
       photo: user.photo,
+      decklistUrl,
       micEnabled: true
     };
 
@@ -1252,10 +1278,23 @@ io.on("connection", (socket) => {
 
     const profile = clientProfiles[socket.id];
     if (!profile) return;
-    if (profile.role === "spectator" && !profile.micAllowed) return;
+    if (profile.role === "spectator" && !profile.micAllowed) {
+      console.log("[AUDIO][SPECTATOR] mic status ignored without permission", {
+        roomId,
+        spectatorSocketId: socket.id
+      });
+      return;
+    }
 
     profile.micEnabled = !!micEnabled;
     room.micStatus[socket.id] = !!micEnabled;
+    if (profile.role === "spectator") {
+      console.log("[AUDIO][SPECTATOR] mic status updated", {
+        roomId,
+        spectatorSocketId: socket.id,
+        micEnabled: !!micEnabled
+      });
+    }
 
     io.to(roomId).emit("mic-status-update", {
       socketId: socket.id,
@@ -1322,6 +1361,11 @@ io.on("connection", (socket) => {
     if (!room || !room.spectators.includes(socket.id)) return;
 
     const profile = clientProfiles[socket.id] || {};
+    console.log("[AUDIO][SPECTATOR] mic permission requested", {
+      roomId,
+      spectatorSocketId: socket.id,
+      name: profile.name || "Espectador"
+    });
 
     room.players.forEach(player => {
       io.to(player.socketId).emit("spectator-mic-requested", {
@@ -1348,6 +1392,11 @@ io.on("connection", (socket) => {
     profile.micAllowed = !!allow;
     profile.micEnabled = false;
     room.micStatus[spectatorSocketId] = false;
+    console.log("[AUDIO][SPECTATOR] mic response", {
+      roomId,
+      spectatorSocketId,
+      allow: !!allow
+    });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
       status: allow ? "allowed" : "denied"
@@ -1367,6 +1416,11 @@ io.on("connection", (socket) => {
     profile.micAllowed = !!allow;
     profile.micEnabled = false;
     room.micStatus[spectatorSocketId] = false;
+    console.log("[AUDIO][SPECTATOR] mic permission updated", {
+      roomId,
+      spectatorSocketId,
+      allow: !!allow
+    });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
       status: allow ? "allowed" : "muted"
