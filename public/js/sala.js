@@ -3349,7 +3349,7 @@ window.toggleNotesPanel = function() {
 };
 
 /* =========================
-   CHAT / EMOTES
+    / EMOTES
 ========================= */
 
 function getEmotes() {
@@ -3555,6 +3555,115 @@ function toggleChatPanel(forceOpen = null) {
 function closePlayerChatPanel() {
     document.getElementById("chatContainer")?.classList.add("hidden");
 }
+function initPlayerChatUX() {
+    const chat = document.getElementById("chatContainer");
+    const header = chat?.querySelector(".chat-header");
+    if (!chat || !header) return;
+
+    const STORAGE_KEY = "resenhaon:playerChatUX";
+
+    chat.classList.add("chat-floating-ux");
+
+    if (!document.getElementById("chatExpandBtn")) {
+        const expandBtn = document.createElement("button");
+        expandBtn.id = "chatExpandBtn";
+        expandBtn.type = "button";
+        expandBtn.className = "chat-expand-btn";
+        expandBtn.innerText = "⛶";
+        expandBtn.title = "Expandir/recolher chat";
+
+        const resetBtn = document.createElement("button");
+        resetBtn.id = "chatResetBtn";
+        resetBtn.type = "button";
+        resetBtn.className = "chat-reset-btn";
+        resetBtn.innerText = "↺";
+        resetBtn.title = "Resetar posição";
+
+        const closeBtn = document.getElementById("closeChatBtn");
+        header.appendChild(expandBtn);
+        header.appendChild(resetBtn);
+        if (closeBtn) header.appendChild(closeBtn);
+
+        expandBtn.addEventListener("click", () => {
+            chat.classList.toggle("chat-expanded");
+            saveChatState();
+        });
+
+        resetBtn.addEventListener("click", () => {
+            localStorage.removeItem(STORAGE_KEY);
+            chat.style.left = "";
+            chat.style.top = "";
+            chat.style.width = "";
+            chat.style.height = "";
+            chat.classList.remove("chat-expanded");
+        });
+    }
+
+    function saveChatState() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            left: chat.style.left,
+            top: chat.style.top,
+            width: chat.style.width,
+            height: chat.style.height,
+            expanded: chat.classList.contains("chat-expanded")
+        }));
+    }
+
+    try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        if (saved.left) chat.style.left = saved.left;
+        if (saved.top) chat.style.top = saved.top;
+        if (saved.width) chat.style.width = saved.width;
+        if (saved.height) chat.style.height = saved.height;
+        if (saved.expanded) chat.classList.add("chat-expanded");
+    } catch {}
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+
+    header.addEventListener("mousedown", (event) => {
+        if (event.target.closest("button")) return;
+
+        dragging = true;
+        startX = event.clientX;
+        startY = event.clientY;
+
+        const rect = chat.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+
+        chat.classList.add("chat-dragging");
+        event.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (event) => {
+        if (!dragging) return;
+
+        const nextLeft = startLeft + event.clientX - startX;
+        const nextTop = startTop + event.clientY - startY;
+
+        chat.style.left = `${Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, nextLeft))}px`;
+        chat.style.top = `${Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, nextTop))}px`;
+        chat.style.right = "auto";
+        chat.style.bottom = "auto";
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        chat.classList.remove("chat-dragging");
+        saveChatState();
+    });
+
+    chat.addEventListener("mouseup", saveChatState);
+
+    console.log("[CHAT-UX] initialized");
+}
+
+document.addEventListener("DOMContentLoaded", initPlayerChatUX);
 
 if (toggleChatBtn) {
     toggleChatBtn.addEventListener("click", () => {
