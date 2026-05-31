@@ -89,6 +89,7 @@ const toggleChatBtn = document.getElementById("toggleChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
 const expandChatBtn = document.getElementById("expandChatBtn");
 const resetChatPositionBtn = document.getElementById("resetChatPositionBtn");
+const chatDragHandle = document.getElementById("chatDragHandle");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -3478,7 +3479,8 @@ function resetChatLayout() {
 function initPlayerChatUX() {
     const container = getChatContainer();
     const header = container?.querySelector(".chat-header");
-    if (!container || !header) return;
+    const dragHandle = chatDragHandle || container?.querySelector("#chatDragHandle");
+    if (!container || !header || !dragHandle) return;
     if (container.dataset.playerChatUxReady === "true") return;
     container.dataset.playerChatUxReady = "true";
 
@@ -3487,9 +3489,7 @@ function initPlayerChatUX() {
 
     let drag = null;
 
-    header.addEventListener("pointerdown", event => {
-        if (event.target.closest("button")) return;
-
+    dragHandle.addEventListener("pointerdown", event => {
         const rect = container.getBoundingClientRect();
         drag = {
             pointerId: event.pointerId,
@@ -3508,12 +3508,16 @@ function initPlayerChatUX() {
         container.style.width = rect.width + "px";
         container.style.height = rect.height + "px";
         container.classList.add("dragging");
+        console.log("[CHAT-DRAG] start", {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top)
+        });
 
-        try { header.setPointerCapture?.(event.pointerId); } catch {}
+        try { dragHandle.setPointerCapture?.(event.pointerId); } catch {}
         event.preventDefault();
     });
 
-    header.addEventListener("pointermove", event => {
+    dragHandle.addEventListener("pointermove", event => {
         if (!drag || drag.pointerId !== event.pointerId) return;
 
         const nextLeft = Math.min(Math.max(drag.left + event.clientX - drag.startX, 8), window.innerWidth - drag.width - 8);
@@ -3521,18 +3525,29 @@ function initPlayerChatUX() {
 
         container.style.left = nextLeft + "px";
         container.style.top = nextTop + "px";
+        container.style.right = "auto";
+        container.style.bottom = "auto";
+        console.log("[CHAT-DRAG] move", {
+            left: Math.round(nextLeft),
+            top: Math.round(nextTop)
+        });
     });
 
     const finishDrag = event => {
         if (!drag || drag.pointerId !== event.pointerId) return;
         drag = null;
         container.classList.remove("dragging");
-        try { header.releasePointerCapture?.(event.pointerId); } catch {}
+        try { dragHandle.releasePointerCapture?.(event.pointerId); } catch {}
         saveChatLayout();
+        const rect = container.getBoundingClientRect();
+        console.log("[CHAT-DRAG] end", {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top)
+        });
     };
 
-    header.addEventListener("pointerup", finishDrag);
-    header.addEventListener("pointercancel", finishDrag);
+    dragHandle.addEventListener("pointerup", finishDrag);
+    dragHandle.addEventListener("pointercancel", finishDrag);
     container.addEventListener("mouseup", saveChatLayout);
 
     if (window.ResizeObserver) {

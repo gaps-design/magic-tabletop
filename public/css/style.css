@@ -2608,7 +2608,7 @@ body.camera-mode .scanner-card-btn{
     align-items:center;
     justify-content:space-between;
     gap:10px;
-    cursor:move;
+    cursor:default;
     touch-action:none;
 }
 
@@ -2617,8 +2617,8 @@ body.camera-mode .scanner-card-btn{
 }
 
 .chat-tool-btn,
+.chat-drag-handle,
 .chat-close-btn{
-    width:34px;
     height:34px;
     border:none;
     border-radius:10px;
@@ -2630,11 +2630,32 @@ body.camera-mode .scanner-card-btn{
     cursor:pointer;
 }
 
+.chat-tool-btn,
+.chat-close-btn{
+    width:34px;
+}
+
+.chat-drag-handle{
+    width:auto;
+    min-width:82px;
+    padding:0 10px;
+    cursor:grab;
+    font-size:13px;
+    color:#bfdbfe;
+    white-space:nowrap;
+    touch-action:none;
+}
+
+.chat-drag-handle:active{
+    cursor:grabbing;
+}
+
 .chat-tool-btn{
     font-size:15px;
     color:#bfdbfe;
 }
 
+.chat-drag-handle:hover,
 .chat-tool-btn:hover{
     background:rgba(59,130,246,0.2);
     color:white;
@@ -4754,6 +4775,6 @@ body.spectator-mode .readonly-marker-summary{
     overflow-y: auto;
 }
 .chat-container .chat-header {
-    cursor: move !important;
+    cursor: default !important;
     user-select: none;
 }
