@@ -183,6 +183,7 @@ let faceCameraStream = null;
 let faceCameraDeviceId = localStorage.getItem("magicSelectedFaceCamera") || "";
 let faceCameraStatus = "off";
 const remoteFaceCameras = {};
+const faceCameraCardCache = {};
 let lastTimerRemaining = null;
 let timerAudioContext = null;
 const timerAlertMarks = [1200, 900, 600, 300];
@@ -563,21 +564,21 @@ async function getFaceCameraDevices({ warnIfMissing = false } = {}) {
 
     const devices = await navigator.mediaDevices.enumerateDevices();
     const cameras = devices.filter(device => device.kind === "videoinput");
-    const mainCameraId = getMainCameraDeviceId();
-    const secondaryCameras = cameras.filter(camera => !mainCameraId || camera.deviceId !== mainCameraId);
-
     if (faceCameraSelect) {
+        const currentValue = faceCameraDeviceId || faceCameraSelect.value;
         faceCameraSelect.innerHTML = "";
 
-        secondaryCameras.forEach((camera, index) => {
+        cameras.forEach((camera, index) => {
             const option = document.createElement("option");
             option.value = camera.deviceId;
             option.text = camera.label || `Câmera de rosto ${index + 1}`;
             faceCameraSelect.appendChild(option);
         });
 
-        if (!secondaryCameras.some(camera => camera.deviceId === faceCameraDeviceId)) {
-            faceCameraDeviceId = secondaryCameras[0]?.deviceId || "";
+        if (currentValue && cameras.some(camera => camera.deviceId === currentValue)) {
+            faceCameraDeviceId = currentValue;
+        } else if (!cameras.some(camera => camera.deviceId === faceCameraDeviceId)) {
+            faceCameraDeviceId = cameras[0]?.deviceId || "";
         }
 
         if (faceCameraDeviceId) {
@@ -585,42 +586,61 @@ async function getFaceCameraDevices({ warnIfMissing = false } = {}) {
         }
     }
 
-    if (warnIfMissing && cameras.length <= 1) {
-        showRoomToast("Nenhuma segunda câmera encontrada.");
+    if (warnIfMissing && !cameras.length) {
+        showRoomToast("Nenhuma câmera de rosto encontrada.");
     }
 
-    return secondaryCameras;
+    return cameras;
 }
 
-function renderFaceCameraCard(root, { stream, playerNumber, name, isLocal = false } = {}) {
+function renderFaceCameraCard(root, { stream, playerNumber, name, isLocal = false, cacheKey = "" } = {}) {
     if (!root || !stream) return false;
 
-    const card = document.createElement("div");
-    const header = document.createElement("div");
-    const title = document.createElement("strong");
-    const closeButton = document.createElement("button");
-    const video = document.createElement("video");
+    const safeKey = cacheKey || `${isLocal ? "local" : "remote"}-${playerNumber || "unknown"}`;
+    let card = faceCameraCardCache[safeKey];
+    let title = card?.querySelector("strong");
+    let closeButton = card?.querySelector("button");
+    let video = card?.querySelector("video");
 
-    card.className = `face-camera-card face-camera-player-${playerNumber || "local"}`;
-    header.className = "face-camera-header";
+    if (!card) {
+        card = document.createElement("div");
+        const header = document.createElement("div");
+        title = document.createElement("strong");
+        closeButton = document.createElement("button");
+        video = document.createElement("video");
+
+        card.className = `face-camera-card face-camera-player-${playerNumber || "local"}`;
+        card.dataset.faceCameraKey = safeKey;
+        header.className = "face-camera-header";
+        closeButton.type = "button";
+        closeButton.innerText = "X";
+        closeButton.setAttribute("aria-label", "Desligar câmera de rosto");
+        closeButton.addEventListener("click", () => stopFaceCamera());
+
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+
+        header.appendChild(title);
+        header.appendChild(closeButton);
+        card.appendChild(header);
+        card.appendChild(video);
+        faceCameraCardCache[safeKey] = card;
+    }
+
     title.innerText = isLocal
         ? "Minha FaceCam"
         : `FaceCam ${name || `Jogador ${playerNumber || ""}`}`.trim();
-    closeButton.type = "button";
-    closeButton.innerText = "X";
-    closeButton.setAttribute("aria-label", "Desligar câmera de rosto");
     closeButton.classList.toggle("hidden", !isLocal);
-    closeButton.addEventListener("click", () => stopFaceCamera());
 
-    video.autoplay = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.srcObject = stream;
+    if (video.srcObject !== stream) {
+        video.srcObject = stream;
+        console.log("[FACECAM] video element attached", {
+            playerNumber: playerNumber || null,
+            isLocal
+        });
+    }
 
-    header.appendChild(title);
-    header.appendChild(closeButton);
-    card.appendChild(header);
-    card.appendChild(video);
     root.appendChild(card);
 
     return true;
@@ -633,19 +653,20 @@ async function startFaceCamera() {
     updateFaceCameraControls();
 
     try {
-        const secondaryCameras = await getFaceCameraDevices({ warnIfMissing: true });
+        const cameras = await getFaceCameraDevices({ warnIfMissing: true });
 
-        if (!secondaryCameras.length) {
+        if (!cameras.length) {
             faceCameraStatus = "off";
             updateFaceCameraControls();
             return;
         }
 
-        const requestedDeviceId = faceCameraSelect?.value || faceCameraDeviceId || secondaryCameras[0].deviceId;
+        const requestedDeviceId = faceCameraSelect?.value || faceCameraDeviceId || cameras[0].deviceId;
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: requestedDeviceId } },
             audio: false
         });
+        console.log("[FACECAM] stream created", { deviceId: requestedDeviceId });
 
         stopFaceCamera({ silent: true });
 
@@ -3122,22 +3143,31 @@ function renderFloatingMarkers() {
     const root = document.getElementById("floatingMarkersRoot");
     if (!root) return;
 
+    root.querySelectorAll(".face-camera-card[data-face-camera-key]").forEach(card => {
+        faceCameraCardCache[card.dataset.faceCameraKey] = card;
+        card.remove();
+    });
+
     root.innerHTML = "";
     root.classList.remove("has-facecams");
     root.parentElement?.classList.remove("has-floating-markers", "has-floating-player-1", "has-floating-player-2");
 
     let faceCameraCount = 0;
     const visiblePlayers = new Set();
+    const renderedFaceCameraKeys = new Set();
 
     if (selectedRole === "player" && faceCameraStream) {
         const playerNumber = Number(myPlayerNumber);
         const column = getFloatingPlayerColumn(root, playerNumber);
+        const cacheKey = `local-${playerNumber || "unknown"}`;
 
         renderFaceCameraCard(column, {
             stream: faceCameraStream,
             playerNumber,
-            isLocal: true
+            isLocal: true,
+            cacheKey
         });
+        renderedFaceCameraKeys.add(cacheKey);
         visiblePlayers.add(playerNumber);
         faceCameraCount++;
     }
@@ -3146,15 +3176,28 @@ function renderFloatingMarkers() {
         const normalizedPlayer = Number(playerNumber);
         if (selectedRole === "player" && normalizedPlayer === Number(myPlayerNumber)) return;
 
+        const cacheKey = `remote-${normalizedPlayer}`;
+
         if (renderFaceCameraCard(getFloatingPlayerColumn(root, normalizedPlayer), {
             stream: camera.stream,
             playerNumber: normalizedPlayer,
             name: camera.name,
-            isLocal: false
+            isLocal: false,
+            cacheKey
         })) {
+            renderedFaceCameraKeys.add(cacheKey);
             visiblePlayers.add(normalizedPlayer);
             faceCameraCount++;
         }
+    });
+
+    Object.entries(faceCameraCardCache).forEach(([key, card]) => {
+        if (renderedFaceCameraKeys.has(key)) return;
+        card.querySelector("video")?.pause?.();
+        if (card.querySelector("video")) {
+            card.querySelector("video").srcObject = null;
+        }
+        delete faceCameraCardCache[key];
     });
 
     if (!isMarkerUiVisible()) {

@@ -4,6 +4,7 @@ const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const cameraSelect = document.getElementById("cameraSelect");
 const microphoneSelect = document.getElementById("microphoneSelect");
+const spectatorMicrophoneSelect = document.getElementById("spectatorMicrophoneSelect");
 const reconnectMediaBtn = document.getElementById("reconnectMediaBtn");
 
 const micStatusText = document.getElementById("micStatusText");
@@ -23,6 +24,7 @@ let cameraEnabled = true;
 
 let selectedCameraId = localStorage.getItem("magicSelectedCamera") || "";
 let selectedMicrophoneId = localStorage.getItem("magicSelectedMicrophone") || "";
+let selectedSpectatorMicrophoneId = localStorage.getItem("magicSelectedSpectatorMicrophone") || "";
 
 const peerConnections = {};
 const peerInfo = {};
@@ -132,6 +134,54 @@ async function getDevices() {
             localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
         }
     }
+
+    populateSpectatorMicrophones(microphones);
+}
+
+function populateSpectatorMicrophones(microphones = []) {
+    if (!spectatorMicrophoneSelect) return;
+
+    const currentValue = selectedSpectatorMicrophoneId || spectatorMicrophoneSelect.value;
+    spectatorMicrophoneSelect.innerHTML = "";
+
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.text = "PadrÃ£o do navegador";
+    spectatorMicrophoneSelect.appendChild(defaultOption);
+
+    microphones.forEach((mic, index) => {
+        const option = document.createElement("option");
+        option.value = mic.deviceId;
+        option.text = mic.label || `Microfone ${index + 1}`;
+        spectatorMicrophoneSelect.appendChild(option);
+    });
+
+    if (currentValue && microphones.some(mic => mic.deviceId === currentValue)) {
+        selectedSpectatorMicrophoneId = currentValue;
+        spectatorMicrophoneSelect.value = currentValue;
+    } else {
+        selectedSpectatorMicrophoneId = "";
+        spectatorMicrophoneSelect.value = "";
+        localStorage.removeItem("magicSelectedSpectatorMicrophone");
+    }
+
+    console.log("[AUDIO][SPECTATOR] devices loaded", {
+        count: microphones.length,
+        selectedDeviceId: selectedSpectatorMicrophoneId || "default"
+    });
+}
+
+async function refreshSpectatorMicrophones() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    populateSpectatorMicrophones(devices.filter(device => device.kind === "audioinput"));
+}
+
+function getSpectatorAudioConstraints() {
+    return selectedSpectatorMicrophoneId
+        ? { deviceId: { exact: selectedSpectatorMicrophoneId } }
+        : true;
 }
 
 function updateMediaStatus() {
@@ -1072,6 +1122,10 @@ function createFaceCamSenderPeer(receiverId) {
 
     if (localFaceCamStream) {
         localFaceCamStream.getVideoTracks().forEach(track => {
+            console.log("[FACECAM] track added", {
+                target: receiverId,
+                trackId: track.id
+            });
             peer.addTrack(track, localFaceCamStream);
         });
     }
@@ -1185,6 +1239,10 @@ async function requestFaceCamSource(sourceInfo = {}) {
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
+    console.log("[FACECAM] renegotiation started", {
+        target: sourceId,
+        side: "recv"
+    });
 
     socket.emit("facecam-offer", {
         target: sourceId,
@@ -1240,6 +1298,11 @@ window.startFaceCamBroadcast = function(stream, meta = {}) {
     socket.emit("facecam-started", {
         roomId: currentRoomId,
         playerNumber: localFaceCamMeta.playerNumber
+    });
+    console.log("[FACECAM] renegotiation started", {
+        roomId: currentRoomId,
+        playerNumber: localFaceCamMeta.playerNumber,
+        reason: "facecam-started"
     });
 };
 
@@ -1992,6 +2055,10 @@ socket.on("facecam-offer", async ({ offer, sender, senderInfo }) => {
         await peer.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
+        console.log("[FACECAM] renegotiation started", {
+            target: sender,
+            side: "send"
+        });
 
         socket.emit("facecam-answer", {
             target: sender,
@@ -2239,6 +2306,29 @@ if (microphoneSelect) {
     });
 }
 
+if (spectatorMicrophoneSelect) {
+    spectatorMicrophoneSelect.addEventListener("change", async () => {
+        selectedSpectatorMicrophoneId = spectatorMicrophoneSelect.value || "";
+
+        if (selectedSpectatorMicrophoneId) {
+            localStorage.setItem("magicSelectedSpectatorMicrophone", selectedSpectatorMicrophoneId);
+        } else {
+            localStorage.removeItem("magicSelectedSpectatorMicrophone");
+        }
+
+        console.log("[AUDIO][SPECTATOR] device selected", {
+            selectedDeviceId: selectedSpectatorMicrophoneId || "default"
+        });
+
+        if (currentRole === "spectator" && micEnabled && localStream?.getAudioTracks().length) {
+            console.log("[AUDIO][SPECTATOR] microphone changed", {
+                selectedDeviceId: selectedSpectatorMicrophoneId || "default"
+            });
+            await window.enableSpectatorMicrophone?.();
+        }
+    });
+}
+
 /* =========================
    MICROFONE
 ========================= */
@@ -2268,23 +2358,47 @@ window.toggleMicrophone = function() {
 window.enableSpectatorMicrophone = async function() {
     if (currentRole !== "spectator") return;
 
-    audioLog("[SPECTATOR] getUserMedia audio start");
+    await refreshSpectatorMicrophones().catch(error => {
+        audioLog("[SPECTATOR] devices refresh failed", {
+            errorName: error?.name,
+            errorMessage: error?.message
+        }, "warn");
+    });
+
+    const audioConstraints = getSpectatorAudioConstraints();
+
+    audioLog("[SPECTATOR] getUserMedia audio start", {
+        selectedDeviceId: selectedSpectatorMicrophoneId || "default"
+    });
     const audioStream = await getUserMediaWithDeviceFallback(
         {
             video: false,
-            audio: selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : true
+            audio: audioConstraints
         },
         {
             video: false,
             audio: true
         },
         {
-            microphone: !!selectedMicrophoneId
+            microphone: !!selectedSpectatorMicrophoneId
         }
     );
 
     const audioTrack = audioStream.getAudioTracks()[0];
     if (!audioTrack) return;
+    const trackSettings = audioTrack.getSettings?.() || {};
+    if (trackSettings.deviceId) {
+        selectedSpectatorMicrophoneId = trackSettings.deviceId;
+        localStorage.setItem("magicSelectedSpectatorMicrophone", selectedSpectatorMicrophoneId);
+        if (spectatorMicrophoneSelect) {
+            spectatorMicrophoneSelect.value = selectedSpectatorMicrophoneId;
+        }
+    }
+
+    console.log("[AUDIO][SPECTATOR] microphone started", {
+        selectedDeviceId: selectedSpectatorMicrophoneId || "default",
+        actualDeviceId: trackSettings.deviceId || "default"
+    });
 
     audioLog("[SPECTATOR] getUserMedia audio success", {
         trackId: audioTrack.id,
