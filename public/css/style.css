@@ -3585,6 +3585,28 @@ body.spectator-mode .spectator-bottom-area{
     color:#cbd5e1;
 }
 
+.spectator-mic-select-wrap{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    min-width:180px;
+    flex:1 1 220px;
+    color:#cbd5e1;
+    font-size:12px;
+    font-weight:800;
+}
+
+.spectator-mic-select-wrap select{
+    width:100%;
+    min-width:0;
+    border:1px solid rgba(148,163,184,0.3);
+    border-radius:9px;
+    background:rgba(15,23,42,0.92);
+    color:#e5e7eb;
+    padding:7px 8px;
+    font-size:12px;
+}
+
 .spectator-status-box button{
     margin-left:auto;
     padding:7px 9px;
