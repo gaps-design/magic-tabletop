@@ -3775,6 +3775,14 @@ document.addEventListener("click", (event) => {
     if (!btn) return;
 
     event.preventDefault();
+    toggleChatPanel();
+});
+
+document.addEventListener("click", (event) => {
+    const btn = event.target.closest("#toggleChatBtn");
+    if (!btn) return;
+
+    event.preventDefault();
 
     const container = document.getElementById("chatContainer");
     if (!container) return;
