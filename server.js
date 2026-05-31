@@ -313,7 +313,9 @@ function ensureRoom(roomId) {
       matchScore: { 1: 0, 2: 0 },
       faceCams: {},
       markerState: { 1: {}, 2: {} },
-      playerThemes: createDefaultPlayerThemes()
+      playerThemes: createDefaultPlayerThemes(),
+      overlays: [],
+      currentScannerCard: null
     };
   }
 
@@ -490,6 +492,7 @@ function sendRoomState(roomId) {
     faceCams: Object.values(room.faceCams || {}),
     markerState: room.markerState || { 1: {}, 2: {} },
     playerThemes: room.playerThemes || createDefaultPlayerThemes(),
+    currentScannerCard: room.currentScannerCard || null,
     users: buildRoomUsers(room)
   });
 }
@@ -576,7 +579,9 @@ function resetPublicRoomIfEmpty(roomId) {
       matchScore: { 1: 0, 2: 0 },
       faceCams: {},
       markerState: { 1: {}, 2: {} },
-      playerThemes: createDefaultPlayerThemes()
+      playerThemes: createDefaultPlayerThemes(),
+      overlays: [],
+      currentScannerCard: null
     };
   } else {
     delete rooms[roomId];
@@ -896,6 +901,7 @@ function removeSocketFromAllRooms(socketId) {
       room.players.some(p => p.socketId === socketId) ||
       room.spectators.includes(socketId) ||
       room.cameraClients.some(c => c.socketId === socketId) ||
+      room.overlays?.includes(socketId) ||
       room.queue?.some(item => item.socketId === socketId);
 
     if (!wasInside) continue;
@@ -910,6 +916,7 @@ function removeSocketFromAllRooms(socketId) {
 
     room.players = room.players.filter(p => p.socketId !== socketId);
     room.spectators = room.spectators.filter(id => id !== socketId);
+    room.overlays = (room.overlays || []).filter(id => id !== socketId);
     room.cameraClients = room.cameraClients.filter(c =>
       c.socketId !== socketId &&
       !removedPlayerNumbers.includes(Number(c.linkedPlayer))
@@ -1219,6 +1226,67 @@ io.on("connection", (socket) => {
 
     sendRoomState(roomId);
     broadcastLobbyState();
+  });
+
+
+  socket.on("join-overlay", ({ roomId } = {}) => {
+    if (!roomId || typeof roomId !== "string" || roomId.length > 80) return;
+
+    removeSocketFromAllRooms(socket.id);
+
+    const room = rooms[roomId] || ensureRoom(roomId);
+    room.overlays = room.overlays || [];
+
+    if (!room.overlays.includes(socket.id)) {
+      room.overlays.push(socket.id);
+    }
+
+    socket.join(roomId);
+
+    clientProfiles[socket.id] = {
+      role: "overlay",
+      name: "Overlay OBS",
+      photo: "/assets/default-avatar.png",
+      micEnabled: false
+    };
+
+    socket.emit("assigned-role", {
+      role: "overlay"
+    });
+
+    socket.emit("existing-peers", {
+      peers: [
+        ...room.players.map(p => ({
+          socketId: p.socketId,
+          role: "player",
+          playerNumber: p.playerNumber,
+          name: p.name,
+          photo: p.photo
+        })),
+        ...room.cameraClients.map(c => ({
+          socketId: c.socketId,
+          role: "camera",
+          linkedPlayer: c.linkedPlayer,
+          name: c.name || "Camera"
+        }))
+      ]
+    });
+
+    socket.emit("facecam-list", {
+      faceCams: Object.values(room.faceCams || {})
+    });
+
+    if (room.currentScannerCard) {
+      socket.emit("card-scan-shown", room.currentScannerCard);
+    }
+
+    socket.to(roomId).emit("user-connected", {
+      socketId: socket.id,
+      role: "overlay",
+      name: "Overlay OBS"
+    });
+
+    sendRoomState(roomId);
   });
 
   socket.on("roll-dice", ({ roomId }) => {
@@ -1737,11 +1805,13 @@ io.on("connection", (socket) => {
       CARD_SCAN_MESSAGE_LIMIT
     );
 
-    io.to(roomId).emit("card-scan-shown", {
+    room.currentScannerCard = {
       playerName,
       card: safeCard,
       time: new Date().toLocaleTimeString("pt-BR")
-    });
+    };
+
+    io.to(roomId).emit("card-scan-shown", room.currentScannerCard);
 
     io.to(roomId).emit("chat-message", {
       name: "Oráculo ON",

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overlay OBS | ResenhaON</title>
+  <link rel="stylesheet" href="/overlay.css">
+</head>
+<body>
+  <main id="overlayRoot" class="obs-overlay">
+    <header class="overlay-top">
+      <div>
+        <span class="eyebrow">ResenhaON OBS</span>
+        <strong id="roomLabel">Sala</strong>
+      </div>
+      <div id="scoreLine" class="score-line">0 x 0</div>
+      <div id="timerDisplay" class="timer-display">50:00</div>
+    </header>
+
+    <section class="players-grid" id="playersGrid">
+      <article class="player-block player-one" data-player="1">
+        <div class="player-bar">
+          <div>
+            <strong id="player1Name">Jogador 1</strong>
+            <span id="player1Deck">Deck nao informado</span>
+          </div>
+          <div class="life-score">
+            <span id="player1Score">□□□</span>
+            <strong id="player1Life">20</strong>
+          </div>
+        </div>
+        <video id="player1Video" autoplay playsinline></video>
+        <video id="player1FaceCam" class="facecam-video hidden" autoplay playsinline muted></video>
+        <div id="player1Markers" class="marker-row"></div>
+        <a id="player1Decklist" class="decklist-link disabled" target="_blank" rel="noopener noreferrer">Lista nao informada</a>
+      </article>
+
+      <article class="player-block player-two" data-player="2">
+        <div class="player-bar">
+          <div>
+            <strong id="player2Name">Jogador 2</strong>
+            <span id="player2Deck">Deck nao informado</span>
+          </div>
+          <div class="life-score">
+            <span id="player2Score">□□□</span>
+            <strong id="player2Life">20</strong>
+          </div>
+        </div>
+        <video id="player2Video" autoplay playsinline></video>
+        <video id="player2FaceCam" class="facecam-video hidden" autoplay playsinline muted></video>
+        <div id="player2Markers" class="marker-row"></div>
+        <a id="player2Decklist" class="decklist-link disabled" target="_blank" rel="noopener noreferrer">Lista nao informada</a>
+      </article>
+    </section>
+
+    <aside class="overlay-side">
+      <section class="overlay-card chat-card">
+        <header>
+          <strong>Chat da mesa</strong>
+          <button id="toggleChatBtn" type="button">Ocultar</button>
+        </header>
+        <div id="chatList" class="chat-list"></div>
+      </section>
+
+      <section class="overlay-card scanner-card">
+        <strong>Carta em destaque</strong>
+        <div id="scannerCard" class="scanner-card-body empty">Nenhuma carta exibida.</div>
+        <label class="manual-card-search">
+          <span>Carta do narrador</span>
+          <input id="manualCardInput" type="text" placeholder="Digite uma carta">
+        </label>
+        <div class="card-actions">
+          <button id="manualCardBtn" type="button">Buscar/Mostrar</button>
+          <button id="clearManualCardBtn" type="button">Limpar</button>
+        </div>
+      </section>
+    </aside>
+
+    <section id="overlayControls" class="overlay-controls">
+      <button data-view="dual" type="button">Visao dupla</button>
+      <button data-view="j1" type="button">Focar J1</button>
+      <button data-view="j2" type="button">Focar J2</button>
+      <button id="enableAudioBtn" type="button">Ativar audio da transmissao</button>
+      <button id="muteJ1Btn" type="button">Mutar J1</button>
+      <button id="muteJ2Btn" type="button">Mutar J2</button>
+      <button id="muteAllBtn" type="button">Mutar todos</button>
+      <button id="unmuteAllBtn" type="button">Desmutar todos</button>
+    </section>
+
+    <div id="emptyState" class="empty-state hidden">Sala nao encontrada ou sem partida ativa.</div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/overlay.js"></script>
+</body>
+</html>

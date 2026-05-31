@@ -49,6 +49,7 @@ const enterRoomBtn = document.getElementById("enterRoomBtn");
 const entryError = document.getElementById("entryError");
 
 const copyRoomBtn = document.getElementById("copyRoomBtn");
+const copyOverlayBtn = document.getElementById("copyOverlayBtn");
 const usersCountBtn = document.getElementById("usersCountBtn");
 const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
 const resenhaBecomeSpectatorBtn = document.getElementById("resenhaBecomeSpectatorBtn");
@@ -3589,6 +3590,19 @@ if (toggleChatBtn && toggleChatBtn.dataset.playerChatBound !== "true") {
     toggleChatBtn.addEventListener("click", event => {
         event.preventDefault();
         toggleChatPanel();
+    });
+}
+
+if (copyOverlayBtn) {
+    copyOverlayBtn.addEventListener("click", async () => {
+        const overlayUrl = `${window.location.origin}/overlay.html?room=${encodeURIComponent(roomId)}`;
+
+        try {
+            await navigator.clipboard.writeText(overlayUrl);
+            showRoomToast("Link do overlay copiado para o OBS.");
+        } catch (error) {
+            alert(`Link do overlay OBS: ${overlayUrl}`);
+        }
     });
 }
 
