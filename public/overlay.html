@@ -53,11 +53,11 @@
       </article>
     </section>
 
-    <aside class="overlay-side">
+    <aside class="overlay-bottom">
       <section class="overlay-card chat-card">
         <header>
           <strong>Chat da mesa</strong>
-          <button id="toggleChatBtn" type="button">Ocultar</button>
+          <button id="toggleChatBtn" class="controls-only" type="button">Ocultar</button>
         </header>
         <div id="chatList" class="chat-list"></div>
       </section>
@@ -65,11 +65,11 @@
       <section class="overlay-card scanner-card">
         <strong>Carta em destaque</strong>
         <div id="scannerCard" class="scanner-card-body empty">Nenhuma carta exibida.</div>
-        <label class="manual-card-search">
+        <label class="manual-card-search controls-only">
           <span>Carta do narrador</span>
           <input id="manualCardInput" type="text" placeholder="Digite uma carta">
         </label>
-        <div class="card-actions">
+        <div class="card-actions controls-only">
           <button id="manualCardBtn" type="button">Buscar/Mostrar</button>
           <button id="clearManualCardBtn" type="button">Limpar</button>
         </div>

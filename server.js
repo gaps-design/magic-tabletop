@@ -531,6 +531,14 @@ function buildPeerList(room, excludeSocketId = null) {
         role: "spectator",
         name: clientProfiles[id]?.name || "Espectador",
         photo: clientProfiles[id]?.photo || "/assets/default-avatar.png"
+      })),
+    ...(room.overlays || [])
+      .filter(id => id !== excludeSocketId)
+      .map(id => ({
+        socketId: id,
+        role: "overlay",
+        name: "Overlay OBS",
+        photo: "/assets/default-avatar.png"
       }))
   ];
 }

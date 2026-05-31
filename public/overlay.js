@@ -2,7 +2,7 @@
   const params = new URLSearchParams(window.location.search);
   const roomId = params.get("room") || "";
   const initialView = params.get("view") || "dual";
-  const showControls = params.get("controls") !== "0";
+  const showControls = params.get("controls") === "1";
   const transparent = params.get("transparent") === "1";
   const socket = io();
 
@@ -75,6 +75,7 @@
     if (!video || !stream) return;
     if (video.srcObject !== stream) video.srcObject = stream;
     video.muted = !!mutedPlayers[playerNumber];
+    video.volume = mutedPlayers[playerNumber] ? 0 : 1;
     video.play?.().catch(() => {});
   }
 
@@ -278,7 +279,7 @@
     const list = el("chatList");
     if (!list) return;
     chatMessages.push(data);
-    while (chatMessages.length > 12) chatMessages.shift();
+    while (chatMessages.length > 5) chatMessages.shift();
     list.innerHTML = "";
     chatMessages.forEach(item => {
       const row = document.createElement("div");
@@ -350,7 +351,7 @@
   }
 
   function setupControls() {
-    document.body.classList.toggle("controls-off", !showControls);
+    document.body.classList.toggle("controls-on", showControls);
     document.body.classList.toggle("transparent", transparent);
     setView(initialView);
 
@@ -394,13 +395,13 @@
     peers.forEach(peer => {
       if (!peer?.socketId) return;
       if (!["player", "camera"].includes(peer.role)) return;
-      createOffer(peer.socketId, peer).catch(console.warn);
+      peerInfo[peer.socketId] = { ...(peerInfo[peer.socketId] || {}), ...peer, socketId: peer.socketId };
     });
   });
 
   socket.on("user-connected", data => {
     if (!data?.socketId || !["player", "camera"].includes(data.role)) return;
-    createOffer(data.socketId, data).catch(console.warn);
+    peerInfo[data.socketId] = { ...(peerInfo[data.socketId] || {}), ...data, socketId: data.socketId };
   });
 
   socket.on("user-disconnected", socketId => {

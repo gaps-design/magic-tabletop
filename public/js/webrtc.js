@@ -2018,6 +2018,14 @@ socket.on("user-connected", (data) => {
 
     savePeerInfo(data.socketId, data);
 
+    if (data.role === "overlay" && (currentRole === "player" || currentRole === "camera")) {
+        rtcLog(data.socketId, "creating offer to OBS overlay", {
+            remoteRole: data.role
+        });
+        createOffer(data.socketId, data);
+        return;
+    }
+
     if (currentRole === "spectator" && data.role !== "spectator") {
         spectatorLog("spectator creating offer to new media sender", {
             target: data.socketId,
