@@ -440,12 +440,15 @@ function showPlayerFields() {
     if (playerFields) playerFields.style.display = "flex";
     if (deckNameInput?.closest("label")) deckNameInput.closest("label").style.display = "block";
     if (guildInput?.closest("label")) guildInput.closest("label").style.display = "block";
+    if (decklistInput?.closest("label")) decklistInput.closest("label").style.display = "block";
 }
 
 function showSpectatorFields() {
     if (playerFields) playerFields.style.display = "flex";
     if (deckNameInput?.closest("label")) deckNameInput.closest("label").style.display = "none";
     if (guildInput?.closest("label")) guildInput.closest("label").style.display = "none";
+    if (decklistInput?.closest("label")) decklistInput.closest("label").style.display = "none";
+    if (decklistInput) decklistInput.value = "";
 }
 
 function showLeaveSpectatorButton() {
@@ -1104,13 +1107,14 @@ function configureDecklistButton(button, playerData, labelPrefix = "Decklist") {
     button.onclick = null;
 
     if (!decklistUrl) {
-        button.innerText = `${labelPrefix} não informada`;
+        const name = playerData?.name || labelPrefix;
+        button.innerText = `Decklist ${name} não informada`;
         button.disabled = true;
         button.classList.add("disabled");
         return;
     }
 
-    button.innerText = `${labelPrefix}: ${playerData?.name || "abrir"}`;
+    button.innerText = `Decklist ${playerData?.name || labelPrefix}`;
     button.disabled = false;
     button.classList.remove("disabled");
     button.onclick = () => openDecklistUrl(decklistUrl);
@@ -1121,16 +1125,11 @@ function updateDecklistButtons(playerOne, playerTwo) {
 
     [1, 2].forEach(panelNumber => {
         const button = document.getElementById(`decklistBtn${panelNumber}`);
-        const opponentNumber = panelNumber === 1 ? 2 : 1;
-        const isOwnPanel = selectedRole === "player" && Number(myPlayerNumber) === panelNumber;
-        const playerToShow = isOwnPanel ? playerByNumber[opponentNumber] : playerByNumber[panelNumber];
-        const label = isOwnPanel ? "Decklist oponente" : "Decklist";
-
-        configureDecklistButton(button, playerToShow, label);
+        configureDecklistButton(button, playerByNumber[panelNumber], `Jogador ${panelNumber}`);
     });
 
-    configureDecklistButton(document.getElementById("spectatorDecklistBtn1"), playerOne, "J1");
-    configureDecklistButton(document.getElementById("spectatorDecklistBtn2"), playerTwo, "J2");
+    configureDecklistButton(document.getElementById("spectatorDecklistBtn1"), playerOne, "Jogador 1");
+    configureDecklistButton(document.getElementById("spectatorDecklistBtn2"), playerTwo, "Jogador 2");
 }
 
 /* =========================
@@ -3143,12 +3142,7 @@ function renderFloatingMarkers() {
     const root = document.getElementById("floatingMarkersRoot");
     if (!root) return;
 
-    root.querySelectorAll(".face-camera-card[data-face-camera-key]").forEach(card => {
-        faceCameraCardCache[card.dataset.faceCameraKey] = card;
-        card.remove();
-    });
-
-    root.innerHTML = "";
+    root.querySelectorAll(".dynamic-marker-card").forEach(card => card.remove());
     root.classList.remove("has-facecams");
     root.parentElement?.classList.remove("has-floating-markers", "has-floating-player-1", "has-floating-player-2");
 
@@ -3197,6 +3191,7 @@ function renderFloatingMarkers() {
         if (card.querySelector("video")) {
             card.querySelector("video").srcObject = null;
         }
+        card.remove();
         delete faceCameraCardCache[key];
     });
 

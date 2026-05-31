@@ -201,7 +201,7 @@
         modal?.classList.remove("hidden");
         currentCard = null;
         renderResult(null);
-        setStatus("Aponte a câmera para a carta ou digite o nome manualmente.");
+        setStatus("Use IA/OCR para identificar a carta pela imagem ou digite o nome manualmente.");
         startPreviewLoop();
         manualInput?.focus();
     }
@@ -256,7 +256,7 @@
         if (isBusy) return;
         setBusy(true);
         renderResult(null);
-        setStatus("Escaneando carta...");
+        setStatus("Identificando nome da carta com IA/OCR...");
 
         try {
             const hasFrame = drawVideoFrame();
@@ -300,7 +300,7 @@
         }
 
         setBusy(true);
-        setStatus("Buscando carta no Scryfall...");
+        setStatus("Buscando carta no Oracle/Scryfall...");
 
         try {
             const response = await fetch(`${SCRYFALL_NAMED_URL}${encodeURIComponent(query)}`);

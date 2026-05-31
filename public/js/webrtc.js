@@ -1727,6 +1727,20 @@ async function createOffer(targetId, data = {}, options = {}) {
 
     const peer = createPeerConnection(targetId);
 
+    if (options.waitForStable && peer.signalingState !== "stable") {
+        await new Promise(resolve => {
+            const startedAt = Date.now();
+            const wait = () => {
+                if (peer.signalingState === "stable" || Date.now() - startedAt > 2200) {
+                    resolve();
+                    return;
+                }
+                setTimeout(wait, 120);
+            };
+            wait();
+        });
+    }
+
     if (makingOffer[targetId] || peer.signalingState !== "stable") {
         rtcLog(targetId, "offer skipped", {
             makingOffer: !!makingOffer[targetId],
@@ -2457,7 +2471,7 @@ window.enableSpectatorMicrophone = async function() {
                 role: info.role,
                 playerNumber: info.playerNumber
             });
-            await createOffer(socketId, info).catch(error => {
+            await createOffer(socketId, info, { waitForStable: true }).catch(error => {
                 console.warn("Falha ao liberar microfone do espectador:", error);
             });
         }
