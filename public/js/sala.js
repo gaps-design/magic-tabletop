@@ -3770,11 +3770,13 @@ header.addEventListener("pointercancel", () => {
 
 document.addEventListener("DOMContentLoaded", initPlayerChatUX);
 
-if (toggleChatBtn) {
-    toggleChatBtn.addEventListener("click", () => {
-        toggleChatPanel();
-    });
-}
+document.addEventListener("click", (event) => {
+    const btn = event.target.closest("#toggleChatBtn");
+    if (!btn) return;
+
+    event.preventDefault();
+    toggleChatPanel();
+});
 
 if (closeChatBtn) {
     closeChatBtn.addEventListener("click", () => {
