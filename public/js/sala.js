@@ -3778,11 +3778,18 @@ document.addEventListener("click", (event) => {
     toggleChatPanel();
 });
 
-if (closeChatBtn) {
-    closeChatBtn.addEventListener("click", () => {
-        closePlayerChatPanel();
-    });
-}
+document.addEventListener("click", (event) => {
+    const btn = event.target.closest("#toggleChatBtn");
+    if (!btn) return;
+
+    event.preventDefault();
+
+    const container = document.getElementById("chatContainer");
+    if (!container) return;
+
+    initPlayerChatUX?.();
+    container.classList.toggle("hidden");
+});
 
 expandChatBtn?.addEventListener("click", () => {
     const container = getChatContainer();
