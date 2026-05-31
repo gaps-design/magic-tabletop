@@ -3775,9 +3775,24 @@ document.addEventListener("click", (event) => {
     if (!btn) return;
 
     event.preventDefault();
-    toggleChatPanel();
-});
 
+    const container = document.getElementById("chatContainer");
+    if (!container) return;
+
+    initPlayerChatUX?.();
+
+    container.classList.toggle("hidden");
+
+    if (!container.classList.contains("hidden")) {
+        container.style.display = "flex";
+        container.style.position = "fixed";
+        container.style.left = container.style.left || "50px";
+        container.style.top = container.style.top || "50px";
+        container.style.width = container.style.width || "350px";
+        container.style.height = container.style.height || "450px";
+        container.style.zIndex = "999999";
+    }
+});
 document.addEventListener("click", (event) => {
     const btn = event.target.closest("#toggleChatBtn");
     if (!btn) return;
