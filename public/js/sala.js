@@ -3435,6 +3435,9 @@ function applyChatLayout() {
     const container = getChatContainer();
     if (!container) return;
 
+    container.style.display = "flex";
+    container.style.position = "fixed";
+
     try {
         const saved = JSON.parse(localStorage.getItem(CHAT_LAYOUT_STORAGE_KEY) || "null");
         if (!saved) return;
@@ -3444,12 +3447,12 @@ function applyChatLayout() {
         const left = Math.min(Math.max(Number(saved.left) || 0, 8), window.innerWidth - width - 8);
         const top = Math.min(Math.max(Number(saved.top) || 0, 8), window.innerHeight - height - 8);
 
-        container.style.left = `${left}px`;
-        container.style.top = `${top}px`;
+        container.style.left = left + "px";
+        container.style.top = top + "px";
         container.style.right = "auto";
         container.style.bottom = "auto";
-        container.style.width = `${width}px`;
-        container.style.height = `${height}px`;
+        container.style.width = width + "px";
+        container.style.height = height + "px";
         container.classList.toggle("expanded", saved.expanded === true);
     } catch {
         localStorage.removeItem(CHAT_LAYOUT_STORAGE_KEY);
@@ -3466,22 +3469,26 @@ function resetChatLayout() {
     container.style.bottom = "";
     container.style.width = "";
     container.style.height = "";
-    container.classList.remove("expanded");
+    container.style.display = "flex";
+    container.style.position = "fixed";
+    container.classList.remove("expanded", "chat-expanded");
     localStorage.removeItem(CHAT_LAYOUT_STORAGE_KEY);
 }
 
-function initDraggableChat() {
+function initPlayerChatUX() {
     const container = getChatContainer();
     const header = container?.querySelector(".chat-header");
     if (!container || !header) return;
+    if (container.dataset.playerChatUxReady === "true") return;
+    container.dataset.playerChatUxReady = "true";
 
+    header.querySelectorAll("#chatExpandBtn, #chatResetBtn, .chat-reset-btn, .chat-expand-btn").forEach(btn => btn.remove());
     applyChatLayout();
 
     let drag = null;
 
     header.addEventListener("pointerdown", event => {
         if (event.target.closest("button")) return;
-        if (window.innerWidth <= 768) return;
 
         const rect = container.getBoundingClientRect();
         drag = {
@@ -3494,14 +3501,16 @@ function initDraggableChat() {
             height: rect.height
         };
 
-        container.style.left = `${rect.left}px`;
-        container.style.top = `${rect.top}px`;
+        container.style.left = rect.left + "px";
+        container.style.top = rect.top + "px";
         container.style.right = "auto";
         container.style.bottom = "auto";
-        container.style.width = `${rect.width}px`;
-        container.style.height = `${rect.height}px`;
+        container.style.width = rect.width + "px";
+        container.style.height = rect.height + "px";
         container.classList.add("dragging");
-        header.setPointerCapture(event.pointerId);
+
+        try { header.setPointerCapture?.(event.pointerId); } catch {}
+        event.preventDefault();
     });
 
     header.addEventListener("pointermove", event => {
@@ -3510,33 +3519,34 @@ function initDraggableChat() {
         const nextLeft = Math.min(Math.max(drag.left + event.clientX - drag.startX, 8), window.innerWidth - drag.width - 8);
         const nextTop = Math.min(Math.max(drag.top + event.clientY - drag.startY, 8), window.innerHeight - drag.height - 8);
 
-        container.style.left = `${nextLeft}px`;
-        container.style.top = `${nextTop}px`;
+        container.style.left = nextLeft + "px";
+        container.style.top = nextTop + "px";
     });
 
-    header.addEventListener("pointerup", event => {
+    const finishDrag = event => {
         if (!drag || drag.pointerId !== event.pointerId) return;
-
         drag = null;
         container.classList.remove("dragging");
+        try { header.releasePointerCapture?.(event.pointerId); } catch {}
         saveChatLayout();
-    });
+    };
 
+    header.addEventListener("pointerup", finishDrag);
+    header.addEventListener("pointercancel", finishDrag);
     container.addEventListener("mouseup", saveChatLayout);
 
     if (window.ResizeObserver) {
         const observer = new ResizeObserver(() => {
-            if (!container.classList.contains("hidden")) {
-                saveChatLayout();
-            }
+            if (!container.classList.contains("hidden")) saveChatLayout();
         });
         observer.observe(container);
     }
 }
 
 function toggleChatPanel(forceOpen = null) {
-    const container = document.getElementById("chatContainer");
+    const container = getChatContainer();
     if (!container) return;
+    initPlayerChatUX();
 
     if (forceOpen === true) {
         applyChatLayout();
@@ -3549,282 +3559,39 @@ function toggleChatPanel(forceOpen = null) {
         return;
     }
 
-    container.classList.toggle("hidden");
+    const willOpen = container.classList.contains("hidden");
+    if (willOpen) applyChatLayout();
+    container.classList.toggle("hidden", !willOpen);
 }
 
-function initPlayerChatUX() {
-    const chat = document.getElementById("chatContainer");
-    const header = chat?.querySelector(".chat-header");
-    const closeBtn = document.getElementById("closeChatBtn");
+function closePlayerChatPanel() {
+    getChatContainer()?.classList.add("hidden");
+}
 
-    if (!chat || !header) return;
-    if (chat.dataset.chatUxReady === "true") return;
-
-    chat.dataset.chatUxReady = "true";
-    chat.classList.add("chat-floating-ux");
-
-    // Remove botões duplicados antigos
-    header.querySelectorAll("#chatExpandBtn, #chatResetBtn").forEach(btn => btn.remove());
-
-    const title = header.querySelector("span");
-
-    const resetBtn = document.createElement("button");
-    resetBtn.id = "chatResetBtn";
-    resetBtn.type = "button";
-    resetBtn.className = "chat-reset-btn";
-    resetBtn.innerText = "↺";
-    resetBtn.title = "Resetar posição";
-
-    const expandBtn = document.createElement("button");
-    expandBtn.id = "chatExpandBtn";
-    expandBtn.type = "button";
-    expandBtn.className = "chat-expand-btn";
-    expandBtn.innerText = "⛶";
-    expandBtn.title = "Expandir/recolher chat";
-
-    header.innerHTML = "";
-    if (title) header.appendChild(title);
-    header.appendChild(resetBtn);
-    header.appendChild(expandBtn);
-    if (closeBtn) header.appendChild(closeBtn);
-
-    const STORAGE_KEY = "resenhaon:playerChatUX";
-
-    function saveChatState() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            left: chat.style.left,
-            top: chat.style.top,
-            width: chat.style.width,
-            height: chat.style.height,
-            expanded: chat.classList.contains("chat-expanded")
-        }));
-    }
-
-    function applySavedState() {
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-
-            if (saved.left) chat.style.left = saved.left;
-            if (saved.top) chat.style.top = saved.top;
-            if (saved.width) chat.style.width = saved.width;
-            if (saved.height) chat.style.height = saved.height;
-            if (saved.expanded) chat.classList.add("chat-expanded");
-
-            if (saved.left || saved.top) {
-                chat.style.right = "auto";
-                chat.style.bottom = "auto";
-            }
-        } catch {}
-    }
-
-    applySavedState();
-
-    expandBtn.addEventListener("click", () => {
-        chat.classList.toggle("chat-expanded");
-        saveChatState();
-    });
-
-    resetBtn.addEventListener("click", () => {
-        localStorage.removeItem(STORAGE_KEY);
-        chat.style.left = "";
-        chat.style.top = "";
-        chat.style.right = "";
-        chat.style.bottom = "";
-        chat.style.width = "";
-        chat.style.height = "";
-        chat.classList.remove("chat-expanded");
-    });
-
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let startLeft = 0;
-    let startTop = 0;
-
-    header.addEventListener("pointerdown", (event) => {
-        if (event.target.closest("button")) return;
-
-        const rect = chat.getBoundingClientRect();
-
-        dragging = true;
-        startX = event.clientX;
-        startY = event.clientY;
-        startLeft = rect.left;
-        startTop = rect.top;
-
-        chat.style.left = `${rect.left}px`;
-        chat.style.top = `${rect.top}px`;
-        chat.style.right = "auto";
-        chat.style.bottom = "auto";
-
-        chat.classList.add("chat-dragging");
-        header.setPointerCapture?.(event.pointerId);
+if (toggleChatBtn && toggleChatBtn.dataset.playerChatBound !== "true") {
+    toggleChatBtn.dataset.playerChatBound = "true";
+    toggleChatBtn.type = "button";
+    toggleChatBtn.addEventListener("click", event => {
         event.preventDefault();
+        toggleChatPanel();
     });
-
-    header.addEventListener("pointermove", (event) => {
-        if (!dragging) return;
-
-        const nextLeft = Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, startLeft + event.clientX - startX));
-        const nextTop = Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, startTop + event.clientY - startY));
-
-        chat.style.left = `${nextLeft}px`;
-        chat.style.top = `${nextTop}px`;
-        chat.style.right = "auto";
-        chat.style.bottom = "auto";
-    });
-
-    header.addEventListener("pointerup", (event) => {
-        if (!dragging) return;
-
-        dragging = false;
-        chat.classList.remove("chat-dragging");
-        header.releasePointerCapture?.(event.pointerId);
-        saveChatState();
-    });
-
-    header.addEventListener("pointercancel", () => {
-        dragging = false;
-        chat.classList.remove("chat-dragging");
-    });
-
-    console.log("[CHAT-UX] initialized");
 }
 
-    function saveChatState() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            left: chat.style.left,
-            top: chat.style.top,
-            width: chat.style.width,
-            height: chat.style.height,
-            expanded: chat.classList.contains("chat-expanded")
-        }));
-    }
-
-    try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-        if (saved.left) chat.style.left = saved.left;
-        if (saved.top) chat.style.top = saved.top;
-        if (saved.width) chat.style.width = saved.width;
-        if (saved.height) chat.style.height = saved.height;
-        if (saved.expanded) chat.classList.add("chat-expanded");
-    } catch {}
-
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let startLeft = 0;
-    let startTop = 0;
-
-   header.addEventListener("pointerdown", (event) => {
-    if (event.target.closest("button")) return;
-
-    dragging = true;
-
-    const rect = chat.getBoundingClientRect();
-
-    startX = event.clientX;
-    startY = event.clientY;
-    startLeft = rect.left;
-    startTop = rect.top;
-
-    chat.style.left = `${rect.left}px`;
-    chat.style.top = `${rect.top}px`;
-    chat.style.right = "auto";
-    chat.style.bottom = "auto";
-
-    chat.classList.add("chat-dragging");
-    header.setPointerCapture?.(event.pointerId);
-
-    event.preventDefault();
-});
-
-header.addEventListener("pointermove", (event) => {
-    if (!dragging) return;
-
-    const nextLeft = startLeft + event.clientX - startX;
-    const nextTop = startTop + event.clientY - startY;
-
-    chat.style.left = `${Math.max(8, Math.min(window.innerWidth - chat.offsetWidth - 8, nextLeft))}px`;
-    chat.style.top = `${Math.max(8, Math.min(window.innerHeight - chat.offsetHeight - 8, nextTop))}px`;
-    chat.style.right = "auto";
-    chat.style.bottom = "auto";
-});
-
-header.addEventListener("pointerup", (event) => {
-    if (!dragging) return;
-
-    dragging = false;
-    chat.classList.remove("chat-dragging");
-    header.releasePointerCapture?.(event.pointerId);
-    saveChatState();
-});
-
-header.addEventListener("pointercancel", () => {
-    dragging = false;
-    chat.classList.remove("chat-dragging");
-});
-
-    console.log("[CHAT-UX] initialized");
-
-
-document.addEventListener("DOMContentLoaded", initPlayerChatUX);
-
-document.addEventListener("click", (event) => {
-    const btn = event.target.closest("#toggleChatBtn");
-    if (!btn) return;
-
-    event.preventDefault();
-    toggleChatPanel();
-});
-
-document.addEventListener("click", (event) => {
-    const btn = event.target.closest("#toggleChatBtn");
-    if (!btn) return;
-
-    event.preventDefault();
-
-    const container = document.getElementById("chatContainer");
-    if (!container) return;
-
-    initPlayerChatUX?.();
-
-    container.classList.toggle("hidden");
-
-    if (!container.classList.contains("hidden")) {
-        container.style.display = "flex";
-        container.style.position = "fixed";
-        container.style.left = container.style.left || "50px";
-        container.style.top = container.style.top || "50px";
-        container.style.width = container.style.width || "350px";
-        container.style.height = container.style.height || "450px";
-        container.style.zIndex = "999999";
-    }
-});
-document.addEventListener("click", (event) => {
-    const btn = event.target.closest("#toggleChatBtn");
-    if (!btn) return;
-
-    event.preventDefault();
-
-    const container = document.getElementById("chatContainer");
-    if (!container) return;
-
-    initPlayerChatUX?.();
-    container.classList.toggle("hidden");
-});
+if (closeChatBtn) closeChatBtn.addEventListener("click", closePlayerChatPanel);
 
 expandChatBtn?.addEventListener("click", () => {
     const container = getChatContainer();
     if (!container) return;
-
     applyChatLayout();
     container.classList.toggle("expanded");
     saveChatLayout();
 });
 
 resetChatPositionBtn?.addEventListener("click", resetChatLayout);
-initDraggableChat();
+initPlayerChatUX();
+window.toggleChatPanel = toggleChatPanel;
+window.closePlayerChatPanel = closePlayerChatPanel;
+window.initPlayerChatUX = initPlayerChatUX;
 
 function canSendChat() {
     if (chatCooldown) {

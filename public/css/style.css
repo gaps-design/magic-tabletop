@@ -2609,6 +2609,7 @@ body.camera-mode .scanner-card-btn{
     justify-content:space-between;
     gap:10px;
     cursor:move;
+    touch-action:none;
 }
 
 .chat-header span{
@@ -4506,8 +4507,7 @@ body.spectator-mode .readonly-marker-summary{
 .chat-panel,
 .room-chat,
 .chat-box,
-#chatPanel,
-#chatContainer{
+#chatPanel{
     position:relative;
 }
 
