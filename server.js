@@ -4,6 +4,8 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
+const CANONICAL_HOST = "www.resenhaon.com.br";
+const CANONICAL_ORIGIN = `https://${CANONICAL_HOST}`;
 
 const io = new Server(server, {
   cors: {
@@ -12,6 +14,18 @@ const io = new Server(server, {
   }
 });
 
+app.use((req, res, next) => {
+  const host = String(req.headers.host || "").split(":")[0].toLowerCase();
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  const protocol = forwardedProto || req.protocol;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "::1";
+
+  if (!isLocalhost && (protocol !== "https" || host !== CANONICAL_HOST)) {
+    return res.redirect(301, `${CANONICAL_ORIGIN}${req.originalUrl}`);
+  }
+
+  return next();
+});
 app.use(express.static("public"));
 
 const rooms = {};
