@@ -4131,3 +4131,30 @@ window.addEventListener("load", () => {
 renderDiceHistory();
 
 console.log("Sala.js carregado com sucesso");
+
+document.addEventListener("click", (event) => {
+    const btn = event.target.closest("#toggleChatBtn");
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const chat = document.getElementById("chatContainer");
+    if (!chat) return;
+
+    chat.classList.toggle("hidden");
+
+    if (!chat.classList.contains("hidden")) {
+        chat.style.display = "flex";
+        chat.style.position = "fixed";
+        chat.style.left = "50px";
+        chat.style.top = "50px";
+        chat.style.right = "auto";
+        chat.style.bottom = "auto";
+        chat.style.width = "350px";
+        chat.style.height = "450px";
+        chat.style.zIndex = "999999";
+    }
+
+    console.log("[CHAT-FIX] botão chat acionado");
+}, true);
