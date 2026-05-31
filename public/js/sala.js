@@ -44,6 +44,7 @@ const googleEntryPhoto = document.getElementById("googleEntryPhoto");
 const googleEntryText = document.getElementById("googleEntryText");
 const deckNameInput = document.getElementById("deckNameInput");
 const guildInput = document.getElementById("guildInput");
+const decklistInput = document.getElementById("decklistInput");
 const enterRoomBtn = document.getElementById("enterRoomBtn");
 const entryError = document.getElementById("entryError");
 
@@ -74,6 +75,7 @@ const cancelLeaveRoomBtn = document.getElementById("cancelLeaveRoomBtn");
 const confirmLeaveRoomBtn = document.getElementById("confirmLeaveRoomBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const localVideoElement = document.getElementById("localVideo");
+const remoteVideoElement = document.getElementById("remoteVideo");
 const cameraFramingBtn = document.getElementById("cameraFramingBtn");
 const cameraFramingPanel = document.getElementById("cameraFramingPanel");
 const closeCameraFramingBtn = document.getElementById("closeCameraFramingBtn");
@@ -85,6 +87,8 @@ const saveCameraFramingBtn = document.getElementById("saveCameraFramingBtn");
 
 const toggleChatBtn = document.getElementById("toggleChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
+const expandChatBtn = document.getElementById("expandChatBtn");
+const resetChatPositionBtn = document.getElementById("resetChatPositionBtn");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -109,6 +113,8 @@ const spectatorChatInput = document.getElementById("spectatorChatInput");
 const sendSpectatorChatBtn = document.getElementById("sendSpectatorChatBtn");
 const requestSpectatorMicBtn = document.getElementById("requestSpectatorMicBtn");
 const spectatorMobileChatBtn = document.getElementById("spectatorMobileChatBtn");
+const spectatorMutePlayer1Btn = document.getElementById("spectatorMutePlayer1Btn");
+const spectatorMutePlayer2Btn = document.getElementById("spectatorMutePlayer2Btn");
 const spectatorMicStatus = document.getElementById("spectatorMicStatus");
 const spectatorMarkersList = document.getElementById("spectatorMarkersList");
 
@@ -123,6 +129,7 @@ let currentQueue = [];
 let isQueuedInResenha = false;
 let currentRoomMarkerState = { 1: {}, 2: {} };
 let currentMatchScore = { 1: 0, 2: 0 };
+const spectatorLocalPlayerMute = { 1: false, 2: false };
 let hasReceivedMatchScore = false;
 let victoryOverlayTimer = null;
 const previousOfficialLife = {};
@@ -137,6 +144,7 @@ let chatCooldown = false;
 let cleanModeEnabled = false;
 let cleanHudHidden = false;
 const CAMERA_FRAMING_STORAGE_KEY = "resenhaon-camera-framing";
+const CHAT_LAYOUT_STORAGE_KEY = "resenhaon-player-chat-layout";
 const CAMERA_FRAMING_DEFAULT = { zoom: 1, x: 0, y: 0 };
 
 function getMyPlayerProfile() {
@@ -189,6 +197,60 @@ const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+
+function getSpectatorVideoForPlayer(playerNumber) {
+    return Number(playerNumber) === 1 ? localVideoElement : remoteVideoElement;
+}
+
+function updateSpectatorLocalMuteControls() {
+    if (selectedRole !== "spectator") return;
+
+    [1, 2].forEach(playerNumber => {
+        const muted = !!spectatorLocalPlayerMute[playerNumber];
+        const video = getSpectatorVideoForPlayer(playerNumber);
+
+        if (video) {
+            video.muted = muted;
+        }
+
+        const button = playerNumber === 1 ? spectatorMutePlayer1Btn : spectatorMutePlayer2Btn;
+        if (button) {
+            button.innerText = muted ? `Ouvir J${playerNumber}` : `Mutar J${playerNumber}`;
+            button.classList.toggle("active", muted);
+        }
+    });
+}
+
+function toggleSpectatorLocalPlayerMute(playerNumber) {
+    if (selectedRole !== "spectator") return;
+
+    spectatorLocalPlayerMute[playerNumber] = !spectatorLocalPlayerMute[playerNumber];
+    updateSpectatorLocalMuteControls();
+}
+
+spectatorMutePlayer1Btn?.addEventListener("click", () => toggleSpectatorLocalPlayerMute(1));
+spectatorMutePlayer2Btn?.addEventListener("click", () => toggleSpectatorLocalPlayerMute(2));
+window.applySpectatorLocalAudioMute = updateSpectatorLocalMuteControls;
+
+function normalizeDecklistUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    try {
+        const url = new URL(raw);
+        if (!["http:", "https:"].includes(url.protocol)) return "";
+        return url.href;
+    } catch {
+        return "";
+    }
+}
+
+function openDecklistUrl(url) {
+    const normalizedUrl = normalizeDecklistUrl(url);
+    if (!normalizedUrl) return;
+
+    window.open(normalizedUrl, "_blank", "noopener,noreferrer");
+}
 
 function redirectHomeOnce(delay = 250) {
     if (isRedirectingHome) return;
@@ -800,6 +862,8 @@ if (enterRoomBtn) {
         const name = (googleRoomProfile?.name || (playerNameInput ? playerNameInput.value.trim() : "")).trim();
         const deck = deckNameInput ? deckNameInput.value : "";
         const guild = guildInput ? guildInput.value : "";
+        const decklistRaw = decklistInput ? decklistInput.value.trim() : "";
+        const decklistUrl = normalizeDecklistUrl(decklistRaw);
 
         if (!name) {
             if (entryError) entryError.innerText = "Digite seu nome.";
@@ -808,6 +872,11 @@ if (enterRoomBtn) {
 
         if (selectedRole === "player" && !deck) {
             if (entryError) entryError.innerText = "Selecione o deck.";
+            return;
+        }
+
+        if (selectedRole === "player" && decklistRaw && !decklistUrl) {
+            if (entryError) entryError.innerText = "Informe um link de decklist válido.";
             return;
         }
 
@@ -822,6 +891,7 @@ if (enterRoomBtn) {
                 profile: googleRoomProfile,
                 deck: selectedRole === "spectator" ? "---" : deck,
                 guild: selectedRole === "spectator" ? "---" : guild,
+                decklistUrl: selectedRole === "spectator" ? "" : decklistUrl,
                 format: roomFormat
             });
 
@@ -849,6 +919,7 @@ socket.on("assigned-role", (data) => {
         document.body.classList.remove("player-one-active", "player-two-active", "focus-mode");
         document.body.classList.remove("spectator-mobile-chat-open");
         closePlayerChatPanel();
+        updateSpectatorLocalMuteControls();
 
         if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
         if (requestSpectatorMicBtn) {
@@ -948,6 +1019,7 @@ socket.on("room-state", (state) => {
     updatePlayerPanel(1, p1);
     updatePlayerPanel(2, p2);
     updateCameraTitles(p1, p2);
+    updateDecklistButtons(p1, p2);
 
     applyRoomMarkerState(state.markerState || {});
     renderMatchScore(state.matchScore || {});
@@ -1001,6 +1073,43 @@ function updateCameraTitles(playerOne, playerTwo) {
     if (titleTwo) {
         titleTwo.innerText = playerTwo?.name || "Jogador 2";
     }
+}
+
+function configureDecklistButton(button, playerData, labelPrefix = "Decklist") {
+    if (!button) return;
+
+    const decklistUrl = normalizeDecklistUrl(playerData?.decklistUrl);
+
+    button.onclick = null;
+
+    if (!decklistUrl) {
+        button.innerText = `${labelPrefix} não informada`;
+        button.disabled = true;
+        button.classList.add("disabled");
+        return;
+    }
+
+    button.innerText = `${labelPrefix}: ${playerData?.name || "abrir"}`;
+    button.disabled = false;
+    button.classList.remove("disabled");
+    button.onclick = () => openDecklistUrl(decklistUrl);
+}
+
+function updateDecklistButtons(playerOne, playerTwo) {
+    const playerByNumber = { 1: playerOne, 2: playerTwo };
+
+    [1, 2].forEach(panelNumber => {
+        const button = document.getElementById(`decklistBtn${panelNumber}`);
+        const opponentNumber = panelNumber === 1 ? 2 : 1;
+        const isOwnPanel = selectedRole === "player" && Number(myPlayerNumber) === panelNumber;
+        const playerToShow = isOwnPanel ? playerByNumber[opponentNumber] : playerByNumber[panelNumber];
+        const label = isOwnPanel ? "Decklist oponente" : "Decklist";
+
+        configureDecklistButton(button, playerToShow, label);
+    });
+
+    configureDecklistButton(document.getElementById("spectatorDecklistBtn1"), playerOne, "J1");
+    configureDecklistButton(document.getElementById("spectatorDecklistBtn2"), playerTwo, "J2");
 }
 
 /* =========================
@@ -1556,9 +1665,9 @@ function handleLifeShortcut(event) {
     } else if (event.key === "ArrowDown") {
         processed = updateLife(myPlayerNumber, -1);
     } else if (event.key === "ArrowLeft") {
-        processed = window.changeOpponentLifeLocal(myPlayerNumber, 1);
-    } else if (event.key === "ArrowRight") {
         processed = window.changeOpponentLifeLocal(myPlayerNumber, -1);
+    } else if (event.key === "ArrowRight") {
+        processed = window.changeOpponentLifeLocal(myPlayerNumber, 1);
     }
 
     if (processed) {
@@ -3266,11 +3375,133 @@ function injectSpectatorEmotes() {
     });
 }
 
+function getChatContainer() {
+    return document.getElementById("chatContainer");
+}
+
+function saveChatLayout() {
+    const container = getChatContainer();
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    localStorage.setItem(CHAT_LAYOUT_STORAGE_KEY, JSON.stringify({
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        expanded: container.classList.contains("expanded")
+    }));
+}
+
+function applyChatLayout() {
+    const container = getChatContainer();
+    if (!container) return;
+
+    try {
+        const saved = JSON.parse(localStorage.getItem(CHAT_LAYOUT_STORAGE_KEY) || "null");
+        if (!saved) return;
+
+        const width = Math.min(Math.max(Number(saved.width) || 320, 280), window.innerWidth - 16);
+        const height = Math.min(Math.max(Number(saved.height) || 420, 260), window.innerHeight - 24);
+        const left = Math.min(Math.max(Number(saved.left) || 0, 8), window.innerWidth - width - 8);
+        const top = Math.min(Math.max(Number(saved.top) || 0, 8), window.innerHeight - height - 8);
+
+        container.style.left = `${left}px`;
+        container.style.top = `${top}px`;
+        container.style.right = "auto";
+        container.style.bottom = "auto";
+        container.style.width = `${width}px`;
+        container.style.height = `${height}px`;
+        container.classList.toggle("expanded", saved.expanded === true);
+    } catch {
+        localStorage.removeItem(CHAT_LAYOUT_STORAGE_KEY);
+    }
+}
+
+function resetChatLayout() {
+    const container = getChatContainer();
+    if (!container) return;
+
+    container.style.left = "";
+    container.style.top = "";
+    container.style.right = "";
+    container.style.bottom = "";
+    container.style.width = "";
+    container.style.height = "";
+    container.classList.remove("expanded");
+    localStorage.removeItem(CHAT_LAYOUT_STORAGE_KEY);
+}
+
+function initDraggableChat() {
+    const container = getChatContainer();
+    const header = container?.querySelector(".chat-header");
+    if (!container || !header) return;
+
+    applyChatLayout();
+
+    let drag = null;
+
+    header.addEventListener("pointerdown", event => {
+        if (event.target.closest("button")) return;
+        if (window.innerWidth <= 768) return;
+
+        const rect = container.getBoundingClientRect();
+        drag = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        };
+
+        container.style.left = `${rect.left}px`;
+        container.style.top = `${rect.top}px`;
+        container.style.right = "auto";
+        container.style.bottom = "auto";
+        container.style.width = `${rect.width}px`;
+        container.style.height = `${rect.height}px`;
+        container.classList.add("dragging");
+        header.setPointerCapture(event.pointerId);
+    });
+
+    header.addEventListener("pointermove", event => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+
+        const nextLeft = Math.min(Math.max(drag.left + event.clientX - drag.startX, 8), window.innerWidth - drag.width - 8);
+        const nextTop = Math.min(Math.max(drag.top + event.clientY - drag.startY, 8), window.innerHeight - drag.height - 8);
+
+        container.style.left = `${nextLeft}px`;
+        container.style.top = `${nextTop}px`;
+    });
+
+    header.addEventListener("pointerup", event => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+
+        drag = null;
+        container.classList.remove("dragging");
+        saveChatLayout();
+    });
+
+    container.addEventListener("mouseup", saveChatLayout);
+
+    if (window.ResizeObserver) {
+        const observer = new ResizeObserver(() => {
+            if (!container.classList.contains("hidden")) {
+                saveChatLayout();
+            }
+        });
+        observer.observe(container);
+    }
+}
+
 function toggleChatPanel(forceOpen = null) {
     const container = document.getElementById("chatContainer");
     if (!container) return;
 
     if (forceOpen === true) {
+        applyChatLayout();
         container.classList.remove("hidden");
         return;
     }
@@ -3298,6 +3529,18 @@ if (closeChatBtn) {
         closePlayerChatPanel();
     });
 }
+
+expandChatBtn?.addEventListener("click", () => {
+    const container = getChatContainer();
+    if (!container) return;
+
+    applyChatLayout();
+    container.classList.toggle("expanded");
+    saveChatLayout();
+});
+
+resetChatPositionBtn?.addEventListener("click", resetChatLayout);
+initDraggableChat();
 
 function canSendChat() {
     if (chatCooldown) {
@@ -3373,6 +3616,7 @@ if (requestSpectatorMicBtn) {
 
         if (requestSpectatorMicBtn.dataset.allowed === "true") {
             try {
+                console.log("[AUDIO][SPECTATOR] enabling approved microphone", { roomId });
                 await window.enableSpectatorMicrophone?.();
                 if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone liberado";
                 requestSpectatorMicBtn.innerText = "Microfone ativo";
@@ -3383,6 +3627,7 @@ if (requestSpectatorMicBtn) {
             return;
         }
 
+        console.log("[AUDIO][SPECTATOR] mic permission requested", { roomId });
         socket.emit("spectator-mic-request", { roomId });
         if (spectatorMicStatus) spectatorMicStatus.innerText = "Solicitação enviada";
         requestSpectatorMicBtn.innerText = "Solicitação enviada";
@@ -3421,6 +3666,8 @@ function showRoomToast(message) {
         toast.remove();
     }, 2100);
 }
+
+window.showRoomToast = showRoomToast;
 
 socket.on("room-join-toast", ({ name, role, playerNumber }) => {
     const now = Date.now();
@@ -3471,6 +3718,7 @@ socket.on("spectator-mic-status", async ({ status }) => {
     }
 
     if (status === "allowed") {
+        console.log("[AUDIO][SPECTATOR] mic approved", { roomId });
         spectatorMicStatus.innerText = "Microfone liberado";
         requestSpectatorMicBtn.dataset.allowed = "true";
         requestSpectatorMicBtn.innerText = "Ativar microfone";

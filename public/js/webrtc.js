@@ -4,6 +4,7 @@ const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const cameraSelect = document.getElementById("cameraSelect");
 const microphoneSelect = document.getElementById("microphoneSelect");
+const reconnectMediaBtn = document.getElementById("reconnectMediaBtn");
 
 const micStatusText = document.getElementById("micStatusText");
 const cameraStatusText = document.getElementById("cameraStatusText");
@@ -39,12 +40,16 @@ let localFaceCamMeta = null;
 let cameraWakeLock = null;
 let cameraRecoveryInProgress = false;
 let cameraRecoveryTimer = null;
+let lastConnectionToastAt = 0;
 
 const RTC_DEBUG = true;
 let lastMediaAccessError = null;
 let mediaErrorAlertShown = false;
 
 const servers = {
+    iceTransportPolicy: "all",
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
     iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:global.stun.twilio.com:3478" },
@@ -735,6 +740,7 @@ function setVideoStream(videoElement, stream, muted = false) {
     }
 
     videoElement.muted = muted;
+    window.applySpectatorLocalAudioMute?.();
     videoElement.playsInline = true;
     videoElement.autoplay = true;
 
@@ -977,9 +983,17 @@ function createPeerConnection(targetId) {
         });
 
         if (
+            !peer.__resenhaClosing &&
+            ["failed", "disconnected"].includes(peer.iceConnectionState)
+        ) {
+            notifyConnectionUnstable(targetId, `ice-${peer.iceConnectionState}`);
+            schedulePeerReconnect(targetId, peer.iceConnectionState === "disconnected" ? 5000 : 1200);
+        }
+
+        if (
             isPhoneCameraMode() &&
             !peer.__resenhaClosing &&
-            ["failed", "disconnected", "closed"].includes(peer.iceConnectionState)
+            peer.iceConnectionState === "closed"
         ) {
             schedulePeerReconnect(targetId, peer.iceConnectionState === "disconnected" ? 5000 : 1200);
         }
@@ -1015,10 +1029,12 @@ function createPeerConnection(targetId) {
         }
 
         if (peer.connectionState === "failed") {
+            notifyConnectionUnstable(targetId, "connection-failed");
             schedulePeerReconnect(targetId);
         }
 
         if (peer.connectionState === "disconnected") {
+            notifyConnectionUnstable(targetId, "connection-disconnected");
             schedulePeerReconnect(targetId, 5000);
         }
 
@@ -1272,13 +1288,29 @@ function schedulePeerReconnect(targetId, baseDelay = 1200) {
         delete reconnectTimers[targetId];
         if (!peerInfo[targetId]) return;
 
-        cleanupPeer(targetId);
-        savePeerInfo(targetId, info);
-
         if (currentRole === "camera" && info.role === "camera") return;
         if (info.role === "spectator") return;
 
         try {
+            const existingPeer = peerConnections[targetId];
+
+            if (
+                existingPeer &&
+                !existingPeer.__resenhaClosing &&
+                existingPeer.signalingState === "stable" &&
+                typeof existingPeer.restartIce === "function"
+            ) {
+                rtcLog(targetId, "restarting ICE on existing peer", {
+                    attempt: reconnectAttempts[targetId],
+                    peer: peerSnapshot(existingPeer)
+                });
+                existingPeer.restartIce();
+                await createOffer(targetId, info, { iceRestart: true });
+                return;
+            }
+
+            cleanupPeer(targetId);
+            savePeerInfo(targetId, info);
             await createOffer(targetId, info);
         } catch (error) {
             console.warn("Falha ao renegociar WebRTC:", error);
@@ -1347,6 +1379,56 @@ function cleanupPeer(socketId) {
     }
 
     delete peerInfo[socketId];
+}
+
+async function reconnectAllMediaPeers(reason = "manual") {
+    if (!currentRoomId) return;
+
+    socketLog("manual media reconnect started", {
+        reason,
+        peers: Object.keys(peerInfo)
+    });
+    window.showRoomToast?.("Tentando reconectar áudio/vídeo...");
+
+    for (const [socketId, info] of Object.entries(peerInfo)) {
+        if (!info) continue;
+        if (currentRole === "camera" && info.role === "camera") continue;
+        if (info.role === "spectator") continue;
+
+        try {
+            const peer = peerConnections[socketId];
+
+            if (
+                peer &&
+                !peer.__resenhaClosing &&
+                peer.signalingState === "stable" &&
+                typeof peer.restartIce === "function"
+            ) {
+                peer.restartIce();
+                await createOffer(socketId, info, { iceRestart: true });
+            } else {
+                cleanupPeer(socketId);
+                savePeerInfo(socketId, info);
+                await createOffer(socketId, info);
+            }
+        } catch (error) {
+            rtcLog(socketId, "manual media reconnect failed", {
+                reason,
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        }
+    }
+
+    socketLog("manual media reconnect finished", { reason });
+}
+
+window.reconnectRoomMedia = reconnectAllMediaPeers;
+
+if (reconnectMediaBtn) {
+    reconnectMediaBtn.addEventListener("click", () => {
+        reconnectAllMediaPeers("button");
+    });
 }
 
 window.shutdownRoomConnection = function() {
@@ -1460,6 +1542,18 @@ function audioLog(message, details = {}, level = "log") {
     scopedLog("AUDIO", message, details, level);
 }
 
+function notifyConnectionUnstable(targetId, reason = "unknown") {
+    const now = Date.now();
+
+    if (now - lastConnectionToastAt < 12000) return;
+
+    lastConnectionToastAt = now;
+    const message = "Conexão instável detectada. Tentando reconectar áudio/vídeo...";
+
+    rtcLog(targetId, "connection unstable notification", { reason }, "warn");
+    window.showRoomToast?.(message);
+}
+
 function peerSnapshot(peer) {
     if (!peer) return {};
 
@@ -1565,7 +1659,7 @@ async function logSelectedCandidatePair(targetId, peer) {
     }
 }
 
-async function createOffer(targetId, data = {}) {
+async function createOffer(targetId, data = {}, options = {}) {
     savePeerInfo(targetId, data);
 
     const peer = createPeerConnection(targetId);
@@ -1580,9 +1674,11 @@ async function createOffer(targetId, data = {}) {
 
     try {
         makingOffer[targetId] = true;
-        rtcLog(targetId, "creating offer");
+        rtcLog(targetId, "creating offer", {
+            iceRestart: !!options.iceRestart
+        });
 
-        const offer = await peer.createOffer();
+        const offer = await peer.createOffer(options.iceRestart ? { iceRestart: true } : {});
         rtcLog(targetId, "createOffer done", {
             offer: describeDescription(offer),
             peer: peerSnapshot(peer)
@@ -1680,6 +1776,7 @@ async function joinRoom(roomId, user) {
 
         deck: user.deck,
         guild: user.guild,
+        decklistUrl: user.decklistUrl || "",
         linkedPlayer: user.linkedPlayer,
         cameraKey: user.cameraKey,
         format: user.format
@@ -2171,6 +2268,7 @@ window.toggleMicrophone = function() {
 window.enableSpectatorMicrophone = async function() {
     if (currentRole !== "spectator") return;
 
+    audioLog("[SPECTATOR] getUserMedia audio start");
     const audioStream = await getUserMediaWithDeviceFallback(
         {
             video: false,
@@ -2188,6 +2286,12 @@ window.enableSpectatorMicrophone = async function() {
     const audioTrack = audioStream.getAudioTracks()[0];
     if (!audioTrack) return;
 
+    audioLog("[SPECTATOR] getUserMedia audio success", {
+        trackId: audioTrack.id,
+        readyState: audioTrack.readyState,
+        enabled: audioTrack.enabled
+    });
+
     micEnabled = true;
     audioTrack.enabled = true;
 
@@ -2201,11 +2305,16 @@ window.enableSpectatorMicrophone = async function() {
     });
 
     localStream.addTrack(audioTrack);
+    audioLog("[SPECTATOR] audio track added", {
+        peerCount: Object.keys(peerConnections).length,
+        trackId: audioTrack.id
+    });
 
     Object.values(peerConnections).forEach(peer => {
         const sender = peer.getSenders().find(s => s.track?.kind === "audio");
 
         if (sender) {
+            audioLog("[SPECTATOR] replacing audio sender track");
             sender.replaceTrack(audioTrack).catch(error => {
                 audioLog("spectator microphone replaceTrack failed", {
                     errorName: error?.name,
@@ -2213,6 +2322,7 @@ window.enableSpectatorMicrophone = async function() {
                 }, "warn");
             });
         } else {
+            audioLog("[SPECTATOR] adding audio sender track");
             peer.addTrack(audioTrack, localStream);
         }
     });
@@ -2228,6 +2338,11 @@ window.enableSpectatorMicrophone = async function() {
 
     for (const [socketId, info] of Object.entries(peerInfo)) {
         if (info.role === "player" || info.role === "camera") {
+            audioLog("[SPECTATOR] renegotiation started", {
+                target: socketId,
+                role: info.role,
+                playerNumber: info.playerNumber
+            });
             await createOffer(socketId, info).catch(error => {
                 console.warn("Falha ao liberar microfone do espectador:", error);
             });
