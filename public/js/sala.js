@@ -153,6 +153,7 @@ let cleanHudHidden = false;
 const CAMERA_FRAMING_STORAGE_KEY = "resenhaon-camera-framing";
 const CHAT_LAYOUT_STORAGE_KEY = "resenhaon-player-chat-layout";
 const CAMERA_FRAMING_DEFAULT = { zoom: 1, x: 0, y: 0 };
+const CAMERA_FRAMING_STORAGE_VERSION = 2;
 
 function getMyPlayerProfile() {
     if (!myPlayerNumber) return null;
@@ -483,8 +484,14 @@ function normalizeCameraFraming(rawValue = {}) {
 function loadCameraFraming() {
     try {
         const saved = JSON.parse(localStorage.getItem(CAMERA_FRAMING_STORAGE_KEY) || "{}");
+        if (saved.version !== CAMERA_FRAMING_STORAGE_VERSION || saved.userAdjusted !== true) {
+            localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
+            cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
+            return;
+        }
         cameraFraming = normalizeCameraFraming(saved);
     } catch (error) {
+        localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
         cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
     }
 }
@@ -500,11 +507,16 @@ function applyCameraFraming() {
 
     const { zoom, x, y } = normalizeCameraFraming(cameraFraming);
     cameraFraming = { zoom, x, y };
-    localVideoElement.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+    localVideoElement.style.objectFit = "contain";
+    localVideoElement.style.transform = `scale(${zoom}) translate(${x}px, ${y}px)`;
 }
 
 function saveCameraFraming({ notify = true } = {}) {
-    localStorage.setItem(CAMERA_FRAMING_STORAGE_KEY, JSON.stringify(cameraFraming));
+    localStorage.setItem(CAMERA_FRAMING_STORAGE_KEY, JSON.stringify({
+        ...cameraFraming,
+        version: CAMERA_FRAMING_STORAGE_VERSION,
+        userAdjusted: true
+    }));
     if (notify) showRoomToast("Ajuste da câmera salvo.");
 }
 
@@ -520,7 +532,7 @@ function setCameraFraming(nextValue, { persist = false } = {}) {
 
 function resetCameraFraming() {
     setCameraFraming(CAMERA_FRAMING_DEFAULT);
-    saveCameraFraming({ notify: false });
+    localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
 }
 
 function toggleCameraFramingPanel(forceOpen) {
