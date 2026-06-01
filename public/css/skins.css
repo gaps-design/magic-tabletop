@@ -86,14 +86,14 @@
     box-shadow:0 0 18px color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 86%);
 }
 
-body[data-local-room-skin="leme-tempestade"] .bottom-bar,
-body[data-local-room-skin="leme-tempestade"] .top-actions{
+body:not([data-local-room-skin="none"]) .bottom-bar,
+body:not([data-local-room-skin="none"]) .top-actions{
     border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 72%);
     box-shadow:0 0 24px color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 90%);
 }
 
-body[data-local-room-skin="leme-tempestade"] .bottom-bar button,
-body[data-local-room-skin="leme-tempestade"] .top-actions button{
+body:not([data-local-room-skin="none"]) .bottom-bar button,
+body:not([data-local-room-skin="none"]) .top-actions button{
     border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 66%);
 }
 

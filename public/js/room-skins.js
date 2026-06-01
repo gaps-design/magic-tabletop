@@ -11,6 +11,26 @@
             label: "Leme Tempestade",
             image: "/assets/room-skins/leme-tempestade.png",
             accent: "#00ffd5"
+        },
+        floresta: {
+            label: "Floresta do Entardecer",
+            image: "/assets/room-skins/skinsala-floresta.png",
+            accent: "#7CFC00"
+        },
+        pantano: {
+            label: "Pântano Sombrio",
+            image: "/assets/room-skins/skinsala-pantano.png",
+            accent: "#5bff5b"
+        },
+        planice: {
+            label: "Planície da Tempestade",
+            image: "/assets/room-skins/skinsala-planice.png",
+            accent: "#f5d77a"
+        },
+        raios: {
+            label: "Terra dos Mil Raios",
+            image: "/assets/room-skins/skinsala-raios.png",
+            accent: "#ff3c3c"
         }
     };
 

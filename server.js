@@ -76,7 +76,7 @@ const MARKER_LABELS = {
 };
 
 const PLAYER_THEMES = new Set(["none", "living-end"]);
-const ROOM_SKINS = new Set(["none", "leme-tempestade"]);
+const ROOM_SKINS = new Set(["none", "leme-tempestade", "floresta", "pantano", "planice", "raios"]);
 
 const PUBLIC_TABLES = [
   "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
