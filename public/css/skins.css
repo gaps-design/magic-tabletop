@@ -6,7 +6,7 @@
 .room-skin-background{
     position:absolute;
     inset:0;
-    z-index:0;
+    z-index:1;
     pointer-events:none;
     background-image:
         linear-gradient(160deg, rgba(2, 13, 18, .28), rgba(1, 7, 12, .72)),
@@ -29,13 +29,14 @@
 
 .camera-card.room-skin-active video{
     position:relative;
-    z-index:1;
-    background:transparent;
+    z-index:2;
+    background:transparent !important;
 }
 
 .camera-card.room-skin-active.room-skin-video-empty video{
     background:transparent !important;
     opacity:0;
+    visibility:hidden;
 }
 
 .camera-card.room-skin-active.room-skin-video-empty{

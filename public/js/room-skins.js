@@ -92,6 +92,7 @@
     function hasVisibleVideoStream(video) {
         const stream = video?.srcObject;
         if (!(stream instanceof MediaStream)) return false;
+        if (!video.videoWidth || !video.videoHeight) return false;
 
         const activeVideoTrack = stream.getVideoTracks().some(track =>
             track.readyState === "live" &&
@@ -99,7 +100,7 @@
             track.muted !== true
         );
 
-        return activeVideoTrack && video.videoWidth > 0 && video.videoHeight > 0;
+        return activeVideoTrack;
     }
 
     function updateCameraVideoState(playerNumber) {
@@ -107,7 +108,9 @@
         const video = camera?.querySelector("video");
         if (!camera || !video) return;
 
-        camera.classList.toggle("room-skin-video-empty", !hasVisibleVideoStream(video));
+        const hasVideo = hasVisibleVideoStream(video);
+        camera.classList.toggle("room-skin-video-empty", !hasVideo);
+        video.dataset.roomSkinVideoState = hasVideo ? "active" : "empty";
     }
 
     function bindCameraVideoState(cameraCard, playerNumber) {
@@ -117,7 +120,7 @@
         const video = cameraCard.querySelector("video");
         if (!video) return;
 
-        ["loadedmetadata", "playing", "pause", "emptied", "stalled", "suspend", "resize"].forEach(eventName => {
+        ["loadedmetadata", "loadeddata", "canplay", "playing", "pause", "emptied", "stalled", "suspend", "resize"].forEach(eventName => {
             video.addEventListener(eventName, () => updateCameraVideoState(playerNumber));
         });
 
