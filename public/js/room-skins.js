@@ -42,6 +42,9 @@
     let lastRoomPlayers = [];
     let roomSkinSyncTimer = null;
     const observedVideoTracks = new WeakSet();
+    const lastVideoStateLog = new WeakMap();
+    const frameProbeCanvas = document.createElement("canvas");
+    const frameProbeContext = frameProbeCanvas.getContext("2d", { willReadFrequently: true });
 
     function getSocket() {
         if (typeof socket !== "undefined") return socket;
@@ -111,18 +114,153 @@
         return layer;
     }
 
-    function hasUsableVideo(video) {
+    function getVideoTracksInfo(video) {
         const stream = video?.srcObject;
-        if (!(stream instanceof MediaStream)) return false;
-        if (!video.videoWidth || !video.videoHeight) return false;
+        return stream instanceof MediaStream ? stream.getVideoTracks() : [];
+    }
 
-        const activeVideoTrack = stream.getVideoTracks().some(track =>
+    function inspectVideoFrame(video) {
+        if (!frameProbeContext || !video?.videoWidth || !video?.videoHeight) {
+            return { usable: false, reason: "no-frame-dimensions" };
+        }
+
+        const width = 32;
+        const height = Math.max(12, Math.round(width * (video.videoHeight / video.videoWidth)));
+        frameProbeCanvas.width = width;
+        frameProbeCanvas.height = height;
+
+        try {
+            frameProbeContext.drawImage(video, 0, 0, width, height);
+            const { data } = frameProbeContext.getImageData(0, 0, width, height);
+            let litPixels = 0;
+            let maxChannel = 0;
+            let lumaSum = 0;
+            let lumaSqSum = 0;
+            const pixels = data.length / 4;
+
+            for (let index = 0; index < data.length; index += 4) {
+                const red = data[index];
+                const green = data[index + 1];
+                const blue = data[index + 2];
+                const luma = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+                const pixelMax = Math.max(red, green, blue);
+
+                maxChannel = Math.max(maxChannel, pixelMax);
+                if (pixelMax > 24) litPixels += 1;
+                lumaSum += luma;
+                lumaSqSum += luma * luma;
+            }
+
+            const meanLuma = lumaSum / pixels;
+            const lumaVariance = Math.max(0, (lumaSqSum / pixels) - (meanLuma * meanLuma));
+            const litRatio = litPixels / pixels;
+            const usable = maxChannel > 32 || litRatio > 0.015 || lumaVariance > 10;
+
+            return {
+                usable,
+                reason: usable ? "frame-has-content" : "black-frame",
+                maxChannel: Math.round(maxChannel),
+                meanLuma: Math.round(meanLuma * 10) / 10,
+                lumaVariance: Math.round(lumaVariance * 10) / 10,
+                litRatio: Math.round(litRatio * 1000) / 1000
+            };
+        } catch (error) {
+            return {
+                usable: true,
+                reason: "frame-probe-failed",
+                errorName: error?.name || "UnknownError",
+                errorMessage: error?.message || ""
+            };
+        }
+    }
+
+    function getVideoUsability(video) {
+        const stream = video?.srcObject;
+        if (!(stream instanceof MediaStream)) {
+            return { usable: false, reason: "no-srcObject", streamId: null, tracks: [] };
+        }
+
+        const tracks = getVideoTracksInfo(video);
+        const liveEnabledTrack = tracks.some(track =>
             track.readyState === "live" &&
             track.enabled === true &&
             track.muted !== true
         );
 
-        return activeVideoTrack;
+        if (!liveEnabledTrack) {
+            return {
+                usable: false,
+                reason: "no-live-enabled-track",
+                streamId: stream.id,
+                tracks
+            };
+        }
+
+        if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            return {
+                usable: false,
+                reason: "no-current-frame",
+                streamId: stream.id,
+                tracks
+            };
+        }
+
+        const frame = inspectVideoFrame(video);
+
+        return {
+            usable: frame.usable,
+            reason: frame.reason,
+            streamId: stream.id,
+            tracks,
+            frame
+        };
+    }
+
+    function hasUsableVideo(video) {
+        return getVideoUsability(video).usable;
+    }
+
+    function getVideoDiagnostics(video, usability) {
+        return {
+            videoId: video?.id || "",
+            videoWidth: video?.videoWidth || 0,
+            videoHeight: video?.videoHeight || 0,
+            readyState: video?.readyState ?? null,
+            paused: !!video?.paused,
+            srcObject: !!video?.srcObject,
+            streamId: usability.streamId || null,
+            tracks: (usability.tracks || []).map(track => ({
+                id: track.id,
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            })),
+            hasUsableVideo: !!usability.usable,
+            reason: usability.reason,
+            frame: usability.frame || null
+        };
+    }
+
+    function logVideoStateChange(video, diagnostics) {
+        const stateKey = JSON.stringify({
+            videoId: diagnostics.videoId,
+            hasUsableVideo: diagnostics.hasUsableVideo,
+            reason: diagnostics.reason,
+            videoWidth: diagnostics.videoWidth,
+            videoHeight: diagnostics.videoHeight,
+            readyState: diagnostics.readyState,
+            srcObject: diagnostics.srcObject,
+            tracks: diagnostics.tracks.map(track => ({
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            })),
+            frame: diagnostics.frame
+        });
+
+        if (lastVideoStateLog.get(video) === stateKey) return;
+        lastVideoStateLog.set(video, stateKey);
+        console.log("[ROOM-SKIN][VIDEO-STATE]", diagnostics);
     }
 
     function hasVisibleVideoStream(video) {
@@ -134,7 +272,9 @@
         const video = camera?.querySelector("video");
         if (!camera || !video) return;
 
-        const hasVideo = hasVisibleVideoStream(video);
+        const usability = getVideoUsability(video);
+        const hasVideo = usability.usable;
+        logVideoStateChange(video, getVideoDiagnostics(video, usability));
         camera.classList.toggle("room-skin-video-empty", !hasVideo);
         camera.classList.toggle("no-usable-video", !hasVideo);
         video.dataset.roomSkinVideoState = hasVideo ? "active" : "empty";
