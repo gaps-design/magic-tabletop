@@ -3,6 +3,100 @@
     overflow:hidden;
 }
 
+.room-skin-background{
+    position:absolute;
+    inset:0;
+    z-index:0;
+    pointer-events:none;
+    background-image:
+        linear-gradient(160deg, rgba(2, 13, 18, .28), rgba(1, 7, 12, .72)),
+        var(--room-skin-bg);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    opacity:.95;
+}
+
+.camera-card.room-skin-active{
+    border-color:color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 34%);
+    background:
+        radial-gradient(circle at 50% 42%, rgba(0, 255, 213, .10), transparent 45%),
+        #020617;
+    box-shadow:
+        0 0 34px color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 76%),
+        inset 0 0 32px rgba(0,0,0,.35);
+}
+
+.camera-card.room-skin-active video{
+    position:relative;
+    z-index:1;
+    background:transparent;
+}
+
+.camera-card.room-skin-active.room-skin-video-empty video{
+    opacity:0;
+}
+
+.camera-card.room-skin-active.room-skin-video-empty{
+    background-image:
+        linear-gradient(160deg, rgba(2, 13, 18, .18), rgba(1, 7, 12, .58)),
+        var(--room-skin-bg);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+}
+
+.camera-card.room-skin-active .camera-title,
+.camera-card.room-skin-active .camera-status,
+.camera-card.room-skin-active .rotate-btn,
+.camera-card.room-skin-active .camera-framing-btn,
+.camera-card.room-skin-active .camera-framing-panel,
+.camera-card.room-skin-active .muted-icon{
+    border-color:color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 62%);
+    box-shadow:0 0 18px color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 82%);
+}
+
+.player-panel.room-skin-active{
+    border-color:color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 58%);
+    background:
+        linear-gradient(165deg, rgba(1, 22, 24, .86), rgba(3, 11, 24, .92)),
+        var(--room-skin-bg);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.06),
+        0 0 32px color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 84%);
+}
+
+.player-panel.room-skin-active h2,
+.player-panel.room-skin-active .life,
+.player-panel.room-skin-active .match-score-slot.is-filled{
+    color:var(--room-skin-accent, #22d3ee);
+    text-shadow:0 0 16px color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 45%);
+}
+
+.player-panel.room-skin-active button,
+.camera-card.room-skin-active button{
+    border-color:color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 54%);
+}
+
+.top-actions .room-skin-control select{
+    border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 60%);
+    box-shadow:0 0 18px color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 86%);
+}
+
+body[data-local-room-skin="leme-tempestade"] .bottom-bar,
+body[data-local-room-skin="leme-tempestade"] .top-actions{
+    border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 72%);
+    box-shadow:0 0 24px color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 90%);
+}
+
+body[data-local-room-skin="leme-tempestade"] .bottom-bar button,
+body[data-local-room-skin="leme-tempestade"] .top-actions button{
+    border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 66%);
+}
+
 .table-skin-layer{
     position:absolute;
     inset:0;

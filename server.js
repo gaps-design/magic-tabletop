@@ -76,6 +76,7 @@ const MARKER_LABELS = {
 };
 
 const PLAYER_THEMES = new Set(["none", "living-end"]);
+const ROOM_SKINS = new Set(["none", "leme-tempestade"]);
 
 const PUBLIC_TABLES = [
   "mtg-1001", "mtg-1002", "mtg-1003", "mtg-1004", "mtg-1005",
@@ -272,6 +273,10 @@ function normalizePlayerTheme(theme) {
   return PLAYER_THEMES.has(theme) ? theme : "none";
 }
 
+function normalizeRoomSkin(skinId) {
+  return ROOM_SKINS.has(skinId) ? skinId : "none";
+}
+
 function createDefaultPlayerThemes() {
   return { 1: "none", 2: "none" };
 }
@@ -407,6 +412,7 @@ function buildRoomUsers(room) {
       deck: p.deck,
       guild: p.guild,
       decklistUrl: p.decklistUrl || "",
+      roomSkin: p.roomSkin || "none",
       photo: p.photo || "/assets/default-avatar.png"
     })),
     spectators: room.spectators.map(id => {
@@ -446,6 +452,7 @@ function sendRoomState(roomId) {
       deck: p.deck,
       guild: p.guild,
       decklistUrl: p.decklistUrl || "",
+      roomSkin: p.roomSkin || "none",
       photo: p.photo || "/assets/default-avatar.png",
       life: p.life
     })),
@@ -669,6 +676,7 @@ function addToResenhaQueue(socket, roomId, data = {}, user = {}) {
       deck: data.deck || "---",
       guild: data.guild || "---",
       decklistUrl: data.decklistUrl || "",
+      roomSkin: normalizeRoomSkin(data.roomSkin || "none"),
       photo: profile.photo || "/assets/default-avatar.png"
     });
   }
@@ -732,6 +740,7 @@ function promoteNextResenhaPlayer(roomId) {
       deck: next.deck,
       guild: next.guild,
       decklistUrl: next.decklistUrl || "",
+      roomSkin: normalizeRoomSkin(next.roomSkin || "none"),
       photo: next.photo || "/assets/default-avatar.png",
       cameraKey: createCameraKey(),
       life: 20
@@ -824,6 +833,7 @@ function moveActiveResenhaPlayerToQueue(socket, roomId) {
       deck: player.deck || "---",
       guild: player.guild || "---",
       decklistUrl: player.decklistUrl || "",
+      roomSkin: normalizeRoomSkin(player.roomSkin || "none"),
       photo: player.photo || "/assets/default-avatar.png"
     });
   }
@@ -1147,6 +1157,7 @@ io.on("connection", (socket) => {
       deck,
       guild,
       decklistUrl,
+      roomSkin: normalizeRoomSkin(data.roomSkin || "none"),
       cameraKey: createCameraKey(),
       life: 20
     };
@@ -1395,6 +1406,26 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("player-themes-update", {
       playerThemes: room.playerThemes
+    });
+
+    sendRoomState(roomId);
+  });
+
+  socket.on("player-room-skin-change", ({ roomId, playerSlot, skinId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+    if (Number(player.playerNumber) !== Number(playerSlot)) return;
+
+    const normalizedSkin = normalizeRoomSkin(skinId);
+    player.roomSkin = normalizedSkin;
+
+    io.to(roomId).emit("player-room-skin-update", {
+      roomId,
+      playerSlot: player.playerNumber,
+      skinId: normalizedSkin
     });
 
     sendRoomState(roomId);
