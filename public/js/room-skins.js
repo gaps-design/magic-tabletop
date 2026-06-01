@@ -40,6 +40,7 @@
     const playerRoomSkins = { 1: "none", 2: "none" };
     const lastEmittedSkins = { 1: "", 2: "" };
     let lastRoomPlayers = [];
+    let roomSkinSyncTimer = null;
 
     function getSocket() {
         if (typeof socket !== "undefined") return socket;
@@ -142,9 +143,12 @@
     function setRoomSkinProperties(element, skinId, skin) {
         if (!element) return;
 
-        removeRoomSkinClasses(element);
+        if (element.dataset.roomSkin !== skinId) {
+            removeRoomSkinClasses(element);
+            element.dataset.roomSkin = skinId;
+        }
+
         element.classList.add("room-skin-active", `room-skin-${skinId}`);
-        element.dataset.roomSkin = skinId;
         element.style.setProperty("--room-skin-accent", skin.accent);
         if (skin.image) {
             element.style.setProperty("--room-skin-bg", `url("${skin.image}")`);
@@ -301,8 +305,30 @@
         updateSelectAvailability();
     }
 
+    function updateAllCameraVideoStates() {
+        [1, 2].forEach(updateCameraVideoState);
+    }
+
     function syncRoomSkinVisuals() {
-        applyRoomSkinState(lastRoomPlayers);
+        if (lastRoomPlayers.length) {
+            applyRoomSkinState(lastRoomPlayers);
+        } else {
+            updateLocalAccent();
+            updateSelectAvailability();
+        }
+
+        updateAllCameraVideoStates();
+    }
+
+    function scheduleRoomSkinSync(delay = 80) {
+        clearTimeout(roomSkinSyncTimer);
+        roomSkinSyncTimer = setTimeout(syncRoomSkinVisuals, delay);
+    }
+
+    function scheduleRoomSkinSettleSyncs() {
+        [0, 120, 300, 700, 1500, 2500, 5000].forEach(delay => {
+            setTimeout(syncRoomSkinVisuals, delay);
+        });
     }
 
     roomSkinSelect?.addEventListener("change", () => {
@@ -321,11 +347,13 @@
     if (activeSocket?.on) {
         activeSocket.on("room-state", state => {
             applyRoomSkinState(Array.isArray(state?.players) ? state.players : []);
+            scheduleRoomSkinSettleSyncs();
         });
 
         activeSocket.on("player-room-skin-update", payload => {
             if (!payload || payload.roomId !== roomId) return;
             applyRoomSkin(Number(payload.playerSlot), payload.skinId || "none");
+            scheduleRoomSkinSettleSyncs();
         });
     }
 
@@ -340,6 +368,20 @@
         attributes: true,
         attributeFilter: ["class"]
     });
+
+    const videoArea = document.querySelector(".video-area");
+    if (videoArea) {
+        const videoAreaObserver = new MutationObserver(() => {
+            scheduleRoomSkinSync(60);
+        });
+
+        videoAreaObserver.observe(videoArea, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class", "style"]
+        });
+    }
 
     const floatingRoot = document.getElementById("floatingMarkersRoot");
     if (floatingRoot) {
@@ -360,6 +402,12 @@
         skins: ROOM_SKINS
     };
 
-    setTimeout(restoreLocalRoomSkin, 500);
-    setTimeout(restoreLocalRoomSkin, 1500);
+    setTimeout(() => {
+        restoreLocalRoomSkin();
+        scheduleRoomSkinSettleSyncs();
+    }, 500);
+    setTimeout(() => {
+        restoreLocalRoomSkin();
+        scheduleRoomSkinSettleSyncs();
+    }, 1500);
 })();
