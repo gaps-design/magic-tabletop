@@ -41,6 +41,7 @@
     const lastEmittedSkins = { 1: "", 2: "" };
     let lastRoomPlayers = [];
     let roomSkinSyncTimer = null;
+    const observedVideoTracks = new WeakSet();
 
     function getSocket() {
         if (typeof socket !== "undefined") return socket;
@@ -97,7 +98,8 @@
 
         const activeVideoTrack = stream.getVideoTracks().some(track =>
             track.readyState === "live" &&
-            track.enabled === true
+            track.enabled === true &&
+            track.muted !== true
         );
 
         return activeVideoTrack;
@@ -116,6 +118,16 @@
         camera.classList.toggle("room-skin-video-empty", !hasVideo);
         camera.classList.toggle("no-usable-video", !hasVideo);
         video.dataset.roomSkinVideoState = hasVideo ? "active" : "empty";
+
+        if (video.srcObject instanceof MediaStream) {
+            video.srcObject.getVideoTracks().forEach(track => {
+                if (observedVideoTracks.has(track)) return;
+                observedVideoTracks.add(track);
+                ["mute", "unmute", "ended"].forEach(eventName => {
+                    track.addEventListener(eventName, () => scheduleRoomSkinSync(20));
+                });
+            });
+        }
     }
 
     function bindCameraVideoState(cameraCard, playerNumber) {

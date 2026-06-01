@@ -816,6 +816,9 @@ function setVideoStream(videoElement, stream, muted = false) {
             }, "warn");
         });
     };
+
+    setTimeout(() => window.ResenhaONRoomSkins?.syncRoomSkinVisuals?.(), 0);
+    setTimeout(() => window.ResenhaONRoomSkins?.syncRoomSkinVisuals?.(), 300);
 }
 
 function clearVideoIfStream(videoElement, stream) {
@@ -823,6 +826,7 @@ function clearVideoIfStream(videoElement, stream) {
 
     if (videoElement.srcObject === stream) {
         videoElement.srcObject = null;
+        setTimeout(() => window.ResenhaONRoomSkins?.syncRoomSkinVisuals?.(), 0);
     }
 }
 
