@@ -17,6 +17,27 @@
     opacity:.95;
 }
 
+.skin-fallback-layer{
+    position:absolute;
+    inset:12px;
+    z-index:1;
+    pointer-events:none;
+    border-radius:12px;
+    background-image:
+        linear-gradient(160deg, rgba(2, 13, 18, .16), rgba(1, 7, 12, .38)),
+        var(--room-skin-bg);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    opacity:0;
+    transition:opacity .18s ease;
+}
+
+.camera-card.has-room-skin.no-usable-video .skin-fallback-layer,
+.camera-card.room-skin-active.room-skin-video-empty .skin-fallback-layer{
+    opacity:1;
+}
+
 .camera-card.room-skin-active{
     border-color:color-mix(in srgb, var(--room-skin-accent, #22d3ee), transparent 34%);
     background:

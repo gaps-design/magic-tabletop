@@ -91,6 +91,26 @@
         return layer;
     }
 
+    function ensureSkinFallbackLayer(cameraCard) {
+        if (!cameraCard) return null;
+
+        let layer = cameraCard.querySelector(":scope > .skin-fallback-layer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.className = "skin-fallback-layer";
+            layer.setAttribute("aria-hidden", "true");
+
+            const video = cameraCard.querySelector("video");
+            if (video) {
+                video.before(layer);
+            } else {
+                cameraCard.appendChild(layer);
+            }
+        }
+
+        return layer;
+    }
+
     function hasUsableVideo(video) {
         const stream = video?.srcObject;
         if (!(stream instanceof MediaStream)) return false;
@@ -184,6 +204,7 @@
         });
 
         camera?.querySelector(":scope > .room-skin-background")?.remove();
+        camera?.querySelector(":scope > .skin-fallback-layer")?.remove();
     }
 
     function refreshFloatingRoomSkin(playerNumber) {
@@ -228,6 +249,7 @@
         });
 
         ensureBackgroundLayer(camera);
+        ensureSkinFallbackLayer(camera);
         bindCameraVideoState(camera, playerNumber);
         updateCameraVideoState(playerNumber);
         updateLocalAccent();
