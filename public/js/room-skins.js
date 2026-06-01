@@ -38,6 +38,7 @@
     const roomId = params.get("room") || "default";
     const roomSkinSelect = document.getElementById("roomSkinSelect");
     const playerRoomSkins = { 1: "none", 2: "none" };
+    const lastEmittedSkins = { 1: "", 2: "" };
 
     function getSocket() {
         if (typeof socket !== "undefined") return socket;
@@ -68,7 +69,8 @@
     function getPlayerElements(playerNumber) {
         return {
             panel: document.getElementById(`playerPanel${playerNumber}`),
-            camera: document.querySelector(`.camera-player-${playerNumber}`)
+            camera: document.querySelector(`.camera-player-${playerNumber}`),
+            floatingColumn: document.querySelector(`.floating-player-${playerNumber}`)
         };
     }
 
@@ -122,12 +124,35 @@
         updateCameraVideoState(playerNumber);
     }
 
-    function clearRoomSkin(playerNumber) {
-        const { panel, camera } = getPlayerElements(playerNumber);
+    function removeRoomSkinClasses(element) {
+        if (!element) return;
 
-        [panel, camera].forEach(element => {
+        Array.from(element.classList).forEach(className => {
+            if (className === "room-skin-background") return;
+            if (className.startsWith("room-skin-")) {
+                element.classList.remove(className);
+            }
+        });
+    }
+
+    function setRoomSkinProperties(element, skinId, skin) {
+        if (!element) return;
+
+        removeRoomSkinClasses(element);
+        element.classList.add("room-skin-active", `room-skin-${skinId}`);
+        element.dataset.roomSkin = skinId;
+        element.style.setProperty("--room-skin-accent", skin.accent);
+        if (skin.image) {
+            element.style.setProperty("--room-skin-bg", `url("${skin.image}")`);
+        }
+    }
+
+    function clearRoomSkin(playerNumber) {
+        const { panel, camera, floatingColumn } = getPlayerElements(playerNumber);
+
+        [panel, camera, floatingColumn].forEach(element => {
             if (!element) return;
-            element.classList.remove("room-skin-active", "room-skin-leme-tempestade");
+            removeRoomSkinClasses(element);
             element.removeAttribute("data-room-skin");
             element.style.removeProperty("--room-skin-bg");
             element.style.removeProperty("--room-skin-accent");
@@ -136,27 +161,44 @@
         camera?.querySelector(":scope > .room-skin-background")?.remove();
     }
 
+    function refreshFloatingRoomSkin(playerNumber) {
+        const skinId = normalizeRoomSkin(playerRoomSkins[playerNumber] || "none");
+        const skin = ROOM_SKINS[skinId];
+        const { floatingColumn } = getPlayerElements(playerNumber);
+
+        if (!floatingColumn) return;
+
+        if (skinId === "none") {
+            removeRoomSkinClasses(floatingColumn);
+            floatingColumn.removeAttribute("data-room-skin");
+            floatingColumn.style.removeProperty("--room-skin-bg");
+            floatingColumn.style.removeProperty("--room-skin-accent");
+            return;
+        }
+
+        setRoomSkinProperties(floatingColumn, skinId, skin);
+    }
+
     function applyRoomSkin(playerNumber, skinId, options = {}) {
         const normalizedSkinId = normalizeRoomSkin(skinId);
         const skin = ROOM_SKINS[normalizedSkinId];
-        const { panel, camera } = getPlayerElements(playerNumber);
+        const { panel, camera, floatingColumn } = getPlayerElements(playerNumber);
+        const previousSkinId = playerRoomSkins[playerNumber];
 
         playerRoomSkins[playerNumber] = normalizedSkinId;
-        clearRoomSkin(playerNumber);
 
         if (normalizedSkinId === "none") {
+            clearRoomSkin(playerNumber);
             updateLocalAccent();
             return;
         }
 
-        [panel, camera].forEach(element => {
-            if (!element) return;
-            element.classList.add("room-skin-active", `room-skin-${normalizedSkinId}`);
-            element.dataset.roomSkin = normalizedSkinId;
-            element.style.setProperty("--room-skin-accent", skin.accent);
-            if (skin.image) {
-                element.style.setProperty("--room-skin-bg", `url("${skin.image}")`);
-            }
+        if (previousSkinId !== normalizedSkinId) {
+            clearRoomSkin(playerNumber);
+        }
+
+        [panel, camera, floatingColumn].forEach(element => {
+            setRoomSkinProperties(element, normalizedSkinId, skin);
         });
 
         ensureBackgroundLayer(camera);
@@ -182,6 +224,8 @@
                 localStorage.getItem(getStorageKey(localPlayerNumber)) || localSkinId
             );
         }
+
+        [1, 2].forEach(refreshFloatingRoomSkin);
     }
 
     function updateSelectAvailability() {
@@ -196,10 +240,14 @@
         const activeSocket = getSocket();
         if (!activeSocket?.emit) return;
 
+        const normalizedSkinId = normalizeRoomSkin(skinId);
+        if (lastEmittedSkins[playerNumber] === normalizedSkinId) return;
+        lastEmittedSkins[playerNumber] = normalizedSkinId;
+
         activeSocket.emit("player-room-skin-change", {
             roomId,
             playerSlot: playerNumber,
-            skinId: normalizeRoomSkin(skinId)
+            skinId: normalizedSkinId
         });
     }
 
@@ -213,7 +261,7 @@
         emitRoomSkin(playerNumber, normalizedSkinId);
     }
 
-    function restoreLocalRoomSkin() {
+    function restoreLocalRoomSkin({ emit = true } = {}) {
         const playerNumber = getLocalPlayerNumber();
         if (!playerNumber) {
             updateSelectAvailability();
@@ -223,7 +271,9 @@
 
         const savedSkin = normalizeRoomSkin(localStorage.getItem(getStorageKey(playerNumber)) || "none");
         applyRoomSkin(playerNumber, savedSkin, { silent: true });
-        emitRoomSkin(playerNumber, savedSkin);
+        if (emit) {
+            emitRoomSkin(playerNumber, savedSkin);
+        }
         updateSelectAvailability();
     }
 
@@ -250,7 +300,7 @@
     });
 
     window.addEventListener("resenhaon-room-state", () => {
-        setTimeout(restoreLocalRoomSkin, 50);
+        setTimeout(() => restoreLocalRoomSkin({ emit: false }), 50);
     });
 
     const activeSocket = getSocket();
@@ -277,9 +327,21 @@
         attributeFilter: ["class"]
     });
 
+    const floatingRoot = document.getElementById("floatingMarkersRoot");
+    if (floatingRoot) {
+        const floatingObserver = new MutationObserver(() => {
+            [1, 2].forEach(refreshFloatingRoomSkin);
+        });
+
+        floatingObserver.observe(floatingRoot, {
+            childList: true
+        });
+    }
+
     window.ResenhaONRoomSkins = {
         applyRoomSkin,
         setLocalRoomSkin,
+        refreshFloatingRoomSkin,
         skins: ROOM_SKINS
     };
 
