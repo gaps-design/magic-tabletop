@@ -90,18 +90,21 @@
         return layer;
     }
 
-    function hasVisibleVideoStream(video) {
+    function hasUsableVideo(video) {
         const stream = video?.srcObject;
         if (!(stream instanceof MediaStream)) return false;
         if (!video.videoWidth || !video.videoHeight) return false;
 
         const activeVideoTrack = stream.getVideoTracks().some(track =>
             track.readyState === "live" &&
-            track.enabled !== false &&
-            track.muted !== true
+            track.enabled === true
         );
 
         return activeVideoTrack;
+    }
+
+    function hasVisibleVideoStream(video) {
+        return hasUsableVideo(video);
     }
 
     function updateCameraVideoState(playerNumber) {
@@ -111,6 +114,7 @@
 
         const hasVideo = hasVisibleVideoStream(video);
         camera.classList.toggle("room-skin-video-empty", !hasVideo);
+        camera.classList.toggle("no-usable-video", !hasVideo);
         video.dataset.roomSkinVideoState = hasVideo ? "active" : "empty";
     }
 
@@ -148,7 +152,7 @@
             element.dataset.roomSkin = skinId;
         }
 
-        element.classList.add("room-skin-active", `room-skin-${skinId}`);
+        element.classList.add("room-skin-active", "has-room-skin", `room-skin-${skinId}`);
         element.style.setProperty("--room-skin-accent", skin.accent);
         if (skin.image) {
             element.style.setProperty("--room-skin-bg", `url("${skin.image}")`);
@@ -161,6 +165,7 @@
         [panel, camera, floatingColumn].forEach(element => {
             if (!element) return;
             removeRoomSkinClasses(element);
+            element.classList.remove("has-room-skin", "no-usable-video");
             element.removeAttribute("data-room-skin");
             element.style.removeProperty("--room-skin-bg");
             element.style.removeProperty("--room-skin-accent");
@@ -178,6 +183,7 @@
 
         if (skinId === "none" || floatingColumn.childElementCount === 0) {
             removeRoomSkinClasses(floatingColumn);
+            floatingColumn.classList.remove("has-room-skin", "no-usable-video");
             floatingColumn.removeAttribute("data-room-skin");
             floatingColumn.style.removeProperty("--room-skin-bg");
             floatingColumn.style.removeProperty("--room-skin-accent");
@@ -326,7 +332,7 @@
     }
 
     function scheduleRoomSkinSettleSyncs() {
-        [0, 120, 300, 700, 1500, 2500, 5000].forEach(delay => {
+        [0, 120, 300, 700, 1500, 2500, 5000, 7500, 10000].forEach(delay => {
             setTimeout(syncRoomSkinVisuals, delay);
         });
     }
@@ -396,6 +402,7 @@
 
     window.ResenhaONRoomSkins = {
         applyRoomSkin,
+        hasUsableVideo,
         setLocalRoomSkin,
         refreshFloatingRoomSkin,
         syncRoomSkinVisuals,
@@ -410,4 +417,5 @@
         restoreLocalRoomSkin();
         scheduleRoomSkinSettleSyncs();
     }, 1500);
+    setInterval(syncRoomSkinVisuals, 2500);
 })();

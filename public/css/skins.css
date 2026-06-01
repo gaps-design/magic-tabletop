@@ -40,7 +40,8 @@
     box-shadow:none !important;
 }
 
-.camera-card.room-skin-active.room-skin-video-empty{
+.camera-card.room-skin-active.room-skin-video-empty,
+.camera-card.has-room-skin.no-usable-video{
     background-color:transparent !important;
     background-image:
         linear-gradient(160deg, rgba(2, 13, 18, .18), rgba(1, 7, 12, .58)),
@@ -50,21 +51,31 @@
     background-repeat:no-repeat;
 }
 
-.camera-card.room-skin-active.room-skin-video-empty .room-skin-background{
+.camera-card.room-skin-active.room-skin-video-empty .room-skin-background,
+.camera-card.has-room-skin.no-usable-video .room-skin-background{
     opacity:1;
 }
 
-body.spectator-mode .camera-card.room-skin-active.room-skin-video-empty video{
+.camera-card.has-room-skin.no-usable-video video,
+body.clean-mode .camera-card.has-room-skin.no-usable-video video,
+body.spectator-mode .camera-card.room-skin-active.room-skin-video-empty video,
+body.spectator-mode .camera-card.has-room-skin.no-usable-video video{
     background:transparent !important;
     opacity:0 !important;
     visibility:hidden !important;
+    box-shadow:none !important;
 }
 
 .camera-card.room-skin-active.room-skin-video-empty .camera-placeholder,
 .camera-card.room-skin-active.room-skin-video-empty .video-placeholder,
 .camera-card.room-skin-active.room-skin-video-empty .no-video-placeholder,
-.camera-card.room-skin-active.room-skin-video-empty .empty-video-state{
+.camera-card.room-skin-active.room-skin-video-empty .empty-video-state,
+.camera-card.has-room-skin.no-usable-video .camera-placeholder,
+.camera-card.has-room-skin.no-usable-video .video-placeholder,
+.camera-card.has-room-skin.no-usable-video .no-video-placeholder,
+.camera-card.has-room-skin.no-usable-video .empty-video-state{
     display:none !important;
+    background:transparent !important;
 }
 
 .floating-player-column.room-skin-active{
