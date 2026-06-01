@@ -39,6 +39,7 @@
     const roomSkinSelect = document.getElementById("roomSkinSelect");
     const playerRoomSkins = { 1: "none", 2: "none" };
     const lastEmittedSkins = { 1: "", 2: "" };
+    let lastRoomPlayers = [];
 
     function getSocket() {
         if (typeof socket !== "undefined") return socket;
@@ -168,7 +169,7 @@
 
         if (!floatingColumn) return;
 
-        if (skinId === "none") {
+        if (skinId === "none" || floatingColumn.childElementCount === 0) {
             removeRoomSkinClasses(floatingColumn);
             floatingColumn.removeAttribute("data-room-skin");
             floatingColumn.style.removeProperty("--room-skin-bg");
@@ -278,14 +279,16 @@
     }
 
     function applyRoomSkinState(players = []) {
-        players.forEach(player => {
+        lastRoomPlayers = Array.isArray(players) ? players : [];
+
+        lastRoomPlayers.forEach(player => {
             const playerNumber = Number(player.playerNumber);
             if (![1, 2].includes(playerNumber)) return;
             applyRoomSkin(playerNumber, player.roomSkin || "none", { silent: true });
         });
 
         [1, 2].forEach(playerNumber => {
-            if (!players.some(player => Number(player.playerNumber) === playerNumber)) {
+            if (!lastRoomPlayers.some(player => Number(player.playerNumber) === playerNumber)) {
                 clearRoomSkin(playerNumber);
                 playerRoomSkins[playerNumber] = "none";
             }
@@ -295,12 +298,20 @@
         updateSelectAvailability();
     }
 
+    function syncRoomSkinVisuals() {
+        applyRoomSkinState(lastRoomPlayers);
+    }
+
     roomSkinSelect?.addEventListener("change", () => {
         setLocalRoomSkin(roomSkinSelect.value);
     });
 
     window.addEventListener("resenhaon-room-state", () => {
-        setTimeout(() => restoreLocalRoomSkin({ emit: false }), 50);
+        setTimeout(() => {
+            updateSelectAvailability();
+            updateLocalAccent();
+            syncRoomSkinVisuals();
+        }, 50);
     });
 
     const activeSocket = getSocket();
@@ -342,6 +353,7 @@
         applyRoomSkin,
         setLocalRoomSkin,
         refreshFloatingRoomSkin,
+        syncRoomSkinVisuals,
         skins: ROOM_SKINS
     };
 

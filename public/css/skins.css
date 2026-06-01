@@ -112,6 +112,10 @@
     box-shadow:0 0 18px color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 86%);
 }
 
+body.spectator-mode .top-actions .table-theme-control{
+    display:none !important;
+}
+
 body:not([data-local-room-skin="none"]) .bottom-bar,
 body:not([data-local-room-skin="none"]) .top-actions{
     border-color:color-mix(in srgb, var(--local-room-skin-accent, #22d3ee), transparent 72%);
