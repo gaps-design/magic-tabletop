@@ -139,6 +139,19 @@
         camera.classList.toggle("no-usable-video", !hasVideo);
         video.dataset.roomSkinVideoState = hasVideo ? "active" : "empty";
 
+        if (hasVideo) {
+            video.style.removeProperty("opacity");
+            video.style.removeProperty("visibility");
+            video.style.removeProperty("background");
+            video.style.removeProperty("background-color");
+        } else {
+            video.style.setProperty("opacity", "0", "important");
+            video.style.setProperty("visibility", "hidden", "important");
+            video.style.setProperty("background", "transparent", "important");
+            video.style.setProperty("background-color", "transparent", "important");
+            camera.style.setProperty("background-color", "transparent", "important");
+        }
+
         if (video.srcObject instanceof MediaStream) {
             video.srcObject.getVideoTracks().forEach(track => {
                 if (observedVideoTracks.has(track)) return;

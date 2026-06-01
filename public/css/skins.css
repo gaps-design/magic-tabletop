@@ -49,6 +49,13 @@
         inset 0 0 32px rgba(0,0,0,.35);
 }
 
+.camera-card.has-room-skin{
+    background-image:var(--room-skin-bg) !important;
+    background-size:cover !important;
+    background-position:center !important;
+    background-repeat:no-repeat !important;
+}
+
 .camera-card.room-skin-active video{
     position:relative;
     z-index:3;
@@ -81,6 +88,11 @@
     background-color:transparent !important;
 }
 
+.camera-card.no-usable-video,
+.camera-card.no-usable-video *{
+    background-color:transparent !important;
+}
+
 .camera-card.room-skin-active.room-skin-video-empty .room-skin-background,
 .camera-card.has-room-skin.no-usable-video .room-skin-background{
     opacity:1;
@@ -100,10 +112,14 @@ body.spectator-mode .camera-card.has-room-skin.no-usable-video video{
 .camera-card.room-skin-active.room-skin-video-empty .video-placeholder,
 .camera-card.room-skin-active.room-skin-video-empty .no-video-placeholder,
 .camera-card.room-skin-active.room-skin-video-empty .empty-video-state,
+.camera-card.room-skin-active.room-skin-video-empty .empty-camera,
+.camera-card.room-skin-active.room-skin-video-empty .camera-blackout,
 .camera-card.has-room-skin.no-usable-video .camera-placeholder,
 .camera-card.has-room-skin.no-usable-video .video-placeholder,
 .camera-card.has-room-skin.no-usable-video .no-video-placeholder,
-.camera-card.has-room-skin.no-usable-video .empty-video-state{
+.camera-card.has-room-skin.no-usable-video .empty-video-state,
+.camera-card.has-room-skin.no-usable-video .empty-camera,
+.camera-card.has-room-skin.no-usable-video .camera-blackout{
     display:none !important;
     background:transparent !important;
 }
