@@ -182,6 +182,10 @@ const cameraFramingLimits = {
     zoom: { min: 1, max: 2.5, step: 0.1 },
     offset: { min: -200, max: 200, step: 10 }
 };
+let cameraFramings = {
+    1: { ...CAMERA_FRAMING_DEFAULT },
+    2: { ...CAMERA_FRAMING_DEFAULT }
+};
 let cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
 let currentLifeHistory = [];
 let localOpponentLifeHistory = [];
@@ -481,58 +485,126 @@ function normalizeCameraFraming(rawValue = {}) {
     };
 }
 
+function getCameraFramingSlot() {
+    if (Number(myPlayerNumber) === 1 || document.body.classList.contains("player-one-active")) return 1;
+    if (Number(myPlayerNumber) === 2 || document.body.classList.contains("player-two-active")) return 2;
+    return 1;
+}
+
+function getCameraVideoElement(playerSlot) {
+    return Number(playerSlot) === 2 ? remoteVideoElement : localVideoElement;
+}
+
 function loadCameraFraming() {
     try {
         const saved = JSON.parse(localStorage.getItem(CAMERA_FRAMING_STORAGE_KEY) || "{}");
         if (saved.version !== CAMERA_FRAMING_STORAGE_VERSION || saved.userAdjusted !== true) {
             localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
+            cameraFramings = {
+                1: { ...CAMERA_FRAMING_DEFAULT },
+                2: { ...CAMERA_FRAMING_DEFAULT }
+            };
             cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
             return;
         }
-        cameraFraming = normalizeCameraFraming(saved);
+        if (saved.players) {
+            cameraFramings = {
+                1: normalizeCameraFraming(saved.players[1] || saved.players["1"] || CAMERA_FRAMING_DEFAULT),
+                2: normalizeCameraFraming(saved.players[2] || saved.players["2"] || CAMERA_FRAMING_DEFAULT)
+            };
+        } else {
+            const legacyFraming = normalizeCameraFraming(saved);
+            cameraFramings = {
+                1: legacyFraming,
+                2: { ...CAMERA_FRAMING_DEFAULT }
+            };
+        }
+        cameraFraming = normalizeCameraFraming(cameraFramings[getCameraFramingSlot()]);
     } catch (error) {
         localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
+        cameraFramings = {
+            1: { ...CAMERA_FRAMING_DEFAULT },
+            2: { ...CAMERA_FRAMING_DEFAULT }
+        };
         cameraFraming = { ...CAMERA_FRAMING_DEFAULT };
     }
 }
 
 function syncCameraFramingControls() {
+    cameraFraming = normalizeCameraFraming(cameraFramings[getCameraFramingSlot()]);
     if (cameraZoomRange) cameraZoomRange.value = String(cameraFraming.zoom);
     if (cameraXRange) cameraXRange.value = String(cameraFraming.x);
     if (cameraYRange) cameraYRange.value = String(cameraFraming.y);
 }
 
-function applyCameraFraming() {
-    if (!localVideoElement) return;
+function applyCameraTransform(playerSlot, settings) {
+    const video = getCameraVideoElement(playerSlot);
+    if (!video) return;
 
-    const { zoom, x, y } = normalizeCameraFraming(cameraFraming);
-    cameraFraming = { zoom, x, y };
-    localVideoElement.style.objectFit = "contain";
-    localVideoElement.style.transform = `scale(${zoom}) translate(${x}px, ${y}px)`;
+    const { zoom, x, y } = normalizeCameraFraming(settings);
+    video.style.objectFit = "contain";
+    video.style.transform = `scale(${zoom}) translate(${x}px, ${y}px)`;
+}
+
+function applyCameraFraming(playerSlot = getCameraFramingSlot()) {
+    const slot = Number(playerSlot) === 2 ? 2 : 1;
+    cameraFramings[slot] = normalizeCameraFraming(cameraFramings[slot]);
+    applyCameraTransform(slot, cameraFramings[slot]);
+    if (slot === getCameraFramingSlot()) {
+        cameraFraming = { ...cameraFramings[slot] };
+    }
+}
+
+function applyAllCameraFramings() {
+    [1, 2].forEach(playerSlot => applyCameraFraming(playerSlot));
+}
+
+function applyCameraFramingState(state = {}) {
+    [1, 2].forEach(playerSlot => {
+        const nextSettings = state[playerSlot] || state[String(playerSlot)];
+        if (!nextSettings) return;
+        cameraFramings[playerSlot] = normalizeCameraFraming(nextSettings);
+        applyCameraFraming(playerSlot);
+    });
+    syncCameraFramingControls();
 }
 
 function saveCameraFraming({ notify = true } = {}) {
     localStorage.setItem(CAMERA_FRAMING_STORAGE_KEY, JSON.stringify({
-        ...cameraFraming,
+        players: cameraFramings,
         version: CAMERA_FRAMING_STORAGE_VERSION,
         userAdjusted: true
     }));
     if (notify) showRoomToast("Ajuste da câmera salvo.");
 }
 
-function setCameraFraming(nextValue, { persist = false } = {}) {
-    cameraFraming = normalizeCameraFraming({
-        ...cameraFraming,
+function emitCameraFraming(playerSlot) {
+    if (selectedRole !== "player") return;
+    if (![1, 2].includes(Number(playerSlot))) return;
+
+    socket.emit("camera-framing-update", {
+        roomId,
+        playerNumber: Number(playerSlot),
+        settings: cameraFramings[playerSlot]
+    });
+}
+
+function setCameraFraming(nextValue, { persist = false, emit = true } = {}) {
+    const slot = getCameraFramingSlot();
+    cameraFramings[slot] = normalizeCameraFraming({
+        ...cameraFramings[slot],
         ...nextValue
     });
+    cameraFraming = { ...cameraFramings[slot] };
     syncCameraFramingControls();
-    applyCameraFraming();
+    applyCameraFraming(slot);
+    if (emit) emitCameraFraming(slot);
     if (persist) saveCameraFraming({ notify: false });
 }
 
 function resetCameraFraming() {
     setCameraFraming(CAMERA_FRAMING_DEFAULT);
-    localStorage.removeItem(CAMERA_FRAMING_STORAGE_KEY);
+    saveCameraFraming({ notify: false });
 }
 
 function toggleCameraFramingPanel(forceOpen) {
@@ -544,7 +616,7 @@ function toggleCameraFramingPanel(forceOpen) {
 
 loadCameraFraming();
 syncCameraFramingControls();
-applyCameraFraming();
+applyAllCameraFramings();
 
 function getMainCameraDeviceId() {
     const mainCameraSelect = document.getElementById("cameraSelect");
@@ -964,10 +1036,10 @@ socket.on("assigned-role", (data) => {
         closePlayerChatPanel();
         updateSpectatorLocalMuteControls();
 
-        if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
+        if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone ativando...";
         if (requestSpectatorMicBtn) {
-            requestSpectatorMicBtn.dataset.allowed = "false";
-            requestSpectatorMicBtn.innerText = "Solicitar microfone";
+            requestSpectatorMicBtn.dataset.micEnabled = "true";
+            requestSpectatorMicBtn.innerText = "Mutar microfone";
             requestSpectatorMicBtn.disabled = false;
         }
 
@@ -975,6 +1047,8 @@ socket.on("assigned-role", (data) => {
         updateFaceCameraControls();
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
+        syncCameraFramingControls();
+        applyAllCameraFramings();
         emitRoomStateForExtensions();
         return;
     }
@@ -1010,6 +1084,8 @@ socket.on("assigned-role", (data) => {
         renderAllMarkerPanels();
         renderMatchScore(currentMatchScore);
         syncActiveMarkersToRoom();
+        syncCameraFramingControls();
+        applyAllCameraFramings();
         emitRoomStateForExtensions();
     }
 });
@@ -1069,6 +1145,7 @@ socket.on("room-state", (state) => {
     renderLifeHistory(state.lifeHistory || []);
     renderSpectatorMarkerSummary(state.markerState || {});
     updateTimerDisplay(state.timer);
+    applyCameraFramingState(state.cameraFraming || {});
     updateResenhaRoleButtons();
 
     if (state.micStatus) {
@@ -1229,6 +1306,12 @@ function updateMicIconsFromState(state) {
 
 socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
     if (info?.role === "spectator") {
+        if (socketId === socket.id && spectatorMicStatus && requestSpectatorMicBtn) {
+            spectatorMicStatus.innerText = micEnabled ? "Microfone ativo" : "Você está mutado";
+            requestSpectatorMicBtn.dataset.micEnabled = micEnabled ? "true" : "false";
+            requestSpectatorMicBtn.innerText = micEnabled ? "Mutar microfone" : "Ligar microfone";
+            requestSpectatorMicBtn.disabled = false;
+        }
         return;
     }
 
@@ -1244,6 +1327,15 @@ socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
     } else {
         updateRemoteMutedIcon(micEnabled);
     }
+});
+
+socket.on("camera-framing-update", ({ playerNumber, settings }) => {
+    const playerSlot = Number(playerNumber);
+    if (![1, 2].includes(playerSlot)) return;
+
+    cameraFramings[playerSlot] = normalizeCameraFraming(settings);
+    applyCameraFraming(playerSlot);
+    syncCameraFramingControls();
 });
 
 /* =========================
@@ -2137,15 +2229,12 @@ if (spectatorsCountBtn) {
             currentSpectators.map(s => ({
                 name: s.name || "Espectador",
                 photo: s.photo || "",
-                status: s.micAllowed
-                    ? (s.micEnabled ? "🎙️ Microfone ativo" : "✅ Microfone liberado")
-                    : "🔇 Microfone mutado",
-                actionLabel: selectedRole === "player" ? (s.micAllowed ? "Mutar" : "Desmutar") : "",
-                onAction: selectedRole === "player"
-                    ? () => socket.emit("spectator-mic-permission", {
+                status: s.micEnabled ? "Microfone ativo" : "Microfone mutado",
+                actionLabel: selectedRole === "player" && s.micEnabled ? "Mutar" : "",
+                onAction: selectedRole === "player" && s.micEnabled
+                    ? () => socket.emit("spectator-mic-mute", {
                         roomId,
-                        spectatorSocketId: s.socketId,
-                        allow: !s.micAllowed
+                        spectatorSocketId: s.socketId
                     })
                     : null
             }))
@@ -3825,24 +3914,27 @@ if (requestSpectatorMicBtn) {
     requestSpectatorMicBtn.addEventListener("click", async () => {
         if (selectedRole !== "spectator") return;
 
-        if (requestSpectatorMicBtn.dataset.allowed === "true") {
-            try {
-                console.log("[AUDIO][SPECTATOR] enabling approved microphone", { roomId });
-                await window.enableSpectatorMicrophone?.();
-                if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone liberado";
-                requestSpectatorMicBtn.innerText = "Microfone ativo";
-                requestSpectatorMicBtn.disabled = true;
-            } catch (error) {
-                alert("Não foi possível ativar seu microfone.");
-            }
+        const isEnabled = requestSpectatorMicBtn.dataset.micEnabled !== "false";
+
+        if (isEnabled) {
+            await window.disableSpectatorMicrophone?.();
+            if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
+            requestSpectatorMicBtn.dataset.micEnabled = "false";
+            requestSpectatorMicBtn.innerText = "Ligar microfone";
+            requestSpectatorMicBtn.disabled = false;
             return;
         }
 
-        console.log("[AUDIO][SPECTATOR] mic permission requested", { roomId });
-        socket.emit("spectator-mic-request", { roomId });
-        if (spectatorMicStatus) spectatorMicStatus.innerText = "Solicitação enviada";
-        requestSpectatorMicBtn.innerText = "Solicitação enviada";
-        requestSpectatorMicBtn.disabled = true;
+        try {
+            console.log("[AUDIO][SPECTATOR] local microphone enabled", { roomId });
+            await window.enableSpectatorMicrophone?.();
+            if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone ativo";
+            requestSpectatorMicBtn.dataset.micEnabled = "true";
+            requestSpectatorMicBtn.innerText = "Mutar microfone";
+            requestSpectatorMicBtn.disabled = false;
+        } catch (error) {
+            alert("Não foi possível ativar seu microfone.");
+        }
     });
 }
 
@@ -3921,36 +4013,27 @@ socket.on("spectator-mic-requested", (data) => {
 socket.on("spectator-mic-status", async ({ status }) => {
     if (!spectatorMicStatus || !requestSpectatorMicBtn) return;
 
-    if (status === "pending") {
-        spectatorMicStatus.innerText = "Solicitação enviada";
-        requestSpectatorMicBtn.innerText = "Solicitação enviada";
-        requestSpectatorMicBtn.disabled = true;
-        return;
-    }
-
-    if (status === "allowed") {
-        console.log("[AUDIO][SPECTATOR] mic approved", { roomId });
-        spectatorMicStatus.innerText = "Microfone liberado";
-        requestSpectatorMicBtn.dataset.allowed = "true";
-        requestSpectatorMicBtn.innerText = "Ativar microfone";
-        requestSpectatorMicBtn.disabled = false;
-        return;
-    }
-
-    if (status === "denied") {
-        spectatorMicStatus.innerText = "Microfone negado";
-        requestSpectatorMicBtn.innerText = "Solicitar microfone";
-        requestSpectatorMicBtn.disabled = false;
-        return;
-    }
-
     if (status === "muted") {
         await window.disableSpectatorMicrophone?.();
         spectatorMicStatus.innerText = "Você está mutado";
-        requestSpectatorMicBtn.dataset.allowed = "false";
-        requestSpectatorMicBtn.innerText = "Solicitar microfone";
+        requestSpectatorMicBtn.dataset.micEnabled = "false";
+        requestSpectatorMicBtn.innerText = "Ligar microfone";
         requestSpectatorMicBtn.disabled = false;
+        return;
     }
+
+    if (status === "allowed" || status === "enabled") {
+        spectatorMicStatus.innerText = "Microfone ativo";
+        requestSpectatorMicBtn.dataset.micEnabled = "true";
+        requestSpectatorMicBtn.innerText = "Mutar microfone";
+        requestSpectatorMicBtn.disabled = false;
+        return;
+    }
+
+    spectatorMicStatus.innerText = "Microfone disponível";
+    requestSpectatorMicBtn.dataset.micEnabled = "true";
+    requestSpectatorMicBtn.innerText = "Mutar microfone";
+    requestSpectatorMicBtn.disabled = false;
 });
 
 socket.on("chat-cooldown", (data) => {

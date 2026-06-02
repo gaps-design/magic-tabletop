@@ -304,6 +304,7 @@ function ensureRoom(roomId) {
       matchScore: { 1: 0, 2: 0 },
       faceCams: {},
       markerState: { 1: {}, 2: {} },
+      cameraFraming: { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } },
       playerThemes: createDefaultPlayerThemes(),
       overlays: [],
       currentScannerCard: null
@@ -312,6 +313,10 @@ function ensureRoom(roomId) {
 
   if (!rooms[roomId].playerThemes) {
     rooms[roomId].playerThemes = createDefaultPlayerThemes();
+  }
+
+  if (!rooms[roomId].cameraFraming) {
+    rooms[roomId].cameraFraming = { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } };
   }
 
   return rooms[roomId];
@@ -484,6 +489,7 @@ function sendRoomState(roomId) {
     matchScore: room.matchScore || { 1: 0, 2: 0 },
     faceCams: Object.values(room.faceCams || {}),
     markerState: room.markerState || { 1: {}, 2: {} },
+    cameraFraming: room.cameraFraming || { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } },
     playerThemes: room.playerThemes || createDefaultPlayerThemes(),
     currentScannerCard: room.currentScannerCard || null,
     users: buildRoomUsers(room)
@@ -604,11 +610,11 @@ function addSpectator(socket, roomId, user, reason = "") {
     name: profile.name,
     email: profile.email,
     photo: profile.photo,
-    micEnabled: false,
-    micAllowed: false
+    micEnabled: true,
+    micAllowed: true
   };
 
-  room.micStatus[socket.id] = false;
+  room.micStatus[socket.id] = true;
 
   updateConnectedUser(socket.id, {
     status: "spectator",
@@ -1090,10 +1096,10 @@ io.on("connection", (socket) => {
         linkedPlayer,
         name: `Câmera Jogador ${linkedPlayer}`,
         photo: "/assets/default-avatar.png",
-        micEnabled: true
+        micEnabled: false
       };
 
-      room.micStatus[socket.id] = true;
+      room.micStatus[socket.id] = false;
 
       socket.emit("assigned-role", {
         role: "camera",
@@ -1365,13 +1371,6 @@ io.on("connection", (socket) => {
 
     const profile = clientProfiles[socket.id];
     if (!profile) return;
-    if (profile.role === "spectator" && !profile.micAllowed) {
-      console.log("[AUDIO][SPECTATOR] mic status ignored without permission", {
-        roomId,
-        spectatorSocketId: socket.id
-      });
-      return;
-    }
 
     profile.micEnabled = !!micEnabled;
     room.micStatus[socket.id] = !!micEnabled;
@@ -1431,6 +1430,36 @@ io.on("connection", (socket) => {
     sendRoomState(roomId);
   });
 
+  socket.on("camera-framing-update", ({ roomId, playerNumber, settings }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+    if (Number(player.playerNumber) !== Number(playerNumber)) return;
+
+    const normalizedPlayerNumber = Number(playerNumber);
+    const normalizedSettings = {
+      zoom: Math.min(2.5, Math.max(1, Number(settings?.zoom) || 1)),
+      x: Math.min(200, Math.max(-200, Number(settings?.x) || 0)),
+      y: Math.min(200, Math.max(-200, Number(settings?.y) || 0))
+    };
+
+    room.cameraFraming = room.cameraFraming || { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } };
+    room.cameraFraming[normalizedPlayerNumber] = normalizedSettings;
+
+    socket.to(roomId).emit("camera-framing-update", {
+      playerNumber: normalizedPlayerNumber,
+      settings: normalizedSettings
+    });
+
+    console.log("[CAMERA-FRAMING] updated", {
+      roomId,
+      playerNumber: normalizedPlayerNumber,
+      settings: normalizedSettings
+    });
+  });
+
   socket.on("resenha-yield-seat", ({ roomId }) => {
     moveActiveResenhaPlayerToQueue(socket, roomId);
   });
@@ -1468,23 +1497,15 @@ io.on("connection", (socket) => {
     if (!room || !room.spectators.includes(socket.id)) return;
 
     const profile = clientProfiles[socket.id] || {};
-    console.log("[AUDIO][SPECTATOR] mic permission requested", {
+    profile.micAllowed = true;
+    console.log("[AUDIO][SPECTATOR] legacy mic request accepted automatically", {
       roomId,
       spectatorSocketId: socket.id,
       name: profile.name || "Espectador"
     });
 
-    room.players.forEach(player => {
-      io.to(player.socketId).emit("spectator-mic-requested", {
-        roomId,
-        spectatorSocketId: socket.id,
-        name: profile.name || "Espectador",
-        photo: profile.photo || "/assets/default-avatar.png"
-      });
-    });
-
     socket.emit("spectator-mic-status", {
-      status: "pending"
+      status: "allowed"
     });
   });
 
@@ -1496,10 +1517,10 @@ io.on("connection", (socket) => {
     const profile = clientProfiles[spectatorSocketId];
     if (!profile) return;
 
-    profile.micAllowed = !!allow;
+    profile.micAllowed = true;
     profile.micEnabled = false;
     room.micStatus[spectatorSocketId] = false;
-    console.log("[AUDIO][SPECTATOR] mic response", {
+    console.log("[AUDIO][SPECTATOR] legacy mic response", {
       roomId,
       spectatorSocketId,
       allow: !!allow
@@ -1520,10 +1541,10 @@ io.on("connection", (socket) => {
     const profile = clientProfiles[spectatorSocketId];
     if (!profile) return;
 
-    profile.micAllowed = !!allow;
+    profile.micAllowed = true;
     profile.micEnabled = false;
     room.micStatus[spectatorSocketId] = false;
-    console.log("[AUDIO][SPECTATOR] mic permission updated", {
+    console.log("[AUDIO][SPECTATOR] legacy mic permission command", {
       roomId,
       spectatorSocketId,
       allow: !!allow
@@ -1550,9 +1571,14 @@ io.on("connection", (socket) => {
     const profile = clientProfiles[spectatorSocketId];
     if (!profile) return;
 
-    profile.micAllowed = false;
+    profile.micAllowed = true;
     profile.micEnabled = false;
     room.micStatus[spectatorSocketId] = false;
+    console.log("[AUDIO][SPECTATOR] non-blocking spectator mute command", {
+      roomId,
+      spectatorSocketId,
+      mutedBy: socket.id
+    });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
       status: "muted"
