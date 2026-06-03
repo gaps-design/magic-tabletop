@@ -564,6 +564,12 @@ async function startWebcam(
             : (microphoneId ? { deviceId: { exact: microphoneId } } : true)
     };
 
+    if (isCameraOnlyMode) {
+        audioLog("[RTC_DEBUG][AUDIO] camera audio intentionally disabled", {
+            role: currentRole
+        });
+    }
+
     localStream = await getOptionalRoomMedia(
         constraints,
         {
@@ -649,6 +655,13 @@ async function startWebcam(
             readyState: audioTrack.readyState,
             deviceId: settings.deviceId || "default"
         });
+        if (currentRole === "player") {
+            audioLog("[RTC_DEBUG][AUDIO] player audio enabled", {
+                trackId: audioTrack.id,
+                enabled: audioTrack.enabled,
+                readyState: audioTrack.readyState
+            });
+        }
 
         if (microphoneSelect) {
             microphoneSelect.value = selectedMicrophoneId;
@@ -813,6 +826,10 @@ function findSenderByKind(peer, kind) {
     return peer.getSenders().find(sender => sender.track?.kind === kind) || null;
 }
 
+function isRemoteCameraPeer(targetId) {
+    return peerInfo[targetId]?.role === "camera";
+}
+
 function hasTransceiverByKind(peer, kind) {
     return !!peer?.getTransceivers?.().some(transceiver =>
         transceiver.sender?.track?.kind === kind ||
@@ -845,10 +862,12 @@ function getLocalAudioTrack() {
 function upsertAudioTrackForPeer(peerConnection, audioTrack, targetId, reason = "audio-upsert") {
     if (!peerConnection || !audioTrack || !localStream) return false;
 
-    if (currentRole === "camera") {
+    if (currentRole === "camera" || isRemoteCameraPeer(targetId)) {
         audioLog("[RTC_DEBUG][AUDIO] skipped audio track for camera-only client", {
             targetId,
             reason,
+            localRole: currentRole,
+            remoteRole: peerInfo[targetId]?.role || "unknown",
             trackId: audioTrack.id
         });
         return false;
@@ -899,7 +918,7 @@ function requestRenegotiationAfterAudioUpdate(targetId, reason = "audio-update")
 
     if (!targetId || !peer || isPeerClosed(peer)) return;
     if (currentRole === "camera") return;
-    if (currentRole === "camera" && info?.role === "camera") return;
+    if (info?.role === "camera") return;
 
     audioLog("[RTC_DEBUG][AUDIO] renegotiation requested after audio update", {
         targetId,
@@ -1219,6 +1238,12 @@ function createPeerConnection(targetId) {
 
         if (event.track?.kind === "audio") {
             audioLog("[RTC_DEBUG][AUDIO] remote audio track received", {
+                targetId,
+                muted: event.track.muted,
+                readyState: event.track.readyState,
+                streamId: stream?.id || null
+            });
+            audioLog("[RTC_DEBUG][AUDIO] remote audio received", {
                 targetId,
                 muted: event.track.muted,
                 readyState: event.track.readyState,
@@ -2822,6 +2847,12 @@ window.enableSpectatorMicrophone = async function() {
             readyState: existingAudioTrack.readyState,
             reused: true
         });
+        audioLog("[RTC_DEBUG][AUDIO] spectator audio enabled", {
+            trackId: existingAudioTrack.id,
+            enabled: existingAudioTrack.enabled,
+            readyState: existingAudioTrack.readyState,
+            reused: true
+        });
 
         syncLocalAudioTrackToPeers("spectator-mic-reenable");
 
@@ -2885,6 +2916,12 @@ window.enableSpectatorMicrophone = async function() {
         enabled: audioTrack.enabled
     });
     audioLog("[RTC_DEBUG][AUDIO] spectator audio track ready", {
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        deviceId: trackSettings.deviceId || "default"
+    });
+    audioLog("[RTC_DEBUG][AUDIO] spectator audio enabled", {
         trackId: audioTrack.id,
         enabled: audioTrack.enabled,
         readyState: audioTrack.readyState,
