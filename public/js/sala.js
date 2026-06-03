@@ -1258,8 +1258,7 @@ window.setRemoteMutedIconState = updateRemoteMutedIcon;
 function getPlayerMicSocketId(player, cameras) {
     if (!player) return "";
 
-    const linkedCamera = cameras.find(c => Number(c.linkedPlayer) === Number(player.playerNumber));
-    return linkedCamera?.socketId || player.socketId || "";
+    return player.socketId || "";
 }
 
 function updateMutedIconForPlayer(playerNumber, micEnabled) {
@@ -1305,6 +1304,10 @@ function updateMicIconsFromState(state) {
 }
 
 socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
+    if (info?.role === "camera") {
+        return;
+    }
+
     if (info?.role === "spectator") {
         if (socketId === socket.id && spectatorMicStatus && requestSpectatorMicBtn) {
             spectatorMicStatus.innerText = micEnabled ? "Microfone ativo" : "Você está mutado";

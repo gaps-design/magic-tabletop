@@ -13,6 +13,9 @@ const toggleMicBtn = document.getElementById("toggleMicBtn");
 const toggleCameraBtn = document.getElementById("toggleCameraBtn");
 
 let localStream = null;
+let mainLocalStream = null;
+let cameraOnlyStream = null;
+let spectatorAudioStream = null;
 let currentRoomId = null;
 let currentRole = null;
 let myPlayerNumberRTC = null;
@@ -192,17 +195,52 @@ function getSpectatorAudioConstraints() {
         : true;
 }
 
+function isCameraOnlyClient() {
+    return currentRole === "camera" || document.body.classList.contains("camera-mode");
+}
+
+function setActiveLocalStream(stream, role = currentRole) {
+    localStream = stream;
+
+    if (role === "camera") {
+        cameraOnlyStream = stream;
+        return;
+    }
+
+    if (role === "spectator") {
+        spectatorAudioStream = stream;
+        return;
+    }
+
+    if (role === "player") {
+        mainLocalStream = stream;
+    }
+}
+
+function getActiveLocalStream() {
+    if (currentRole === "camera") return cameraOnlyStream || localStream;
+    if (currentRole === "spectator") return spectatorAudioStream || localStream;
+    if (currentRole === "player") return mainLocalStream || localStream;
+    return localStream;
+}
+
 function updateMediaStatus() {
-    const hasActiveMic = !!localStream?.getAudioTracks().length && micEnabled;
+    const activeStream = getActiveLocalStream();
+    const isCameraOnly = isCameraOnlyClient();
+    const hasActiveMic = !isCameraOnly && !!activeStream?.getAudioTracks().length && micEnabled;
 
     if (micStatusText) {
-        micStatusText.innerText = localStream?.getAudioTracks().length
+        if (isCameraOnly) {
+            micStatusText.innerText = "Somente vídeo";
+        } else {
+            micStatusText.innerText = activeStream?.getAudioTracks().length
             ? (micEnabled ? "Ativado" : "Desativado")
             : "Sem microfone";
+        }
     }
 
     if (cameraStatusText) {
-        cameraStatusText.innerText = localStream?.getVideoTracks().length
+        cameraStatusText.innerText = activeStream?.getVideoTracks().length
             ? (cameraEnabled ? "Ativada" : "Desativada")
             : "Sem câmera";
     }
@@ -367,7 +405,7 @@ function monitorCameraModeTrack(stream = localStream) {
 }
 
 function hasLiveCameraModeTrack() {
-    const videoTrack = localStream?.getVideoTracks?.()[0];
+    const videoTrack = cameraOnlyStream?.getVideoTracks?.()[0];
     return !!videoTrack && videoTrack.readyState === "live";
 }
 
@@ -553,8 +591,12 @@ async function startWebcam(
         hasSavedMicrophone: !isCameraOnlyMode && !!microphoneId
     });
 
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+    const previousRoleStream = isCameraOnlyMode
+        ? cameraOnlyStream
+        : (currentRole === "player" ? mainLocalStream : getActiveLocalStream());
+
+    if (previousRoleStream) {
+        previousRoleStream.getTracks().forEach(track => track.stop());
     }
 
     const constraints = {
@@ -565,18 +607,22 @@ async function startWebcam(
     };
 
     if (isCameraOnlyMode) {
+        audioLog("[RTC_DEBUG][AUDIO] camera-only mode: requesting video only", {
+            role: currentRole
+        });
         audioLog("[RTC_DEBUG][AUDIO] camera audio intentionally disabled", {
             role: currentRole
         });
     }
 
-    localStream = await getOptionalRoomMedia(
+    const nextStream = await getOptionalRoomMedia(
         constraints,
         {
             camera: !!cameraId,
             microphone: !isCameraOnlyMode && !!microphoneId
         }
     );
+    setActiveLocalStream(nextStream, currentRole);
 
     if (!localStream) {
         if (localVideo) {
@@ -656,6 +702,11 @@ async function startWebcam(
             deviceId: settings.deviceId || "default"
         });
         if (currentRole === "player") {
+            audioLog("[RTC_DEBUG][AUDIO] player microphone active", {
+                trackId: audioTrack.id,
+                enabled: audioTrack.enabled,
+                readyState: audioTrack.readyState
+            });
             audioLog("[RTC_DEBUG][AUDIO] player audio enabled", {
                 trackId: audioTrack.id,
                 enabled: audioTrack.enabled,
@@ -729,6 +780,7 @@ async function switchCamera(cameraId) {
     });
 
     localStream.addTrack(newVideoTrack);
+    setActiveLocalStream(localStream, currentRole);
 
     routeLocalPreview();
 
@@ -744,6 +796,12 @@ async function switchCamera(cameraId) {
 
 async function switchMicrophone(microphoneId) {
     if (!microphoneId) return;
+    if (isCameraOnlyClient()) {
+        audioLog("[RTC_DEBUG][AUDIO] camera-only mode: no audio sender added", {
+            reason: "switch-microphone-blocked"
+        });
+        return;
+    }
 
     selectedMicrophoneId = microphoneId;
     localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
@@ -790,6 +848,7 @@ async function switchMicrophone(microphoneId) {
     });
 
     localStream.addTrack(newAudioTrack);
+    setActiveLocalStream(localStream, currentRole);
 
     replaceTrackOnPeers("audio", newAudioTrack);
     mediaErrorAlertShown = false;
@@ -841,8 +900,9 @@ function hasTransceiverByKind(peer, kind) {
 function ensureReceiveTransceivers(peer, targetId) {
     if (!peer || currentRole === "camera") return;
 
-    const hasLocalVideo = !!localStream?.getVideoTracks?.().some(track => track.readyState === "live");
-    const hasLocalAudio = !!localStream?.getAudioTracks?.().some(track => track.readyState === "live");
+    const activeStream = getActiveLocalStream();
+    const hasLocalVideo = !!activeStream?.getVideoTracks?.().some(track => track.readyState === "live");
+    const hasLocalAudio = !!activeStream?.getAudioTracks?.().some(track => track.readyState === "live");
 
     if (currentRole === "spectator" && !hasLocalVideo && !hasTransceiverByKind(peer, "video")) {
         peer.addTransceiver("video", { direction: "recvonly" });
@@ -856,18 +916,35 @@ function ensureReceiveTransceivers(peer, targetId) {
 }
 
 function getLocalAudioTrack() {
-    return localStream?.getAudioTracks?.().find(track => track.readyState === "live") || null;
+    return getActiveLocalStream()?.getAudioTracks?.().find(track => track.readyState === "live") || null;
 }
 
 function upsertAudioTrackForPeer(peerConnection, audioTrack, targetId, reason = "audio-upsert") {
-    if (!peerConnection || !audioTrack || !localStream) return false;
+    const activeStream = getActiveLocalStream();
+    if (!peerConnection || !audioTrack || !activeStream) return false;
 
-    if (currentRole === "camera" || isRemoteCameraPeer(targetId)) {
+    if (currentRole === "camera") {
+        audioLog("[RTC_DEBUG][AUDIO] camera-only mode: no audio sender added", {
+            targetId,
+            reason,
+            trackId: audioTrack.id
+        });
         audioLog("[RTC_DEBUG][AUDIO] skipped audio track for camera-only client", {
             targetId,
             reason,
             localRole: currentRole,
             remoteRole: peerInfo[targetId]?.role || "unknown",
+            trackId: audioTrack.id
+        });
+        return false;
+    }
+
+    if (isRemoteCameraPeer(targetId)) {
+        audioLog("[RTC_DEBUG][AUDIO] preserving player audio sender", {
+            targetId,
+            reason,
+            localRole: currentRole,
+            remoteRole: peerInfo[targetId]?.role || "camera",
             trackId: audioTrack.id
         });
         return false;
@@ -908,7 +985,7 @@ function upsertAudioTrackForPeer(peerConnection, audioTrack, targetId, reason = 
         trackId: audioTrack.id
     });
 
-    peerConnection.addTrack(audioTrack, localStream);
+    peerConnection.addTrack(audioTrack, activeStream);
     return true;
 }
 
@@ -1212,9 +1289,11 @@ function createPeerConnection(targetId) {
         iceServers: servers.iceServers.map(server => server.urls)
     });
 
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            addOrReplaceLocalTrack(peer, targetId, track, localStream, "create-peer");
+    const activeStream = getActiveLocalStream();
+
+    if (activeStream) {
+        activeStream.getTracks().forEach(track => {
+            addOrReplaceLocalTrack(peer, targetId, track, activeStream, "create-peer");
         });
         ensureReceiveTransceivers(peer, targetId);
     } else {
@@ -1888,6 +1967,9 @@ window.shutdownRoomConnection = function() {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
+    mainLocalStream = null;
+    cameraOnlyStream = null;
+    spectatorAudioStream = null;
 
     releaseCameraWakeLock();
 
@@ -2312,7 +2394,11 @@ socket.on("assigned-role", async (data) => {
         myPlayerNumberRTC = Number(data.playerNumber);
     }
 
-    if ((data.role === "player" || data.role === "camera") && !localStream) {
+    const roleHasLocalMedia = data.role === "camera"
+        ? !!cameraOnlyStream
+        : !!getActiveLocalStream();
+
+    if ((data.role === "player" || data.role === "camera") && !roleHasLocalMedia) {
         try {
             await startWebcam();
         } catch (error) {
@@ -2809,6 +2895,13 @@ if (spectatorMicrophoneSelect) {
 ========================= */
 
 window.toggleMicrophone = function() {
+    if (isCameraOnlyClient()) {
+        audioLog("[RTC_DEBUG][AUDIO] camera-only mode: no audio sender added", {
+            reason: "toggle-microphone-blocked"
+        });
+        return;
+    }
+
     if (!localStream?.getAudioTracks().length) {
         alert("Nenhum microfone disponível.");
         return;
@@ -2837,6 +2930,7 @@ window.enableSpectatorMicrophone = async function() {
     if (existingAudioTrack && existingAudioTrack.readyState === "live") {
         micEnabled = true;
         existingAudioTrack.enabled = true;
+        setActiveLocalStream(localStream, "spectator");
         audioLog("[RTC_DEBUG][AUDIO][SPECTATOR] reusing existing spectator audio track", {
             trackId: existingAudioTrack.id,
             peerCount: Object.keys(peerConnections).length
@@ -2848,6 +2942,12 @@ window.enableSpectatorMicrophone = async function() {
             reused: true
         });
         audioLog("[RTC_DEBUG][AUDIO] spectator audio enabled", {
+            trackId: existingAudioTrack.id,
+            enabled: existingAudioTrack.enabled,
+            readyState: existingAudioTrack.readyState,
+            reused: true
+        });
+        audioLog("[RTC_DEBUG][AUDIO] spectator microphone active", {
             trackId: existingAudioTrack.id,
             enabled: existingAudioTrack.enabled,
             readyState: existingAudioTrack.readyState,
@@ -2927,6 +3027,12 @@ window.enableSpectatorMicrophone = async function() {
         readyState: audioTrack.readyState,
         deviceId: trackSettings.deviceId || "default"
     });
+    audioLog("[RTC_DEBUG][AUDIO] spectator microphone active", {
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        deviceId: trackSettings.deviceId || "default"
+    });
 
     micEnabled = true;
     audioTrack.enabled = true;
@@ -2941,6 +3047,7 @@ window.enableSpectatorMicrophone = async function() {
     });
 
     localStream.addTrack(audioTrack);
+    setActiveLocalStream(localStream, "spectator");
     audioLog("[SPECTATOR] audio track added", {
         peerCount: Object.keys(peerConnections).length,
         trackId: audioTrack.id
