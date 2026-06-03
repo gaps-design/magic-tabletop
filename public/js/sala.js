@@ -427,7 +427,29 @@ function createTournamentRoomButton(label, onClick, disabled = false) {
     return button;
 }
 
-async function reportTournamentRoomResult(result) {
+function getTournamentRoomScoreOptions(match, p1Name, p2Name) {
+    const scores = tournamentRoomContext?.tournament?.format === "BO1"
+        ? [
+            [1, 0, `${p1Name} 1x0 ${p2Name}`],
+            [0, 1, `${p1Name} 0x1 ${p2Name}`],
+            [0, 0, "Empate 0x0"]
+        ]
+        : [
+            [2, 0, `${p1Name} 2x0 ${p2Name}`],
+            [2, 1, `${p1Name} 2x1 ${p2Name}`],
+            [1, 1, `${p1Name} 1x1 ${p2Name}`],
+            [0, 2, `${p1Name} 0x2 ${p2Name}`],
+            [1, 2, `${p1Name} 1x2 ${p2Name}`]
+        ];
+
+    return scores.map(([player1GameWins, player2GameWins, label]) => ({
+        player1GameWins,
+        player2GameWins,
+        label
+    }));
+}
+
+async function reportTournamentRoomResult(score) {
     if (!tournamentRoomContext?.tournament?.id || !tournamentRoomContext?.match?.id) return;
 
     const user = getTournamentUserPayload();
@@ -440,7 +462,7 @@ async function reportTournamentRoomResult(result) {
         const response = await fetch(`/api/tournaments/${encodeURIComponent(tournamentRoomContext.tournament.id)}/matches/${encodeURIComponent(tournamentRoomContext.match.id)}/result`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user, result })
+            body: JSON.stringify({ user, ...score })
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Não foi possível lançar resultado.");
@@ -486,9 +508,12 @@ function renderTournamentRoomPanel() {
         }
 
         const isBye = !!match.isBye || !match.player2Id;
-        tournamentRoomActions.appendChild(createTournamentRoomButton(`Vitória ${p1Name}`, () => reportTournamentRoomResult("player1_win"), isBye));
-        tournamentRoomActions.appendChild(createTournamentRoomButton(`Vitória ${p2Name}`, () => reportTournamentRoomResult("player2_win"), isBye));
-        tournamentRoomActions.appendChild(createTournamentRoomButton("Empate", () => reportTournamentRoomResult("draw"), isBye));
+        getTournamentRoomScoreOptions(match, p1Name, p2Name).forEach(option => {
+            tournamentRoomActions.appendChild(createTournamentRoomButton(option.label, () => reportTournamentRoomResult({
+                player1GameWins: option.player1GameWins,
+                player2GameWins: option.player2GameWins
+            }), isBye));
+        });
     }
 
     tournamentRoomPanel.classList.remove("hidden");

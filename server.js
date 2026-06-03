@@ -1037,6 +1037,7 @@ function findTournamentPlayer(tournament, userId) {
 
 function publicTournament(tournament) {
   if (!tournament) return null;
+  const standings = getTournamentStandings(tournament);
   return {
     id: tournament.id,
     name: tournament.name,
@@ -1051,17 +1052,116 @@ function publicTournament(tournament) {
     updatedAt: tournament.updatedAt,
     players: tournament.players,
     rounds: tournament.rounds,
-    matches: tournament.matches
+    matches: tournament.matches,
+    standings,
+    champion: tournament.status === "finished" ? standings[0] || null : null
   };
+}
+
+function resetTournamentPlayerStats(player) {
+    player.points = 0;
+    player.matchPoints = 0;
+    player.wins = 0;
+    player.matchWins = 0;
+    player.draws = 0;
+    player.matchDraws = 0;
+    player.losses = 0;
+    player.matchLosses = 0;
+    player.byes = 0;
+    player.gameWins = 0;
+    player.gameLosses = 0;
+    player.gameDraws = 0;
+    player.gameDifferential = 0;
+    player.gameWinPercentage = 0;
+    player.opponentMatchWinPercentage = 0;
+    player.opponentMatchWinRate = 0;
+    player.matchesPlayed = 0;
+    player.opponentIds = [];
+}
+
+function ensureTournamentPlayerStats(player) {
+  if (typeof player.matchPoints !== "number") player.matchPoints = Number(player.points || 0);
+  if (typeof player.matchWins !== "number") player.matchWins = Number(player.wins || 0);
+  if (typeof player.matchDraws !== "number") player.matchDraws = Number(player.draws || 0);
+  if (typeof player.matchLosses !== "number") player.matchLosses = Number(player.losses || 0);
+  if (typeof player.gameWins !== "number") player.gameWins = 0;
+  if (typeof player.gameLosses !== "number") player.gameLosses = 0;
+  if (typeof player.gameDraws !== "number") player.gameDraws = 0;
+  if (typeof player.gameDifferential !== "number") player.gameDifferential = player.gameWins - player.gameLosses;
+  if (typeof player.gameWinPercentage !== "number") player.gameWinPercentage = 0;
+  if (typeof player.opponentMatchWinPercentage !== "number") player.opponentMatchWinPercentage = 0;
+  if (typeof player.opponentMatchWinRate !== "number") player.opponentMatchWinRate = player.opponentMatchWinPercentage;
+  if (typeof player.matchesPlayed !== "number") player.matchesPlayed = 0;
+  if (!Array.isArray(player.opponentIds)) player.opponentIds = [];
+  player.points = player.matchPoints;
+  player.wins = player.matchWins;
+  player.draws = player.matchDraws;
+  player.losses = player.matchLosses;
+  return player;
+}
+
+function getGameWinPercentage(player) {
+  const totalGames = (Number(player.gameWins) || 0) + (Number(player.gameLosses) || 0) + (Number(player.gameDraws) || 0);
+  if (!totalGames) return 0;
+  return ((Number(player.gameWins) || 0) + ((Number(player.gameDraws) || 0) * 0.5)) / totalGames;
+}
+
+function getMatchWinPercentage(player) {
+  const played = Number(player.matchesPlayed) || 0;
+  if (!played) return 0;
+  return (Number(player.matchPoints || player.points || 0) || 0) / (played * 3);
+}
+
+function compareTournamentPlayers(a, b) {
+  ensureTournamentPlayerStats(a);
+  ensureTournamentPlayerStats(b);
+  return b.matchPoints - a.matchPoints ||
+    b.opponentMatchWinPercentage - a.opponentMatchWinPercentage ||
+    b.gameDifferential - a.gameDifferential ||
+    b.gameWinPercentage - a.gameWinPercentage ||
+    b.matchWins - a.matchWins ||
+    a.name.localeCompare(b.name);
+}
+
+function getTournamentStandings(tournament) {
+  return [...(tournament?.players || [])]
+    .filter(player => !player.dropped)
+    .map(player => ensureTournamentPlayerStats(player))
+    .sort(compareTournamentPlayers);
+}
+
+function getMatchScoreFromResult(match, tournament) {
+  if (Number.isFinite(Number(match.player1GameWins)) && Number.isFinite(Number(match.player2GameWins))) {
+    return {
+      player1GameWins: Number(match.player1GameWins),
+      player2GameWins: Number(match.player2GameWins)
+    };
+  }
+
+  if (match.result === "bye") {
+    return { player1GameWins: tournament.format === "BO1" ? 1 : 2, player2GameWins: 0 };
+  }
+
+  if (match.result === "draw") return { player1GameWins: 1, player2GameWins: 1 };
+  if (match.result === "player1_win") return { player1GameWins: tournament.format === "BO1" ? 1 : 2, player2GameWins: 0 };
+  if (match.result === "player2_win") return { player1GameWins: 0, player2GameWins: tournament.format === "BO1" ? 1 : 2 };
+
+  return { player1GameWins: 0, player2GameWins: 0 };
+}
+
+function buildTournamentResultLabel(tournament, match, player1GameWins, player2GameWins) {
+  const p1 = findTournamentPlayer(tournament, match.player1Id);
+  const p2 = findTournamentPlayer(tournament, match.player2Id);
+  if (match.result === "bye" || match.isBye || !p2) {
+    return `${p1?.name || "Jogador"} ${player1GameWins}x${player2GameWins} BYE`;
+  }
+
+  return `${p1?.name || "Jogador 1"} ${player1GameWins}x${player2GameWins} ${p2?.name || "Jogador 2"}`;
 }
 
 function recalculateTournamentStandings(tournament) {
   tournament.players.forEach(player => {
-    player.points = 0;
-    player.wins = 0;
-    player.draws = 0;
-    player.losses = 0;
-    player.byes = 0;
+    resetTournamentPlayerStats(player);
   });
 
   tournament.matches.forEach(match => {
@@ -1069,42 +1169,114 @@ function recalculateTournamentStandings(tournament) {
 
     const p1 = findTournamentPlayer(tournament, match.player1Id);
     const p2 = findTournamentPlayer(tournament, match.player2Id);
+    const { player1GameWins, player2GameWins } = getMatchScoreFromResult(match, tournament);
+
+    match.player1GameWins = player1GameWins;
+    match.player2GameWins = player2GameWins;
+    match.isDraw = match.result === "draw" || (player1GameWins === player2GameWins && match.result !== "bye");
+    match.resultLabel = match.resultLabel || buildTournamentResultLabel(tournament, match, player1GameWins, player2GameWins);
 
     if (match.result === "bye" && p1) {
-      p1.points += 3;
-      p1.wins += 1;
+      p1.matchPoints += 3;
+      p1.matchWins += 1;
+      p1.points = p1.matchPoints;
+      p1.wins = p1.matchWins;
       p1.byes += 1;
+      p1.gameWins += player1GameWins;
+      p1.gameLosses += player2GameWins;
+      p1.matchesPlayed += 1;
       return;
     }
 
     if (match.result === "draw") {
       if (p1) {
-        p1.points += 1;
-        p1.draws += 1;
+        p1.matchPoints += 1;
+        p1.matchDraws += 1;
+        p1.points = p1.matchPoints;
+        p1.draws = p1.matchDraws;
+        p1.gameWins += player1GameWins;
+        p1.gameLosses += player2GameWins;
+        p1.gameDraws += player1GameWins === player2GameWins ? 1 : 0;
+        p1.matchesPlayed += 1;
+        if (p2) p1.opponentIds.push(p2.id);
       }
       if (p2) {
-        p2.points += 1;
-        p2.draws += 1;
+        p2.matchPoints += 1;
+        p2.matchDraws += 1;
+        p2.points = p2.matchPoints;
+        p2.draws = p2.matchDraws;
+        p2.gameWins += player2GameWins;
+        p2.gameLosses += player1GameWins;
+        p2.gameDraws += player1GameWins === player2GameWins ? 1 : 0;
+        p2.matchesPlayed += 1;
+        if (p1) p2.opponentIds.push(p1.id);
       }
       return;
     }
 
     if (match.result === "player1_win") {
       if (p1) {
-        p1.points += 3;
-        p1.wins += 1;
+        p1.matchPoints += 3;
+        p1.matchWins += 1;
+        p1.points = p1.matchPoints;
+        p1.wins = p1.matchWins;
+        p1.gameWins += player1GameWins;
+        p1.gameLosses += player2GameWins;
+        p1.matchesPlayed += 1;
+        if (p2) p1.opponentIds.push(p2.id);
       }
-      if (p2) p2.losses += 1;
+      if (p2) {
+        p2.matchLosses += 1;
+        p2.losses = p2.matchLosses;
+        p2.gameWins += player2GameWins;
+        p2.gameLosses += player1GameWins;
+        p2.matchesPlayed += 1;
+        if (p1) p2.opponentIds.push(p1.id);
+      }
       return;
     }
 
     if (match.result === "player2_win") {
       if (p2) {
-        p2.points += 3;
-        p2.wins += 1;
+        p2.matchPoints += 3;
+        p2.matchWins += 1;
+        p2.points = p2.matchPoints;
+        p2.wins = p2.matchWins;
+        p2.gameWins += player2GameWins;
+        p2.gameLosses += player1GameWins;
+        p2.matchesPlayed += 1;
+        if (p1) p2.opponentIds.push(p1.id);
       }
-      if (p1) p1.losses += 1;
+      if (p1) {
+        p1.matchLosses += 1;
+        p1.losses = p1.matchLosses;
+        p1.gameWins += player1GameWins;
+        p1.gameLosses += player2GameWins;
+        p1.matchesPlayed += 1;
+        if (p2) p1.opponentIds.push(p2.id);
+      }
     }
+  });
+
+  tournament.players.forEach(player => {
+    player.gameDifferential = player.gameWins - player.gameLosses;
+    player.gameWinPercentage = getGameWinPercentage(player);
+  });
+
+  tournament.players.forEach(player => {
+    const opponentRates = [...new Set(player.opponentIds || [])]
+      .map(opponentId => findTournamentPlayer(tournament, opponentId))
+      .filter(Boolean)
+      .map(opponent => getMatchWinPercentage(opponent));
+
+    player.opponentMatchWinPercentage = opponentRates.length
+      ? opponentRates.reduce((sum, rate) => sum + rate, 0) / opponentRates.length
+      : 0;
+    player.opponentMatchWinRate = player.opponentMatchWinPercentage;
+    player.points = player.matchPoints;
+    player.wins = player.matchWins;
+    player.draws = player.matchDraws;
+    player.losses = player.matchLosses;
   });
 
   tournament.rounds.forEach(round => {
@@ -1127,11 +1299,86 @@ function hasPlayed(tournament, playerA, playerB) {
 function getSortedTournamentPlayers(tournament) {
   return tournament.players
     .filter(player => !player.dropped)
-    .sort((a, b) =>
-      b.points - a.points ||
-      b.wins - a.wins ||
-      a.name.localeCompare(b.name)
-    );
+    .sort(compareTournamentPlayers);
+}
+
+function createTournamentPlayer(user, tournamentId = "", joinedAt = Date.now()) {
+  return {
+    id: user.id,
+    tournamentId,
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    avatar: user.photo,
+    points: 0,
+    matchPoints: 0,
+    wins: 0,
+    matchWins: 0,
+    draws: 0,
+    matchDraws: 0,
+    losses: 0,
+    matchLosses: 0,
+    byes: 0,
+    gameWins: 0,
+    gameLosses: 0,
+    gameDraws: 0,
+    gameDifferential: 0,
+    gameWinPercentage: 0,
+    opponentMatchWinPercentage: 0,
+    opponentMatchWinRate: 0,
+    matchesPlayed: 0,
+    opponentIds: [],
+    dropped: false,
+    joinedAt
+  };
+}
+
+function normalizeTournamentScore(tournament, match, body = {}) {
+  const maxWins = tournament.format === "BO1" ? 1 : 2;
+  let player1GameWins = Number(body.player1GameWins);
+  let player2GameWins = Number(body.player2GameWins);
+
+  if (!Number.isFinite(player1GameWins) || !Number.isFinite(player2GameWins)) {
+    if (body.result === "draw") {
+      player1GameWins = tournament.format === "BO1" ? 0 : 1;
+      player2GameWins = tournament.format === "BO1" ? 0 : 1;
+    } else if (body.result === "player1_win") {
+      player1GameWins = maxWins;
+      player2GameWins = 0;
+    } else if (body.result === "player2_win") {
+      player1GameWins = 0;
+      player2GameWins = maxWins;
+    }
+  }
+
+  player1GameWins = Math.max(0, Math.min(maxWins, Math.floor(player1GameWins)));
+  player2GameWins = Math.max(0, Math.min(maxWins, Math.floor(player2GameWins)));
+
+  const validScores = tournament.format === "BO1"
+    ? ["1-0", "0-1", "0-0"]
+    : ["2-0", "2-1", "1-1", "0-2", "1-2"];
+  const key = `${player1GameWins}-${player2GameWins}`;
+  if (!validScores.includes(key)) {
+    throw new Error("Placar inv?lido para o formato do torneio.");
+  }
+
+  let result = "draw";
+  let winnerId = null;
+  if (player1GameWins > player2GameWins) {
+    result = "player1_win";
+    winnerId = match.player1Id;
+  } else if (player2GameWins > player1GameWins) {
+    result = "player2_win";
+    winnerId = match.player2Id;
+  }
+
+  return {
+    player1GameWins,
+    player2GameWins,
+    result,
+    winnerId,
+    isDraw: result === "draw"
+  };
 }
 
 function createTournamentRound(tournament) {
@@ -1193,6 +1440,10 @@ function createTournamentRound(tournament) {
       roomUrl: `/sala.html?room=${encodeURIComponent(roomId)}&tournament=${encodeURIComponent(tournament.id)}&round=${roundNumber}&table=${tableNumber}`,
       status: playerB ? "pending" : "completed",
       result: playerB ? null : "bye",
+      player1GameWins: playerB ? null : tournament.format === "BO1" ? 1 : 2,
+      player2GameWins: playerB ? null : 0,
+      isDraw: false,
+      resultLabel: playerB ? "" : `${playerA?.name || "Jogador"} ${tournament.format === "BO1" ? 1 : 2}x0 BYE`,
       winnerId: playerB ? null : playerA.id,
       reportedBy: playerB ? null : "system",
       reportedAt: playerB ? null : Date.now(),
@@ -1278,21 +1529,7 @@ app.post("/api/tournaments", (req, res) => {
   }
 
   const now = Date.now();
-  const ownerPlayer = {
-    id: user.id,
-    tournamentId: "",
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    avatar: user.photo,
-    points: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    byes: 0,
-    dropped: false,
-    joinedAt: now
-  };
+  const ownerPlayer = createTournamentPlayer(user, "", now);
 
   activeTournament = {
     id: createId("tournament"),
@@ -1336,21 +1573,7 @@ app.post("/api/tournaments/:id/join", (req, res) => {
     return;
   }
 
-  tournament.players.push({
-    id: user.id,
-    tournamentId: tournament.id,
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    avatar: user.photo,
-    points: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    byes: 0,
-    dropped: false,
-    joinedAt: Date.now()
-  });
+  tournament.players.push(createTournamentPlayer(user, tournament.id));
   tournament.updatedAt = Date.now();
   res.json({ tournament: publicTournament(tournament) });
 });
@@ -1464,8 +1687,20 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
     return;
   }
 
-  match.result = req.body.result;
-  match.winnerId = req.body.result === "player1_win" ? match.player1Id : req.body.result === "player2_win" ? match.player2Id : null;
+  let score;
+  try {
+    score = normalizeTournamentScore(tournament, match, req.body);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  match.player1GameWins = score.player1GameWins;
+  match.player2GameWins = score.player2GameWins;
+  match.result = score.result;
+  match.isDraw = score.isDraw;
+  match.winnerId = score.winnerId;
+  match.resultLabel = buildTournamentResultLabel(tournament, match, score.player1GameWins, score.player2GameWins);
   match.status = "completed";
   match.reportedBy = user.id;
   match.reportedAt = Date.now();

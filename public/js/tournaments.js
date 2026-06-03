@@ -10,6 +10,7 @@
   const statusBadge = document.getElementById("tournamentStatusBadge");
   const ownerActions = document.getElementById("ownerActions");
   const playersList = document.getElementById("playersList");
+  const championBox = document.getElementById("championBox");
   const standingsBody = document.getElementById("standingsBody");
   const roundsRoot = document.getElementById("roundsRoot");
   const joinBtn = document.getElementById("joinTournamentBtn");
@@ -95,6 +96,10 @@
     return !!activeTournament?.players?.some(player => player.userId === uid);
   }
 
+  function isTournamentBlockingCreation() {
+    return ["registration_open", "registration_closed", "in_progress"].includes(activeTournament?.status);
+  }
+
   function canReport(match) {
     if (!activeTournament || !loggedUser) return false;
     if (isOwner()) return true;
@@ -118,9 +123,42 @@
     return playerById(id)?.name || "BYE";
   }
 
+  function formatPercent(value) {
+    return `${((Number(value) || 0) * 100).toFixed(1)}%`;
+  }
+
+  function gameDifferentialLabel(player) {
+    const diff = Number(player.gameDifferential) || 0;
+    return diff > 0 ? `+${diff}` : String(diff);
+  }
+
+  function getScoreOptions(match) {
+    const p1 = playerName(match.player1Id);
+    const p2 = playerName(match.player2Id);
+    const scores = activeTournament?.format === "BO1"
+      ? [
+          [1, 0, `${p1} 1x0 ${p2}`],
+          [0, 1, `${p1} 0x1 ${p2}`],
+          [0, 0, "Empate 0x0"]
+        ]
+      : [
+          [2, 0, `${p1} 2x0 ${p2}`],
+          [2, 1, `${p1} 2x1 ${p2}`],
+          [1, 1, `${p1} 1x1 ${p2}`],
+          [0, 2, `${p1} 0x2 ${p2}`],
+          [1, 2, `${p1} 1x2 ${p2}`]
+        ];
+
+    return scores.map(([player1GameWins, player2GameWins, label]) => ({
+      player1GameWins,
+      player2GameWins,
+      label
+    }));
+  }
+
   function renderTournament() {
     authNotice.classList.toggle("hidden", !!loggedUser);
-    createForm.querySelector("button[type='submit']").disabled = !loggedUser || !!activeTournament;
+    createForm.querySelector("button[type='submit']").disabled = !loggedUser || isTournamentBlockingCreation();
 
     if (!activeTournament) {
       statusBadge.innerText = "---";
@@ -128,6 +166,7 @@
       activeBox.innerHTML = "Nenhum torneio ativo no momento.";
       ownerActions.classList.add("hidden");
       playersList.innerHTML = "";
+      championBox?.classList.add("hidden");
       standingsBody.innerHTML = "";
       roundsRoot.innerHTML = "";
       joinBtn.disabled = true;
@@ -149,6 +188,10 @@
     renderRounds();
 
     joinBtn.disabled = !loggedUser || activeTournament.status !== "registration_open" || isRegistered();
+    if (activeTournament.status === "finished") {
+      joinBtn.innerText = "Torneio finalizado";
+      return;
+    }
     joinBtn.innerText = isRegistered() ? "Você já está inscrito" : "Entrar no torneio";
   }
 
@@ -224,21 +267,36 @@
   }
 
   function renderStandings() {
-    const standings = [...activeTournament.players].sort((a, b) =>
-      b.points - a.points ||
-      b.wins - a.wins ||
-      a.name.localeCompare(b.name)
-    );
+    const standings = activeTournament.standings?.length ? activeTournament.standings : [...activeTournament.players];
+
+    if (championBox) {
+      const champion = activeTournament.champion || (activeTournament.status === "finished" ? standings[0] : null);
+      championBox.classList.toggle("hidden", !champion);
+      if (champion) {
+        championBox.innerHTML = `
+          <img src="${escapeHtml(champion.avatar || "/assets/default-avatar.png")}" alt="">
+          <div>
+            <span>🏆 Campeão do torneio</span>
+            <strong>${escapeHtml(champion.name)}</strong>
+            <p>${champion.matchPoints ?? champion.points ?? 0} pontos</p>
+            <small>${champion.matchWins ?? champion.wins ?? 0}V - ${champion.matchDraws ?? champion.draws ?? 0}E - ${champion.matchLosses ?? champion.losses ?? 0}D</small>
+          </div>
+        `;
+      }
+    }
 
     standingsBody.innerHTML = standings.map((player, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(player.name)}</td>
-        <td>${player.points}</td>
-        <td>${player.wins}</td>
-        <td>${player.draws}</td>
-        <td>${player.losses}</td>
-        <td>${player.byes}</td>
+        <td>${player.matchPoints ?? player.points ?? 0}</td>
+        <td>${player.matchWins ?? player.wins ?? 0}</td>
+        <td>${player.matchDraws ?? player.draws ?? 0}</td>
+        <td>${player.matchLosses ?? player.losses ?? 0}</td>
+        <td>${player.gameWins ?? 0}</td>
+        <td>${player.gameLosses ?? 0}</td>
+        <td>${gameDifferentialLabel(player)}</td>
+        <td>${formatPercent(player.opponentMatchWinPercentage)}</td>
       </tr>
     `).join("");
   }
@@ -270,12 +328,13 @@
     const p1 = playerName(match.player1Id);
     const p2 = playerName(match.player2Id);
     const roomUrl = match.roomUrl || `/sala.html?room=${encodeURIComponent(match.roomId)}`;
-    const resultLabel = {
+    const resultLabel = match.resultLabel || {
       player1_win: `Vitória ${p1}`,
       player2_win: `Vitória ${p2}`,
       draw: "Empate",
       bye: "BYE"
     }[match.result] || "Sem resultado";
+    const scoreOptions = getScoreOptions(match);
 
     card.innerHTML = `
       <div class="match-title">
@@ -304,6 +363,18 @@
       </div>
     `;
 
+    const resultRow = card.querySelector(".result-row");
+    if (resultRow) {
+      resultRow.innerHTML = scoreOptions.map(option => `
+        <button type="button"
+          data-p1-games="${option.player1GameWins}"
+          data-p2-games="${option.player2GameWins}"
+          ${canReport(match) && !match.isBye ? "" : "disabled"}>
+          ${escapeHtml(option.label)}
+        </button>
+      `).join("");
+    }
+
     card.querySelectorAll("[data-open-room]").forEach(button => {
       button.addEventListener("click", () => window.open(button.dataset.openRoom, "_blank", "noopener,noreferrer"));
     });
@@ -319,10 +390,13 @@
         alert(error.message);
       }
     });
-    card.querySelectorAll("[data-result]").forEach(button => {
+    card.querySelectorAll("[data-p1-games]").forEach(button => {
       button.addEventListener("click", async () => {
         try {
-          await mutate(`/${activeTournament.id}/matches/${match.id}/result`, { result: button.dataset.result });
+          await mutate(`/${activeTournament.id}/matches/${match.id}/result`, {
+            player1GameWins: Number(button.dataset.p1Games),
+            player2GameWins: Number(button.dataset.p2Games)
+          });
           await loadTournament();
         } catch (error) {
           alert(error.message);

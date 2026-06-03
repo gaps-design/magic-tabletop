@@ -176,6 +176,42 @@ form{
   grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
   gap:10px;
 }
+.champion-box{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin:0 0 16px;
+  padding:16px;
+  border:1px solid rgba(245,215,122,.48);
+  border-radius:14px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(245,215,122,.2), transparent 34%),
+    rgba(2,6,23,.58);
+}
+.champion-box.hidden{display:none}
+.champion-box img{
+  width:64px;
+  height:64px;
+  border:2px solid rgba(245,215,122,.7);
+  border-radius:50%;
+  object-fit:cover;
+}
+.champion-box span{
+  color:var(--gold);
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.champion-box strong{
+  display:block;
+  font-size:22px;
+}
+.champion-box p,
+.champion-box small{
+  margin:3px 0 0;
+  color:var(--muted);
+}
 .player-card{
   display:flex;
   align-items:center;
@@ -202,6 +238,7 @@ th,td{
   padding:10px;
   border-bottom:1px solid rgba(255,255,255,.08);
   text-align:left;
+  white-space:nowrap;
 }
 th{color:var(--gold)}
 .rounds-root{
