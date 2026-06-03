@@ -642,7 +642,15 @@ function addSpectator(socket, roomId, user, reason = "") {
         role: "camera",
         linkedPlayer: c.linkedPlayer,
         name: c.name || "Câmera"
-      }))
+      })),
+      ...room.spectators
+        .filter(id => id !== socket.id)
+        .map(id => ({
+          socketId: id,
+          role: "spectator",
+          name: clientProfiles[id]?.name || "Espectador",
+          photo: clientProfiles[id]?.photo || "/assets/default-avatar.png"
+        }))
     ]
   });
 

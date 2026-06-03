@@ -642,6 +642,13 @@ async function startWebcam(
         const settings = audioTrack.getSettings();
         selectedMicrophoneId = settings.deviceId || selectedMicrophoneId;
         localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
+        audioLog("[RTC_DEBUG][AUDIO] local audio track ready", {
+            role: currentRole,
+            trackId: audioTrack.id,
+            enabled: audioTrack.enabled,
+            readyState: audioTrack.readyState,
+            deviceId: settings.deviceId || "default"
+        });
 
         if (microphoneSelect) {
             microphoneSelect.value = selectedMicrophoneId;
@@ -778,17 +785,25 @@ async function switchMicrophone(microphoneId) {
 
 function replaceTrackOnPeers(kind, newTrack) {
     Object.entries(peerConnections).forEach(([socketId, peer]) => {
+        if (kind === "audio") {
+            const changed = upsertAudioTrackForPeer(peer, newTrack, socketId, "replace-track-on-peers");
+            if (changed) {
+                requestRenegotiationAfterAudioUpdate(socketId, "replace-track-on-peers");
+            }
+            return;
+        }
+
         const sender = findSenderByKind(peer, kind);
 
-        if (sender) {
-            sender.replaceTrack(newTrack).catch(error => {
-                rtcLog(socketId, "replaceTrack failed", {
-                    kind,
-                    errorName: error?.name,
-                    errorMessage: error?.message
-                });
+        if (!sender) return;
+
+        sender.replaceTrack(newTrack).catch(error => {
+            rtcLog(socketId, "replaceTrack failed", {
+                kind,
+                errorName: error?.name,
+                errorMessage: error?.message
             });
-        }
+        });
     });
 }
 
@@ -798,17 +813,129 @@ function findSenderByKind(peer, kind) {
     return peer.getSenders().find(sender => sender.track?.kind === kind) || null;
 }
 
+function hasTransceiverByKind(peer, kind) {
+    return !!peer?.getTransceivers?.().some(transceiver =>
+        transceiver.sender?.track?.kind === kind ||
+        transceiver.receiver?.track?.kind === kind ||
+        transceiver.mid === kind
+    );
+}
+
+function ensureReceiveTransceivers(peer, targetId) {
+    if (!peer || currentRole === "camera") return;
+
+    const hasLocalVideo = !!localStream?.getVideoTracks?.().some(track => track.readyState === "live");
+    const hasLocalAudio = !!localStream?.getAudioTracks?.().some(track => track.readyState === "live");
+
+    if (currentRole === "spectator" && !hasLocalVideo && !hasTransceiverByKind(peer, "video")) {
+        peer.addTransceiver("video", { direction: "recvonly" });
+        rtcLog(targetId, "recvonly video transceiver added for spectator");
+    }
+
+    if (!hasLocalAudio && !hasTransceiverByKind(peer, "audio")) {
+        peer.addTransceiver("audio", { direction: "recvonly" });
+        rtcLog(targetId, "recvonly audio transceiver added");
+    }
+}
+
+function getLocalAudioTrack() {
+    return localStream?.getAudioTracks?.().find(track => track.readyState === "live") || null;
+}
+
+function upsertAudioTrackForPeer(peerConnection, audioTrack, targetId, reason = "audio-upsert") {
+    if (!peerConnection || !audioTrack || !localStream) return false;
+
+    if (currentRole === "camera") {
+        audioLog("[RTC_DEBUG][AUDIO] skipped audio track for camera-only client", {
+            targetId,
+            reason,
+            trackId: audioTrack.id
+        });
+        return false;
+    }
+
+    const existingSender = findSenderByKind(peerConnection, "audio");
+
+    if (existingSender) {
+        if (existingSender.track === audioTrack) {
+            rtcLog(targetId, "local audio sender already has track", {
+                reason,
+                trackId: audioTrack.id
+            });
+            return false;
+        }
+
+        audioLog("[RTC_DEBUG][AUDIO] replacing audio sender track", {
+            targetId,
+            reason,
+            previousTrackId: existingSender.track?.id || null,
+            nextTrackId: audioTrack.id
+        });
+
+        existingSender.replaceTrack(audioTrack).catch(error => {
+            rtcLog(targetId, "replaceTrack failed", {
+                kind: "audio",
+                reason,
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        });
+        return true;
+    }
+
+    audioLog("[RTC_DEBUG][AUDIO] adding audio sender to peer", {
+        targetId,
+        reason,
+        trackId: audioTrack.id
+    });
+
+    peerConnection.addTrack(audioTrack, localStream);
+    return true;
+}
+
+function requestRenegotiationAfterAudioUpdate(targetId, reason = "audio-update") {
+    const info = peerInfo[targetId];
+    const peer = peerConnections[targetId];
+
+    if (!targetId || !peer || isPeerClosed(peer)) return;
+    if (currentRole === "camera") return;
+    if (currentRole === "camera" && info?.role === "camera") return;
+
+    audioLog("[RTC_DEBUG][AUDIO] renegotiation requested after audio update", {
+        targetId,
+        reason,
+        remoteRole: info?.role || "unknown",
+        signalingState: peer.signalingState
+    });
+
+    createOffer(targetId, info || {}, { waitForStable: true }).catch(error => {
+        rtcLog(targetId, "audio renegotiation failed", {
+            reason,
+            errorName: error?.name,
+            errorMessage: error?.message
+        }, "warn");
+    });
+}
+
+function syncLocalAudioTrackToPeers(reason = "audio-sync") {
+    const audioTrack = getLocalAudioTrack();
+    if (!audioTrack) return;
+
+    Object.entries(peerConnections).forEach(([socketId, peer]) => {
+        const changed = upsertAudioTrackForPeer(peer, audioTrack, socketId, reason);
+        if (changed) {
+            requestRenegotiationAfterAudioUpdate(socketId, reason);
+        }
+    });
+}
+
 function addOrReplaceLocalTrack(peer, targetId, track, stream, reason = "local-track-sync") {
     if (!peer || !track || !stream) return;
 
     const kind = track.kind;
 
-    if (kind === "audio" && currentRole === "camera") {
-        audioLog("[RTC_DEBUG][AUDIO] skipped audio track for camera-only client", {
-            targetId,
-            reason,
-            trackId: track.id
-        });
+    if (kind === "audio") {
+        upsertAudioTrackForPeer(peer, track, targetId, reason);
         return;
     }
 
@@ -840,14 +967,6 @@ function addOrReplaceLocalTrack(peer, targetId, track, stream, reason = "local-t
             }, "warn");
         });
         return;
-    }
-
-    if (kind === "audio") {
-        audioLog("[RTC_DEBUG][AUDIO] adding audio sender", {
-            targetId,
-            reason,
-            trackId: track.id
-        });
     }
 
     peer.addTrack(track, stream);
@@ -1078,9 +1197,12 @@ function createPeerConnection(targetId) {
         localStream.getTracks().forEach(track => {
             addOrReplaceLocalTrack(peer, targetId, track, localStream, "create-peer");
         });
+        ensureReceiveTransceivers(peer, targetId);
     } else {
         peer.addTransceiver("video", { direction: "recvonly" });
-        peer.addTransceiver("audio", { direction: "recvonly" });
+        if (currentRole !== "camera") {
+            peer.addTransceiver("audio", { direction: "recvonly" });
+        }
         rtcLog(targetId, "recvonly transceivers added");
     }
 
@@ -1094,6 +1216,15 @@ function createPeerConnection(targetId) {
             streamId: stream?.id,
             streamTrackCount: stream?.getTracks?.().length || 0
         });
+
+        if (event.track?.kind === "audio") {
+            audioLog("[RTC_DEBUG][AUDIO] remote audio track received", {
+                targetId,
+                muted: event.track.muted,
+                readyState: event.track.readyState,
+                streamId: stream?.id || null
+            });
+        }
 
         event.track.onunmute = () => {
             rtcLog(targetId, "remote track unmuted", {
@@ -1139,6 +1270,11 @@ function createPeerConnection(targetId) {
         } else {
             rtcLog(targetId, "ICE gathering complete");
         }
+    };
+
+    peer.onnegotiationneeded = () => {
+        if (!getLocalAudioTrack() || currentRole === "camera") return;
+        requestRenegotiationAfterAudioUpdate(targetId, "negotiationneeded");
     };
 
     peer.oniceconnectionstatechange = () => {
@@ -2296,13 +2432,6 @@ socket.on("existing-peers", async ({ peers }) => {
 
         savePeerInfo(peerData.socketId, peerData);
 
-        if (peerData.role === "spectator") {
-            spectatorLog("skipping offer to spectator peer", {
-                target: peerData.socketId
-            });
-            continue;
-        }
-
         if (currentRole === "camera" && peerData.role === "camera") {
             cameraLog("skipping camera to camera peer offer", {
                 target: peerData.socketId
@@ -2334,8 +2463,8 @@ socket.on("user-connected", (data) => {
         return;
     }
 
-    if (currentRole === "spectator" && data.role !== "spectator") {
-        spectatorLog("spectator creating offer to new media sender", {
+    if (currentRole === "spectator" || (currentRole === "player" && data.role === "spectator")) {
+        spectatorLog("creating offer for spectator audio path", {
             target: data.socketId,
             remoteRole: data.role
         });
@@ -2687,10 +2816,14 @@ window.enableSpectatorMicrophone = async function() {
             trackId: existingAudioTrack.id,
             peerCount: Object.keys(peerConnections).length
         });
-
-        Object.entries(peerConnections).forEach(([socketId, peer]) => {
-            addOrReplaceLocalTrack(peer, socketId, existingAudioTrack, localStream, "spectator-mic-reenable");
+        audioLog("[RTC_DEBUG][AUDIO] spectator audio track ready", {
+            trackId: existingAudioTrack.id,
+            enabled: existingAudioTrack.enabled,
+            readyState: existingAudioTrack.readyState,
+            reused: true
         });
+
+        syncLocalAudioTrackToPeers("spectator-mic-reenable");
 
         updateMediaStatus();
 
@@ -2751,6 +2884,12 @@ window.enableSpectatorMicrophone = async function() {
         readyState: audioTrack.readyState,
         enabled: audioTrack.enabled
     });
+    audioLog("[RTC_DEBUG][AUDIO] spectator audio track ready", {
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        deviceId: trackSettings.deviceId || "default"
+    });
 
     micEnabled = true;
     audioTrack.enabled = true;
@@ -2770,9 +2909,7 @@ window.enableSpectatorMicrophone = async function() {
         trackId: audioTrack.id
     });
 
-    Object.entries(peerConnections).forEach(([socketId, peer]) => {
-        addOrReplaceLocalTrack(peer, socketId, audioTrack, localStream, "spectator-mic-enable");
-    });
+    syncLocalAudioTrackToPeers("spectator-mic-enable");
 
     updateMediaStatus();
 
@@ -2783,18 +2920,6 @@ window.enableSpectatorMicrophone = async function() {
         });
     }
 
-    for (const [socketId, info] of Object.entries(peerInfo)) {
-        if (info.role === "player" || info.role === "camera") {
-            audioLog("[SPECTATOR] renegotiation started", {
-                target: socketId,
-                role: info.role,
-                playerNumber: info.playerNumber
-            });
-            await createOffer(socketId, info, { waitForStable: true }).catch(error => {
-                console.warn("Falha ao liberar microfone do espectador:", error);
-            });
-        }
-    }
 };
 
 window.disableSpectatorMicrophone = async function() {
