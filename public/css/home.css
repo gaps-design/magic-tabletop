@@ -1681,6 +1681,26 @@ body{
     linear-gradient(135deg, rgba(12,28,50,0.92), rgba(44,27,78,0.82));
 }
 
+.partners-home-card{
+  border-color:rgba(34,211,238,0.34);
+  background:
+    radial-gradient(circle at 85% 16%, rgba(34,211,238,0.16), transparent 34%),
+    linear-gradient(135deg, rgba(5,19,34,0.92), rgba(20,33,46,0.84));
+}
+
+.partner-logo-placeholder{
+  width:min(260px,100%);
+  min-height:86px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px dashed rgba(247,215,129,0.48);
+  border-radius:18px;
+  color:#f7d781;
+  background:rgba(0,0,0,0.22);
+  font-weight:800;
+}
+
 .top-links a:hover{
   transform:translateY(-2px);
   background:rgba(217,170,79,0.14);

@@ -55,6 +55,7 @@ const closeObsBroadcastBtn = document.getElementById("closeObsBroadcastBtn");
 const obsBroadcastLinks = document.getElementById("obsBroadcastLinks");
 const copyAllObsLinksBtn = document.getElementById("copyAllObsLinksBtn");
 const openObsCoreLinksBtn = document.getElementById("openObsCoreLinksBtn");
+const tournamentRoomToggleBtn = document.getElementById("tournamentRoomToggleBtn");
 const tournamentRoomPanel = document.getElementById("tournamentRoomPanel");
 const tournamentRoomTitle = document.getElementById("tournamentRoomTitle");
 const tournamentRoomDetails = document.getElementById("tournamentRoomDetails");
@@ -144,6 +145,7 @@ let currentMatchScore = { 1: 0, 2: 0 };
 const spectatorLocalPlayerMute = { 1: false, 2: false };
 let hasReceivedMatchScore = false;
 let tournamentRoomContext = null;
+let tournamentRoomPanelOpen = false;
 let victoryOverlayTimer = null;
 const previousOfficialLife = {};
 const lifeDeltaTimers = {};
@@ -445,6 +447,7 @@ function getTournamentRoomScoreOptions(match, p1Name, p2Name) {
     return scores.map(([player1GameWins, player2GameWins, label]) => ({
         player1GameWins,
         player2GameWins,
+        result: player1GameWins > player2GameWins ? "player1_win" : player2GameWins > player1GameWins ? "player2_win" : "draw",
         label
     }));
 }
@@ -472,6 +475,18 @@ async function reportTournamentRoomResult(score) {
     } catch (error) {
         showRoomToast(error.message);
     }
+}
+
+function updateTournamentRoomPanelVisibility() {
+    tournamentRoomToggleBtn?.classList.toggle("hidden", !tournamentRoomContext);
+    tournamentRoomToggleBtn?.classList.toggle("active", tournamentRoomPanelOpen);
+    tournamentRoomPanel?.classList.toggle("hidden", !tournamentRoomContext || !tournamentRoomPanelOpen);
+}
+
+function toggleTournamentRoomPanel() {
+    if (!tournamentRoomContext) return;
+    tournamentRoomPanelOpen = !tournamentRoomPanelOpen;
+    updateTournamentRoomPanelVisibility();
 }
 
 function renderTournamentRoomPanel() {
@@ -511,12 +526,13 @@ function renderTournamentRoomPanel() {
         getTournamentRoomScoreOptions(match, p1Name, p2Name).forEach(option => {
             tournamentRoomActions.appendChild(createTournamentRoomButton(option.label, () => reportTournamentRoomResult({
                 player1GameWins: option.player1GameWins,
-                player2GameWins: option.player2GameWins
+                player2GameWins: option.player2GameWins,
+                result: option.result
             }), isBye));
         });
     }
 
-    tournamentRoomPanel.classList.remove("hidden");
+    updateTournamentRoomPanelVisibility();
 }
 
 async function loadTournamentRoomContext() {
@@ -2630,6 +2646,10 @@ window.restoreDefaultLayout = restoreDefaultLayout;
 
 if (cleanModeBtn) {
     cleanModeBtn.addEventListener("click", toggleCleanMode);
+}
+
+if (tournamentRoomToggleBtn) {
+    tournamentRoomToggleBtn.addEventListener("click", toggleTournamentRoomPanel);
 }
 
 if (cleanModeBtnBottom) {

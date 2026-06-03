@@ -152,6 +152,7 @@
     return scores.map(([player1GameWins, player2GameWins, label]) => ({
       player1GameWins,
       player2GameWins,
+      result: player1GameWins > player2GameWins ? "player1_win" : player2GameWins > player1GameWins ? "player2_win" : "draw",
       label
     }));
   }
@@ -369,6 +370,7 @@
         <button type="button"
           data-p1-games="${option.player1GameWins}"
           data-p2-games="${option.player2GameWins}"
+          data-result="${option.result}"
           ${canReport(match) && !match.isBye ? "" : "disabled"}>
           ${escapeHtml(option.label)}
         </button>
@@ -395,7 +397,8 @@
         try {
           await mutate(`/${activeTournament.id}/matches/${match.id}/result`, {
             player1GameWins: Number(button.dataset.p1Games),
-            player2GameWins: Number(button.dataset.p2Games)
+            player2GameWins: Number(button.dataset.p2Games),
+            result: button.dataset.result
           });
           await loadTournament();
         } catch (error) {

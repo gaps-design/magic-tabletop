@@ -1338,6 +1338,14 @@ function normalizeTournamentScore(tournament, match, body = {}) {
   let player1GameWins = Number(body.player1GameWins);
   let player2GameWins = Number(body.player2GameWins);
 
+  if ((!Number.isFinite(player1GameWins) || !Number.isFinite(player2GameWins)) && typeof body.score === "string") {
+    const scoreMatch = body.score.match(/(\d+)\s*x\s*(\d+)/i);
+    if (scoreMatch) {
+      player1GameWins = Number(scoreMatch[1]);
+      player2GameWins = Number(scoreMatch[2]);
+    }
+  }
+
   if (!Number.isFinite(player1GameWins) || !Number.isFinite(player2GameWins)) {
     if (body.result === "draw") {
       player1GameWins = tournament.format === "BO1" ? 0 : 1;
@@ -1359,7 +1367,7 @@ function normalizeTournamentScore(tournament, match, body = {}) {
     : ["2-0", "2-1", "1-1", "0-2", "1-2"];
   const key = `${player1GameWins}-${player2GameWins}`;
   if (!validScores.includes(key)) {
-    throw new Error("Placar inv?lido para o formato do torneio.");
+    throw new Error("Resultado inv?lido.");
   }
 
   let result = "draw";
@@ -1676,7 +1684,7 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
     res.status(404).json({ error: "Partida n?o encontrada." });
     return;
   }
-  if (!["player1_win", "player2_win", "draw"].includes(req.body.result)) {
+  if (false && !["player1_win", "player2_win", "draw"].includes(req.body.result)) {
     res.status(400).json({ error: "Resultado inv?lido." });
     return;
   }
