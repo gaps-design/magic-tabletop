@@ -1666,6 +1666,21 @@ body{
   display:none;
 }
 
+.top-links a[href="/torneios.html"]{
+  display:inline-flex !important;
+}
+
+.top-links a[href="/torneios.html"]::before{
+  content:"🏆 " !important;
+}
+
+.tournament-home-card{
+  border-color:rgba(245,215,122,0.36);
+  background:
+    radial-gradient(circle at 85% 18%, rgba(245,215,122,0.18), transparent 34%),
+    linear-gradient(135deg, rgba(12,28,50,0.92), rgba(44,27,78,0.82));
+}
+
 .top-links a:hover{
   transform:translateY(-2px);
   background:rgba(217,170,79,0.14);
