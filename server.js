@@ -23,6 +23,7 @@ const socketPresence = new Map();
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
+let activeTournament = null;
 const CARD_SCAN_MESSAGE_LIMIT = 650;
 const CARD_SCAN_FIELD_LIMIT = 180;
 const CARD_SCAN_ORACLE_LIMIT = 420;
@@ -1001,6 +1002,497 @@ function moveSocketPresenceToLobby(socketId) {
 
 io.on("connection", (socket) => {
   console.log("Conectado:", socket.id);
+
+/* =========================
+   TORNEIOS MVP
+========================= */
+
+function createId(prefix = "id") {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getRequestUser(req) {
+  const user = normalizeUser(req.body?.user || {});
+  const id = user.uid || user.email || "";
+  return id ? { ...user, id } : null;
+}
+
+function requireTournamentUser(req, res) {
+  const user = getRequestUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Entre com Google para usar torneios." });
+    return null;
+  }
+
+  return user;
+}
+
+function isTournamentOwner(tournament, user) {
+  return !!(tournament && user && tournament.ownerId === user.id);
+}
+
+function findTournamentPlayer(tournament, userId) {
+  return tournament.players.find(player => player.userId === userId || player.id === userId);
+}
+
+function publicTournament(tournament) {
+  if (!tournament) return null;
+  return {
+    id: tournament.id,
+    name: tournament.name,
+    ownerId: tournament.ownerId,
+    maxPlayers: tournament.maxPlayers,
+    roundsTotal: tournament.roundsTotal,
+    currentRound: tournament.currentRound,
+    format: tournament.format,
+    status: tournament.status,
+    inviteCode: tournament.inviteCode,
+    createdAt: tournament.createdAt,
+    updatedAt: tournament.updatedAt,
+    players: tournament.players,
+    rounds: tournament.rounds,
+    matches: tournament.matches
+  };
+}
+
+function recalculateTournamentStandings(tournament) {
+  tournament.players.forEach(player => {
+    player.points = 0;
+    player.wins = 0;
+    player.draws = 0;
+    player.losses = 0;
+    player.byes = 0;
+  });
+
+  tournament.matches.forEach(match => {
+    if (!match.result) return;
+
+    const p1 = findTournamentPlayer(tournament, match.player1Id);
+    const p2 = findTournamentPlayer(tournament, match.player2Id);
+
+    if (match.result === "bye" && p1) {
+      p1.points += 3;
+      p1.wins += 1;
+      p1.byes += 1;
+      return;
+    }
+
+    if (match.result === "draw") {
+      if (p1) {
+        p1.points += 1;
+        p1.draws += 1;
+      }
+      if (p2) {
+        p2.points += 1;
+        p2.draws += 1;
+      }
+      return;
+    }
+
+    if (match.result === "player1_win") {
+      if (p1) {
+        p1.points += 3;
+        p1.wins += 1;
+      }
+      if (p2) p2.losses += 1;
+      return;
+    }
+
+    if (match.result === "player2_win") {
+      if (p2) {
+        p2.points += 3;
+        p2.wins += 1;
+      }
+      if (p1) p1.losses += 1;
+    }
+  });
+
+  tournament.rounds.forEach(round => {
+    const roundMatches = tournament.matches.filter(match => match.roundId === round.id);
+    round.status = roundMatches.length && roundMatches.every(match => !!match.result) ? "completed" : round.status;
+  });
+}
+
+function getPairKey(playerA, playerB) {
+  return [playerA, playerB].sort().join("::");
+}
+
+function hasPlayed(tournament, playerA, playerB) {
+  const key = getPairKey(playerA, playerB);
+  return tournament.matches.some(match =>
+    match.player1Id && match.player2Id && getPairKey(match.player1Id, match.player2Id) === key
+  );
+}
+
+function getSortedTournamentPlayers(tournament) {
+  return tournament.players
+    .filter(player => !player.dropped)
+    .sort((a, b) =>
+      b.points - a.points ||
+      b.wins - a.wins ||
+      a.name.localeCompare(b.name)
+    );
+}
+
+function createTournamentRound(tournament) {
+  const previousRound = tournament.rounds.find(round => round.roundNumber === tournament.currentRound);
+  if (previousRound) {
+    const openMatches = tournament.matches.filter(match => match.roundId === previousRound.id && !match.result);
+    if (openMatches.length) {
+      throw new Error("A rodada atual ainda tem partidas sem resultado.");
+    }
+  }
+
+  if (tournament.currentRound >= tournament.roundsTotal) {
+    throw new Error("Todas as rodadas j? foram lan?adas.");
+  }
+
+  const roundNumber = tournament.currentRound + 1;
+  const round = {
+    id: createId("round"),
+    tournamentId: tournament.id,
+    roundNumber,
+    status: "active",
+    createdAt: Date.now()
+  };
+
+  const players = getSortedTournamentPlayers(tournament);
+  const unpaired = [...players];
+  const pairings = [];
+
+  if (roundNumber === 1) {
+    unpaired.sort(() => Math.random() - 0.5);
+  }
+
+  if (unpaired.length % 2 === 1) {
+    const byePlayer = [...unpaired].reverse().find(player => player.byes === 0) || unpaired[unpaired.length - 1];
+    unpaired.splice(unpaired.findIndex(player => player.id === byePlayer.id), 1);
+    pairings.push([byePlayer, null]);
+  }
+
+  while (unpaired.length) {
+    const playerA = unpaired.shift();
+    let opponentIndex = unpaired.findIndex(player => !hasPlayed(tournament, playerA.id, player.id));
+    if (opponentIndex < 0) opponentIndex = 0;
+    const playerB = unpaired.splice(opponentIndex, 1)[0];
+    pairings.push([playerA, playerB]);
+  }
+
+  const matches = pairings.map(([playerA, playerB], index) => {
+    const tableNumber = index + 1;
+    const roomId = `trn-${tournament.inviteCode}-r${roundNumber}-m${tableNumber}`;
+    return {
+      id: createId("match"),
+      tournamentId: tournament.id,
+      roundId: round.id,
+      roundNumber,
+      tableNumber,
+      player1Id: playerA?.id || "",
+      player2Id: playerB?.id || "",
+      roomId,
+      roomUrl: `/sala.html?room=${encodeURIComponent(roomId)}&tournament=${encodeURIComponent(tournament.id)}&round=${roundNumber}&table=${tableNumber}`,
+      status: playerB ? "pending" : "completed",
+      result: playerB ? null : "bye",
+      winnerId: playerB ? null : playerA.id,
+      reportedBy: playerB ? null : "system",
+      reportedAt: playerB ? null : Date.now(),
+      externalPlay: false,
+      externalUrl: "",
+      isBye: !playerB,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  });
+
+  tournament.currentRound = roundNumber;
+  tournament.status = "in_progress";
+  tournament.rounds.push(round);
+  tournament.matches.push(...matches);
+  tournament.updatedAt = Date.now();
+  recalculateTournamentStandings(tournament);
+}
+
+function validateTournamentUrl(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+function findTournamentMatch(tournament, matchId) {
+  return tournament.matches.find(match => match.id === matchId);
+}
+
+app.use("/api/tournaments", express.json({ limit: "1mb" }));
+
+app.get("/torneios", (req, res) => {
+  res.redirect("/torneios.html");
+});
+
+app.get("/api/tournaments/active", (req, res) => {
+  res.json({ tournament: publicTournament(activeTournament) });
+});
+
+app.get("/api/tournaments/room/:roomId", (req, res) => {
+  const roomId = req.params.roomId;
+  const match = activeTournament?.matches?.find(item => item.roomId === roomId);
+  if (!activeTournament || !match) {
+    res.status(404).json({ error: "Partida de torneio n?o encontrada." });
+    return;
+  }
+
+  res.json({
+    tournament: {
+      id: activeTournament.id,
+      name: activeTournament.name,
+      format: activeTournament.format
+    },
+    match,
+    player1: findTournamentPlayer(activeTournament, match.player1Id),
+    player2: findTournamentPlayer(activeTournament, match.player2Id)
+  });
+});
+
+app.post("/api/tournaments", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  if (activeTournament && activeTournament.status !== "finished") {
+    res.status(409).json({ error: "J? existe um torneio ativo." });
+    return;
+  }
+
+  const name = limitText(req.body.name, 80);
+  const maxPlayers = Math.min(64, Math.max(2, Number(req.body.maxPlayers || 8)));
+  const roundsTotal = Math.min(8, Math.max(1, Number(req.body.roundsTotal || 3)));
+  const format = req.body.format === "BO1" ? "BO1" : "BO3";
+
+  if (!name) {
+    res.status(400).json({ error: "Informe o nome do torneio." });
+    return;
+  }
+
+  const now = Date.now();
+  const ownerPlayer = {
+    id: user.id,
+    tournamentId: "",
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    avatar: user.photo,
+    points: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    byes: 0,
+    dropped: false,
+    joinedAt: now
+  };
+
+  activeTournament = {
+    id: createId("tournament"),
+    name,
+    ownerId: user.id,
+    maxPlayers,
+    roundsTotal,
+    currentRound: 0,
+    format,
+    status: "registration_open",
+    inviteCode: Math.random().toString(36).slice(2, 8),
+    createdAt: now,
+    updatedAt: now,
+    players: [ownerPlayer],
+    rounds: [],
+    matches: []
+  };
+  ownerPlayer.tournamentId = activeTournament.id;
+
+  res.status(201).json({ tournament: publicTournament(activeTournament) });
+});
+
+app.post("/api/tournaments/:id/join", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id) {
+    res.status(404).json({ error: "Torneio n?o encontrado." });
+    return;
+  }
+  if (tournament.status !== "registration_open") {
+    res.status(400).json({ error: "Inscri??es encerradas." });
+    return;
+  }
+  if (findTournamentPlayer(tournament, user.id)) {
+    res.status(409).json({ error: "Voc? j? est? inscrito neste torneio." });
+    return;
+  }
+  if (tournament.players.filter(player => !player.dropped).length >= tournament.maxPlayers) {
+    res.status(400).json({ error: "Torneio cheio." });
+    return;
+  }
+
+  tournament.players.push({
+    id: user.id,
+    tournamentId: tournament.id,
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    avatar: user.photo,
+    points: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    byes: 0,
+    dropped: false,
+    joinedAt: Date.now()
+  });
+  tournament.updatedAt = Date.now();
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/remove-player", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id) {
+    res.status(404).json({ error: "Torneio n?o encontrado." });
+    return;
+  }
+  if (!isTournamentOwner(tournament, user)) {
+    res.status(403).json({ error: "Apenas o criador pode remover jogadores." });
+    return;
+  }
+  if (tournament.status !== "registration_open") {
+    res.status(400).json({ error: "S? ? poss?vel remover antes do in?cio." });
+    return;
+  }
+
+  tournament.players = tournament.players.filter(player => player.id !== req.body.playerId || player.userId === tournament.ownerId);
+  tournament.updatedAt = Date.now();
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/close-registration", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id) {
+    res.status(404).json({ error: "Torneio n?o encontrado." });
+    return;
+  }
+  if (!isTournamentOwner(tournament, user)) {
+    res.status(403).json({ error: "Apenas o criador pode encerrar inscri??es." });
+    return;
+  }
+
+  tournament.status = "registration_closed";
+  tournament.updatedAt = Date.now();
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/launch-round", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id) {
+    res.status(404).json({ error: "Torneio n?o encontrado." });
+    return;
+  }
+  if (!isTournamentOwner(tournament, user)) {
+    res.status(403).json({ error: "Apenas o criador pode lan?ar rodadas." });
+    return;
+  }
+  if (tournament.players.filter(player => !player.dropped).length < 2) {
+    res.status(400).json({ error: "? preciso pelo menos 2 jogadores." });
+    return;
+  }
+
+  try {
+    createTournamentRound(tournament);
+    res.json({ tournament: publicTournament(tournament) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/tournaments/:id/matches/:matchId/external", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
+  if (!tournament || !match) {
+    res.status(404).json({ error: "Partida n?o encontrada." });
+    return;
+  }
+
+  const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
+  if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
+    res.status(403).json({ error: "Voc? n?o pode alterar esta partida." });
+    return;
+  }
+
+  match.externalPlay = true;
+  match.externalUrl = validateTournamentUrl(req.body.externalUrl || "");
+  match.status = "playing_external";
+  match.updatedAt = Date.now();
+  tournament.updatedAt = Date.now();
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
+  if (!tournament || !match) {
+    res.status(404).json({ error: "Partida n?o encontrada." });
+    return;
+  }
+  if (!["player1_win", "player2_win", "draw"].includes(req.body.result)) {
+    res.status(400).json({ error: "Resultado inv?lido." });
+    return;
+  }
+
+  const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
+  if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
+    res.status(403).json({ error: "Voc? s? pode lan?ar resultado da sua partida." });
+    return;
+  }
+
+  match.result = req.body.result;
+  match.winnerId = req.body.result === "player1_win" ? match.player1Id : req.body.result === "player2_win" ? match.player2Id : null;
+  match.status = "completed";
+  match.reportedBy = user.id;
+  match.reportedAt = Date.now();
+  match.updatedAt = Date.now();
+  tournament.updatedAt = Date.now();
+  recalculateTournamentStandings(tournament);
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/finish", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id) {
+    res.status(404).json({ error: "Torneio n?o encontrado." });
+    return;
+  }
+  if (!isTournamentOwner(tournament, user)) {
+    res.status(403).json({ error: "Apenas o criador pode encerrar o torneio." });
+    return;
+  }
+
+  tournament.status = "finished";
+  tournament.updatedAt = Date.now();
+  recalculateTournamentStandings(tournament);
+  res.json({ tournament: publicTournament(tournament) });
+});
 
   socket.emit("lobby-state", buildLobbyState());
   broadcastPresence(socket);

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Torneios ResenhaON</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/css/tournaments.css">
+</head>
+<body>
+  <header class="tournament-topbar">
+    <a class="brand" href="/">
+      <img src="/assets/logo-resenhaon.png" alt="ResenhaON">
+      <span>Torneios</span>
+    </a>
+    <nav>
+      <a href="/">Lobby</a>
+      <a href="/salas.html">Salão de Jogos</a>
+      <button id="googleLoginBtn" type="button">Entrar com Google</button>
+    </nav>
+  </header>
+
+  <main class="tournament-shell">
+    <section class="hero-card">
+      <div>
+        <p class="eyebrow">MVP Companion ResenhaON</p>
+        <h1>Torneios rápidos integrados às mesas</h1>
+        <p>Crie um torneio, inscreva jogadores, lance rodadas e envie cada confronto para uma sala do ResenhaON ou para um link externo.</p>
+      </div>
+      <button id="refreshTournamentBtn" type="button">Atualizar</button>
+    </section>
+
+    <section id="authNotice" class="notice hidden">
+      Entre com Google para criar ou participar de torneios.
+    </section>
+
+    <section class="grid">
+      <form id="createTournamentForm" class="panel">
+        <h2>Criar torneio</h2>
+        <label>
+          Nome do torneio
+          <input id="tournamentNameInput" maxlength="80" required placeholder="Ex: Modern da Resenha">
+        </label>
+        <div class="form-row">
+          <label>
+            Máx. jogadores
+            <input id="maxPlayersInput" type="number" min="2" max="64" value="8" required>
+          </label>
+          <label>
+            Rodadas
+            <input id="roundsInput" type="number" min="1" max="8" value="3" required>
+          </label>
+        </div>
+        <label>
+          Formato
+          <select id="formatInput">
+            <option value="BO1">BO1</option>
+            <option value="BO3" selected>BO3</option>
+          </select>
+        </label>
+        <button type="submit">Criar torneio</button>
+        <p class="muted">Regra inicial: apenas 1 torneio ativo por vez.</p>
+      </form>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Torneio ativo</h2>
+          <span id="tournamentStatusBadge" class="badge">---</span>
+        </div>
+        <div id="activeTournamentBox" class="empty-state">Nenhum torneio ativo no momento.</div>
+        <div id="ownerActions" class="actions hidden"></div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Jogadores inscritos</h2>
+        <button id="joinTournamentBtn" type="button">Entrar no torneio</button>
+      </div>
+      <div id="playersList" class="players-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Classificação</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Jogador</th>
+              <th>Pts</th>
+              <th>V</th>
+              <th>E</th>
+              <th>D</th>
+              <th>BYE</th>
+            </tr>
+          </thead>
+          <tbody id="standingsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="roundsRoot" class="rounds-root"></section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script src="/js/tournaments.js"></script>
+</body>
+</html>

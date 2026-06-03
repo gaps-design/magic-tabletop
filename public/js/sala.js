@@ -55,6 +55,11 @@ const closeObsBroadcastBtn = document.getElementById("closeObsBroadcastBtn");
 const obsBroadcastLinks = document.getElementById("obsBroadcastLinks");
 const copyAllObsLinksBtn = document.getElementById("copyAllObsLinksBtn");
 const openObsCoreLinksBtn = document.getElementById("openObsCoreLinksBtn");
+const tournamentRoomPanel = document.getElementById("tournamentRoomPanel");
+const tournamentRoomTitle = document.getElementById("tournamentRoomTitle");
+const tournamentRoomDetails = document.getElementById("tournamentRoomDetails");
+const tournamentRoomPlayers = document.getElementById("tournamentRoomPlayers");
+const tournamentRoomActions = document.getElementById("tournamentRoomActions");
 const usersCountBtn = document.getElementById("usersCountBtn");
 const spectatorsCountBtn = document.getElementById("spectatorsCountBtn");
 const resenhaBecomeSpectatorBtn = document.getElementById("resenhaBecomeSpectatorBtn");
@@ -138,6 +143,7 @@ let currentRoomMarkerState = { 1: {}, 2: {} };
 let currentMatchScore = { 1: 0, 2: 0 };
 const spectatorLocalPlayerMute = { 1: false, 2: false };
 let hasReceivedMatchScore = false;
+let tournamentRoomContext = null;
 let victoryOverlayTimer = null;
 const previousOfficialLife = {};
 const lifeDeltaTimers = {};
@@ -210,6 +216,7 @@ const diceSymbols = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 if (roomText) roomText.innerText = `Sala: ${roomId}`;
 if (entryRoomText) entryRoomText.innerText = `Escolha como deseja entrar na sala ${roomId}`;
+loadTournamentRoomContext();
 
 function getSpectatorVideoForPlayer(playerNumber) {
     return Number(playerNumber) === 1 ? localVideoElement : remoteVideoElement;
@@ -391,6 +398,116 @@ function waitForAuthResolution(timeout = 1800) {
             finish(user);
         });
     });
+}
+
+function getTournamentUserPayload() {
+    const profile = window.getLoggedUserProfile?.();
+    if (!profile) return null;
+
+    return {
+        id: profile.uid,
+        uid: profile.uid,
+        name: profile.name,
+        email: profile.email,
+        avatar: profile.photo,
+        photo: profile.photo
+    };
+}
+
+function getTournamentPlayerName(player, fallback = "BYE") {
+    return player?.name || fallback;
+}
+
+function createTournamentRoomButton(label, onClick, disabled = false) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.innerText = label;
+    button.disabled = !!disabled;
+    button.addEventListener("click", onClick);
+    return button;
+}
+
+async function reportTournamentRoomResult(result) {
+    if (!tournamentRoomContext?.tournament?.id || !tournamentRoomContext?.match?.id) return;
+
+    const user = getTournamentUserPayload();
+    if (!user) {
+        showRoomToast("Entre com Google para lançar resultado.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/tournaments/${encodeURIComponent(tournamentRoomContext.tournament.id)}/matches/${encodeURIComponent(tournamentRoomContext.match.id)}/result`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user, result })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Não foi possível lançar resultado.");
+
+        showRoomToast("Resultado do torneio salvo.");
+        await loadTournamentRoomContext();
+    } catch (error) {
+        showRoomToast(error.message);
+    }
+}
+
+function renderTournamentRoomPanel() {
+    if (!tournamentRoomPanel || !tournamentRoomContext) return;
+
+    const { tournament, match, player1, player2 } = tournamentRoomContext;
+    const p1Name = getTournamentPlayerName(player1, "Jogador 1");
+    const p2Name = getTournamentPlayerName(player2, "Jogador 2");
+
+    if (tournamentRoomTitle) tournamentRoomTitle.innerText = tournament.name || "Torneio ResenhaON";
+    if (tournamentRoomDetails) {
+        tournamentRoomDetails.innerText = `Rodada ${match.roundNumber || "-"} - Mesa ${match.tableNumber || "-"}`;
+    }
+    if (tournamentRoomPlayers) {
+        tournamentRoomPlayers.innerText = `${p1Name} x ${p2Name}`;
+    }
+
+    if (tournamentRoomActions) {
+        tournamentRoomActions.innerHTML = "";
+        if (match.externalPlay) {
+            const notice = document.createElement("span");
+            notice.className = "tournament-room-external";
+            notice.innerText = "Jogando externamente";
+            tournamentRoomActions.appendChild(notice);
+        }
+
+        if (match.externalUrl) {
+            const externalLink = document.createElement("a");
+            externalLink.href = match.externalUrl;
+            externalLink.target = "_blank";
+            externalLink.rel = "noopener noreferrer";
+            externalLink.innerText = "Abrir link externo";
+            tournamentRoomActions.appendChild(externalLink);
+        }
+
+        const isBye = !!match.isBye || !match.player2Id;
+        tournamentRoomActions.appendChild(createTournamentRoomButton(`Vitória ${p1Name}`, () => reportTournamentRoomResult("player1_win"), isBye));
+        tournamentRoomActions.appendChild(createTournamentRoomButton(`Vitória ${p2Name}`, () => reportTournamentRoomResult("player2_win"), isBye));
+        tournamentRoomActions.appendChild(createTournamentRoomButton("Empate", () => reportTournamentRoomResult("draw"), isBye));
+    }
+
+    tournamentRoomPanel.classList.remove("hidden");
+}
+
+async function loadTournamentRoomContext() {
+    if (!roomId || !(params.has("tournament") || roomId.startsWith("trn-"))) return;
+
+    try {
+        const response = await fetch(`/api/tournaments/room/${encodeURIComponent(roomId)}`);
+        if (response.status === 404) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Não foi possível carregar dados do torneio.");
+
+        tournamentRoomContext = data;
+        renderTournamentRoomPanel();
+    } catch (error) {
+        console.warn("[TOURNAMENT] room context error", error);
+    }
 }
 
 bindAuthStateChanged((user) => {
