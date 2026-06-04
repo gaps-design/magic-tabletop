@@ -6,6 +6,7 @@
 
   const createForm = document.getElementById("createTournamentForm");
   const typeInput = document.getElementById("tournamentTypeInput");
+  const rankedInput = document.getElementById("rankedInput");
   const swissSettings = document.getElementById("swissSettings");
   const submitBtn = createForm?.querySelector("button[type='submit']");
   const authNotice = document.getElementById("authNotice");
@@ -176,6 +177,15 @@
     if (submitBtn) submitBtn.innerText = roundTableSelected ? "Criar Mesa Redonda" : "Criar torneio";
   }
 
+  function renderHallOfFameStatus() {
+    const status = activeTournament?.hallOfFameStatus || {};
+    if (status.isRanked) {
+      return '<div class="ranking-status">Conta para o Hall da Fama</div>';
+    }
+    const reason = status.reason || (activeTournament?.isRankedRequested === false ? "Evento criado como casual." : "Aguardando requisitos minimos.");
+    return `<div class="ranking-status unranked">Evento casual - nao conta para o Hall da Fama<br><small>Motivo: ${escapeHtml(reason)}</small></div>`;
+  }
+
   function renderTournament() {
     authNotice?.classList.toggle("hidden", !!loggedUser);
     if (submitBtn) submitBtn.disabled = !loggedUser || isTournamentBlockingCreation();
@@ -202,6 +212,7 @@
       <p class="muted">${escapeHtml(typeLabel())} • ${escapeHtml(activeTournament.format)}${roundTable ? " • BO1 continuo" : ` • ${activeTournament.roundsTotal} rodada(s) • limite ${activeTournament.maxPlayers} jogadores`}</p>
       <p><strong>Link compartilhavel:</strong> <code>${escapeHtml(location.origin + "/torneios.html?code=" + activeTournament.inviteCode)}</code></p>
       <p><strong>${roundTable ? "Partida atual" : "Rodada atual"}:</strong> ${roundTable ? activeTournament.roundTable?.currentMatch?.roundNumber || "aguardando desafiante" : activeTournament.currentRound || 0}</p>
+      ${renderHallOfFameStatus()}
     `;
 
     renderOwnerActions();
@@ -550,7 +561,8 @@
         name: document.getElementById("tournamentNameInput").value.trim(),
         maxPlayers: Number(document.getElementById("maxPlayersInput").value),
         roundsTotal: Number(document.getElementById("roundsInput").value),
-        format: document.getElementById("formatInput").value
+        format: document.getElementById("formatInput").value,
+        isRankedRequested: rankedInput?.checked !== false
       });
       createForm.reset();
       updateCreateMode();

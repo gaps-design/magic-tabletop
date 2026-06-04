@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hall da Fama | ResenhaON</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/css/tournaments.css">
+</head>
+<body>
+  <header class="tournament-topbar">
+    <a class="brand" href="/">
+      <img src="/assets/logo-resenhaon.png" alt="ResenhaON">
+      <span>Hall da Fama</span>
+    </a>
+    <nav>
+      <a href="/">Lobby</a>
+      <a href="/salas.html">Salao de Jogos</a>
+      <a href="/torneios.html">Torneios</a>
+      <button id="googleLoginBtn" type="button">Entrar com Google</button>
+    </nav>
+  </header>
+
+  <main class="tournament-shell hall-shell">
+    <section class="hero-card">
+      <div>
+        <p class="eyebrow">ResenhaON competitivo</p>
+        <h1>Hall da Fama</h1>
+        <p>Rankings persistentes, historico de eventos validos e protecao basica contra farm de pontos.</p>
+      </div>
+      <button id="refreshHallBtn" type="button">Atualizar</button>
+    </section>
+
+    <section class="round-table-summary" id="hallSummary">
+      <article><span>Campeao atual da Mesa</span><strong>-</strong></article>
+      <article><span>Maior sequencia</span><strong>-</strong></article>
+      <article><span>Maior campeao</span><strong>-</strong></article>
+      <article><span>Mais partidas</span><strong>-</strong></article>
+    </section>
+
+    <section class="panel">
+      <div class="hall-tabs" role="tablist">
+        <button class="active" type="button" data-tab="general">Geral</button>
+        <button type="button" data-tab="roundTable">Mesa Redonda</button>
+        <button type="button" data-tab="tournaments">Torneios</button>
+        <button type="button" data-tab="players">Jogadores</button>
+        <button type="button" data-tab="history">Historico</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead id="hallHead"></thead>
+          <tbody id="hallBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/auth.js"></script>
+  <script src="/js/hall-da-fama.js"></script>
+</body>
+</html>

@@ -340,6 +340,46 @@ th{color:var(--gold)}
 }
 .queue-list li{margin:6px 0}
 .history-list p{margin:0 0 8px;color:var(--muted)}
+.ranked-toggle{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.ranked-toggle input{
+  width:auto;
+}
+.ranking-status{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:8px;
+  background:rgba(14,165,233,.12);
+  border:1px solid rgba(14,165,233,.28);
+}
+.ranking-status.unranked{
+  background:rgba(245,158,11,.12);
+  border-color:rgba(245,158,11,.34);
+}
+.hall-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-bottom:16px;
+}
+.hall-tabs button.active{
+  background:var(--gold);
+  color:#111827;
+}
+.hall-player-cell{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.hall-player-cell img{
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  object-fit:cover;
+}
 
 @media(max-width:760px){
   .tournament-topbar,.hero-card,.panel-header{

@@ -366,3 +366,26 @@ if (convesModal) {
     }
   });
 }
+
+async function loadHallFameSummary() {
+  const target = document.getElementById("hallFameSummary");
+  if (!target) return;
+
+  try {
+    const response = await fetch("/api/hall-of-fame/summary");
+    const { summary = {} } = await response.json();
+    const best = summary.bestStreakPlayer;
+    const champion = summary.biggestChampion;
+    const matches = summary.mostMatchesPlayer;
+    target.innerText = [
+      `Campeao atual: ${summary.currentRoundTableChampion || "-"}`,
+      `Maior sequencia: ${best ? `${best.name} ${best.bestStreak}` : "-"}`,
+      `Maior campeao: ${champion ? `${champion.name} ${champion.titles}` : "-"}`,
+      `Mais partidas: ${matches ? `${matches.name} ${matches.totalMatches}` : "-"}`
+    ].join(" | ");
+  } catch {
+    target.innerText = "Hall da Fama indisponivel no momento.";
+  }
+}
+
+loadHallFameSummary();

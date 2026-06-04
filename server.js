@@ -1,6 +1,11 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const {
+  getHallOfFame,
+  updateHallOfFameFromEvent,
+  validateEventForRanking
+} = require("./src/hallOfFame");
 
 const app = express();
 const server = http.createServer(app);
@@ -1039,6 +1044,7 @@ function isRoundTableTournament(tournament) {
 function publicTournament(tournament) {
   if (!tournament) return null;
   const standings = getTournamentStandings(tournament);
+  const hallOfFameStatus = tournament.hallOfFameStatus || validateEventForRanking(tournament);
   return {
     id: tournament.id,
     type: tournament.type || "swiss",
@@ -1061,7 +1067,9 @@ function publicTournament(tournament) {
     roundTableHistory: tournament.roundTableHistory || [],
     roundTable: getRoundTableSummary(tournament),
     standings,
-    champion: tournament.status === "finished" ? standings[0] || null : null
+    champion: tournament.status === "finished" ? standings[0] || null : null,
+    isRankedRequested: tournament.isRankedRequested !== false,
+    hallOfFameStatus
   };
 }
 
@@ -1710,8 +1718,20 @@ app.get("/torneios", (req, res) => {
   res.redirect("/torneios.html");
 });
 
+app.get("/hall-da-fama", (req, res) => {
+  res.redirect("/hall-da-fama.html");
+});
+
 app.get("/api/tournaments/active", (req, res) => {
   res.json({ tournament: publicTournament(activeTournament) });
+});
+
+app.get("/api/hall-of-fame", (req, res) => {
+  res.json(getHallOfFame());
+});
+
+app.get("/api/hall-of-fame/summary", (req, res) => {
+  res.json({ summary: getHallOfFame().summary });
 });
 
 app.get("/api/tournaments/room/:roomId", (req, res) => {
@@ -1767,6 +1787,8 @@ app.post("/api/tournaments", (req, res) => {
     currentRound: 0,
     format,
     status: "registration_open",
+    isRankedRequested: req.body.isRankedRequested !== false,
+    hallOfFameStatus: { isRanked: false, reason: "Evento ainda nao finalizado." },
     inviteCode: Math.random().toString(36).slice(2, 8),
     createdAt: now,
     updatedAt: now,
@@ -2037,6 +2059,7 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
   if (!isRoundTableTournament(tournament)) {
     recalculateTournamentStandings(tournament);
   }
+  tournament.hallOfFameStatus = updateHallOfFameFromEvent(tournament);
   res.json({ tournament: publicTournament(tournament) });
 });
 
