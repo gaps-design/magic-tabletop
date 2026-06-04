@@ -1311,6 +1311,67 @@ function hasActiveCameraForPlayer(playerNumber) {
     );
 }
 
+function getCameraStreamForPlayer(playerNumber) {
+    const entry = Object.entries(peerInfo).find(([socketId, peer]) =>
+        peer.role === "camera" &&
+        Number(peer.linkedPlayer) === Number(playerNumber) &&
+        !!remoteStreams[socketId]
+    );
+
+    return entry ? remoteStreams[entry[0]] : null;
+}
+
+function getPlayerMediaStreamForPlayer(playerNumber) {
+    if (
+        currentRole === "player" &&
+        Number(playerNumber) === Number(myPlayerNumberRTC)
+    ) {
+        return mainLocalStream || localStream;
+    }
+
+    const entry = Object.entries(peerInfo).find(([socketId, peer]) =>
+        peer.role === "player" &&
+        Number(peer.playerNumber) === Number(playerNumber) &&
+        !!remoteStreams[socketId]
+    );
+
+    return entry ? remoteStreams[entry[0]] : null;
+}
+
+function buildAuxCameraDisplayStream(playerNumber, cameraStream) {
+    if (!cameraStream) return null;
+
+    removeAudioTracksFromCameraStream(cameraStream, "route-aux-camera-display");
+
+    const playerStream = getPlayerMediaStreamForPlayer(playerNumber);
+    const videoTracks = cameraStream.getVideoTracks();
+    const audioTracks = playerStream?.getAudioTracks?.().filter(track => track.readyState === "live") || [];
+    const displayStream = new MediaStream([...videoTracks, ...audioTracks]);
+
+    rtcLog(null, "aux camera display stream composed", {
+        playerNumber,
+        cameraStreamId: cameraStream.id,
+        playerStreamId: playerStream?.id || null,
+        videoTracks: videoTracks.map(track => ({ id: track.id, label: track.label, readyState: track.readyState })),
+        audioTracks: audioTracks.map(track => ({ id: track.id, label: track.label, readyState: track.readyState }))
+    });
+
+    return displayStream;
+}
+
+function routeCameraForPlayer(playerNumber, cameraStream) {
+    const videoElement = getVideoElementForPlayer(playerNumber);
+    const displayStream = buildAuxCameraDisplayStream(playerNumber, cameraStream);
+
+    if (!videoElement || !displayStream) return;
+
+    setVideoStream(
+        videoElement,
+        displayStream,
+        currentRole === "player" && Number(playerNumber) === Number(myPlayerNumberRTC)
+    );
+}
+
 function routeStream(socketId, stream) {
     if (!socketId || !stream) return;
     if (currentRole === "camera") return;
@@ -1338,17 +1399,16 @@ function routeStream(socketId, stream) {
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
-            setVideoStream(
-                getVideoElementForPlayer(info.linkedPlayer),
-                stream,
-                false
-            );
+            routeCameraForPlayer(info.linkedPlayer, stream);
 
             return;
         }
 
         if (info.role === "player") {
-            if (!hasActiveCameraForPlayer(info.playerNumber)) {
+            const cameraStream = getCameraStreamForPlayer(info.playerNumber);
+            if (cameraStream) {
+                routeCameraForPlayer(info.playerNumber, cameraStream);
+            } else {
                 setVideoStream(
                     getVideoElementForPlayer(info.playerNumber),
                     stream,
@@ -1362,19 +1422,20 @@ function routeStream(socketId, stream) {
 
     if (currentRole === "player") {
         if (info.role === "camera") {
-            setVideoStream(
-                getVideoElementForPlayer(info.linkedPlayer),
-                stream,
-                Number(info.linkedPlayer) === Number(myPlayerNumberRTC)
-            );
+            routeCameraForPlayer(info.linkedPlayer, stream);
 
             return;
         }
 
         if (info.role === "player") {
+            const cameraStream = getCameraStreamForPlayer(info.playerNumber);
             if (
                 Number(info.playerNumber) !== Number(myPlayerNumberRTC) &&
-                !hasActiveCameraForPlayer(info.playerNumber)
+                cameraStream
+            ) {
+                routeCameraForPlayer(info.playerNumber, cameraStream);
+            } else if (
+                Number(info.playerNumber) !== Number(myPlayerNumberRTC)
             ) {
                 setVideoStream(
                     getVideoElementForPlayer(info.playerNumber),
@@ -1514,17 +1575,28 @@ function createPeerConnection(targetId) {
     };
 
     peer.oniceconnectionstatechange = () => {
+        const targetInfo = peerInfo[targetId] || {};
+        const isAuxCameraPeer = targetInfo.role === "camera" || currentRole === "camera";
         rtcLog(targetId, "ice connection state changed", {
             iceConnectionState: peer.iceConnectionState,
             iceGatheringState: peer.iceGatheringState,
-            signalingState: peer.signalingState
+            signalingState: peer.signalingState,
+            diagnostics: peerDiagnostics(peer)
         });
 
         if (
             !peer.__resenhaClosing &&
             ["failed", "disconnected"].includes(peer.iceConnectionState)
         ) {
-            notifyConnectionUnstable(targetId, `ice-${peer.iceConnectionState}`);
+            if (isAuxCameraPeer) {
+                rtcLog(targetId, "aux camera ICE state will restart without audio cleanup", {
+                    reason: `ice-${peer.iceConnectionState}`,
+                    remoteRole: targetInfo.role,
+                    diagnostics: peerDiagnostics(peer)
+                }, "warn");
+            } else {
+                notifyConnectionUnstable(targetId, `ice-${peer.iceConnectionState}`);
+            }
             schedulePeerReconnect(targetId, peer.iceConnectionState === "disconnected" ? 5000 : 1200);
         }
 
@@ -1550,8 +1622,11 @@ function createPeerConnection(targetId) {
     };
 
     peer.onconnectionstatechange = () => {
+        const targetInfo = peerInfo[targetId] || {};
+        const isAuxCameraPeer = targetInfo.role === "camera" || currentRole === "camera";
         rtcLog(targetId, "connection state changed", {
-            connectionState: peer.connectionState
+            connectionState: peer.connectionState,
+            diagnostics: peerDiagnostics(peer)
         });
 
         if (peer.connectionState === "connected") {
@@ -1567,12 +1642,20 @@ function createPeerConnection(targetId) {
         }
 
         if (peer.connectionState === "failed") {
-            notifyConnectionUnstable(targetId, "connection-failed");
+            if (!isAuxCameraPeer) {
+                notifyConnectionUnstable(targetId, "connection-failed");
+            }
             schedulePeerReconnect(targetId);
         }
 
         if (peer.connectionState === "disconnected") {
-            notifyConnectionUnstable(targetId, "connection-disconnected");
+            if (isAuxCameraPeer) {
+                rtcLog(targetId, "aux camera connection disconnected; preserving audio peer", {
+                    diagnostics: peerDiagnostics(peer)
+                }, "warn");
+            } else {
+                notifyConnectionUnstable(targetId, "connection-disconnected");
+            }
             schedulePeerReconnect(targetId, 5000);
         }
 
@@ -1585,6 +1668,13 @@ function createPeerConnection(targetId) {
             rtcLog(targetId, "closed state observed after intentional close", {
                 peer: peerSnapshot(peer)
             });
+            return;
+        }
+
+        if (peer.connectionState === "closed" && isAuxCameraPeer) {
+            rtcLog(targetId, "aux camera peer closed observed; no global cleanup", {
+                diagnostics: peerDiagnostics(peer)
+            }, "warn");
             return;
         }
 
@@ -1851,19 +1941,36 @@ function schedulePeerReconnect(targetId, baseDelay = 1200) {
 
         try {
             const existingPeer = peerConnections[targetId];
+            const isAuxCameraPeer = info.role === "camera" || currentRole === "camera";
 
             if (
                 existingPeer &&
                 !existingPeer.__resenhaClosing &&
-                existingPeer.signalingState === "stable" &&
                 typeof existingPeer.restartIce === "function"
             ) {
-                rtcLog(targetId, "restarting ICE on existing peer", {
+                rtcLog(targetId, isAuxCameraPeer ? "aux camera ICE restart on existing peer" : "restarting ICE on existing peer", {
                     attempt: reconnectAttempts[targetId],
-                    peer: peerSnapshot(existingPeer)
+                    peer: peerSnapshot(existingPeer),
+                    diagnostics: peerDiagnostics(existingPeer)
                 });
                 existingPeer.restartIce();
-                await createOffer(targetId, info, { iceRestart: true });
+
+                if (existingPeer.signalingState === "stable") {
+                    await createOffer(targetId, info, { iceRestart: true });
+                } else {
+                    rtcLog(targetId, "ICE restart offer deferred until stable", {
+                        remoteRole: info.role,
+                        signalingState: existingPeer.signalingState
+                    }, "warn");
+                }
+                return;
+            }
+
+            if (isAuxCameraPeer) {
+                rtcLog(targetId, "aux camera reconnect skipped destructive cleanup", {
+                    remoteRole: info.role,
+                    peer: peerSnapshot(existingPeer)
+                }, "warn");
                 return;
             }
 
@@ -1905,6 +2012,10 @@ function closePeerConnection(socketId, reason = "cleanup", options = {}) {
         peerConnection.__resenhaClosing = true;
 
         try {
+            rtcLog(socketId, "pc.close() called", {
+                reason,
+                diagnosticsBeforeClose: peerDiagnostics(peerConnection)
+            }, "warn");
             peerConnection.close();
             rtcLog(socketId, "RTCPeerConnection closed", {
                 reason,
@@ -2179,7 +2290,31 @@ function peerSnapshot(peer) {
         signalingState: peer.signalingState,
         iceConnectionState: peer.iceConnectionState,
         iceGatheringState: peer.iceGatheringState,
-        connectionState: peer.connectionState
+        connectionState: peer.connectionState,
+        senders: peer.getSenders?.().map(sender => ({
+            kind: sender.track?.kind || null,
+            trackId: sender.track?.id || null,
+            label: sender.track?.label || "",
+            readyState: sender.track?.readyState || null
+        })) || []
+    };
+}
+
+function peerDiagnostics(peer) {
+    const senders = peer?.getSenders?.() || [];
+    return {
+        connectionState: peer?.connectionState || null,
+        iceConnectionState: peer?.iceConnectionState || null,
+        signalingState: peer?.signalingState || null,
+        audioSenders: senders.filter(sender => sender.track?.kind === "audio").length,
+        videoSenders: senders.filter(sender => sender.track?.kind === "video").length,
+        senderTracks: senders.map(sender => ({
+            kind: sender.track?.kind || null,
+            id: sender.track?.id || null,
+            label: sender.track?.label || "",
+            readyState: sender.track?.readyState || null,
+            enabled: sender.track?.enabled ?? null
+        }))
     };
 }
 
