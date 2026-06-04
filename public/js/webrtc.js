@@ -203,7 +203,8 @@ function setActiveLocalStream(stream, role = currentRole) {
     localStream = stream;
 
     if (role === "camera") {
-        cameraOnlyStream = stream;
+        cameraOnlyStream = sanitizeTableCameraStream(stream, "set-active-camera-stream");
+        localStream = cameraOnlyStream;
         return;
     }
 
@@ -222,6 +223,51 @@ function getActiveLocalStream() {
     if (currentRole === "spectator") return spectatorAudioStream || localStream;
     if (currentRole === "player") return mainLocalStream || localStream;
     return localStream;
+}
+
+function logStreamTrackSummary(label, stream, level = "log") {
+    const logger = typeof console[level] === "function" ? console[level] : console.log;
+    logger.call(console, `[RTC_DEBUG][MEDIA] ${label}`, {
+        role: currentRole,
+        streamId: stream?.id || null,
+        audioTracks: stream?.getAudioTracks?.().map(track => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState
+        })) || [],
+        videoTracks: stream?.getVideoTracks?.().map(track => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState
+        })) || []
+    });
+}
+
+function removeAudioTracksFromCameraStream(stream, reason = "camera-stream-sanitize") {
+    if (!stream?.getAudioTracks) return stream;
+
+    stream.getAudioTracks().forEach(track => {
+        audioLog("Mobile/table camera audio track removed intentionally", {
+            reason,
+            trackId: track.id,
+            readyState: track.readyState
+        }, "warn");
+        track.stop();
+        stream.removeTrack(track);
+    });
+
+    return stream;
+}
+
+function sanitizeTableCameraStream(stream, reason = "table-camera") {
+    if (!stream) return null;
+
+    removeAudioTracksFromCameraStream(stream, reason);
+    const videoTracks = stream.getVideoTracks();
+    const videoOnlyStream = new MediaStream(videoTracks);
+
+    logStreamTrackSummary("table/mobile camera stream sanitized", videoOnlyStream);
+    return videoOnlyStream;
 }
 
 function updateMediaStatus() {
@@ -380,10 +426,20 @@ async function releaseCameraWakeLock() {
 }
 
 function replaceLocalTracksOnPeers() {
-    if (!localStream) return;
+    const activeStream = getActiveLocalStream();
+    if (!activeStream) return;
+
+    if (currentRole === "camera") {
+        removeAudioTracksFromCameraStream(activeStream, "replace-local-camera-tracks");
+        const videoTrack = activeStream.getVideoTracks()[0];
+        if (videoTrack) {
+            replaceVideoTrackOnPeers(videoTrack, "replace-local-camera-tracks");
+        }
+        return;
+    }
 
     ["video", "audio"].forEach(kind => {
-        const track = localStream.getTracks().find(item => item.kind === kind);
+        const track = activeStream.getTracks().find(item => item.kind === kind);
         if (track) {
             replaceTrackOnPeers(kind, track);
         }
@@ -591,14 +647,6 @@ async function startWebcam(
         hasSavedMicrophone: !isCameraOnlyMode && !!microphoneId
     });
 
-    const previousRoleStream = isCameraOnlyMode
-        ? cameraOnlyStream
-        : (currentRole === "player" ? mainLocalStream : getActiveLocalStream());
-
-    if (previousRoleStream) {
-        previousRoleStream.getTracks().forEach(track => track.stop());
-    }
-
     const constraints = {
         video: cameraId ? { deviceId: { exact: cameraId } } : true,
         audio: isCameraOnlyMode
@@ -622,7 +670,41 @@ async function startWebcam(
             microphone: !isCameraOnlyMode && !!microphoneId
         }
     );
-    setActiveLocalStream(nextStream, currentRole);
+
+    const sanitizedNextStream = isCameraOnlyMode
+        ? sanitizeTableCameraStream(nextStream, "start-webcam-camera-mode")
+        : nextStream;
+
+    logStreamTrackSummary(isCameraOnlyMode ? "mobile camera getUserMedia success" : "main room media getUserMedia success", sanitizedNextStream);
+
+    if (!sanitizedNextStream) {
+        if (localVideo && !getActiveLocalStream()) {
+            localVideo.srcObject = null;
+        }
+
+        if ((currentRole === "player" || currentRole === "camera") && lastMediaAccessError) {
+            showCriticalMediaAlert(lastMediaAccessError);
+        }
+
+        mediaLog("joining without local media", {
+            role: currentRole,
+            lastError: lastMediaAccessError ? getMediaErrorInfo(lastMediaAccessError) : null
+        }, "warn");
+        rtcLog(null, "local media unavailable");
+        await getDevices();
+        updateMediaStatus();
+        return;
+    }
+
+    const previousRoleStream = isCameraOnlyMode
+        ? cameraOnlyStream
+        : (currentRole === "player" ? mainLocalStream : getActiveLocalStream());
+
+    if (previousRoleStream && previousRoleStream !== sanitizedNextStream) {
+        previousRoleStream.getTracks().forEach(track => track.stop());
+    }
+
+    setActiveLocalStream(sanitizedNextStream, currentRole);
 
     if (!localStream) {
         if (localVideo) {
@@ -657,18 +739,12 @@ async function startWebcam(
 
     await getDevices();
 
+    if (isCameraOnlyMode) {
+        removeAudioTracksFromCameraStream(localStream, "start-webcam-post-check");
+    }
+
     const videoTrack = localStream.getVideoTracks()[0];
     const audioTrack = localStream.getAudioTracks()[0];
-
-    if (isCameraOnlyMode && audioTrack) {
-        audioLog("[RTC_DEBUG][AUDIO] removing unexpected audio track from camera-only stream", {
-            trackId: audioTrack.id
-        }, "warn");
-        localStream.getAudioTracks().forEach(track => {
-            track.stop();
-            localStream.removeTrack(track);
-        });
-    }
 
     rtcLog(null, "local media ready", {
         tracks: localStream.getTracks().map(track => ({
@@ -754,7 +830,17 @@ async function switchCamera(cameraId) {
         }
     );
 
-    const newVideoTrack = newStream.getVideoTracks()[0];
+    const videoOnlyStream = currentRole === "camera"
+        ? sanitizeTableCameraStream(newStream, "switch-camera-camera-mode")
+        : newStream;
+
+    if (currentRole !== "camera") {
+        removeAudioTracksFromCameraStream(videoOnlyStream, "switch-camera-video-only");
+    }
+
+    logStreamTrackSummary("camera switch stream ready", videoOnlyStream);
+
+    const newVideoTrack = videoOnlyStream.getVideoTracks()[0];
     if (!newVideoTrack) return;
 
     const videoSettings = newVideoTrack.getSettings();
@@ -770,22 +856,25 @@ async function switchCamera(cameraId) {
 
     newVideoTrack.enabled = cameraEnabled;
 
-    if (!localStream) {
-        localStream = new MediaStream();
-    }
+    const activeStream = getActiveLocalStream() || new MediaStream();
 
-    localStream.getVideoTracks().forEach(track => {
+    activeStream.getVideoTracks().forEach(track => {
         track.stop();
-        localStream.removeTrack(track);
+        activeStream.removeTrack(track);
     });
 
-    localStream.addTrack(newVideoTrack);
-    setActiveLocalStream(localStream, currentRole);
+    activeStream.addTrack(newVideoTrack);
+
+    if (currentRole === "camera") {
+        removeAudioTracksFromCameraStream(activeStream, "switch-camera-active-stream");
+    }
+
+    setActiveLocalStream(activeStream, currentRole);
 
     routeLocalPreview();
 
-    replaceTrackOnPeers("video", newVideoTrack);
-    monitorCameraModeTrack(localStream);
+    replaceVideoTrackOnPeers(newVideoTrack, "switch-camera");
+    monitorCameraModeTrack(getActiveLocalStream());
     mediaErrorAlertShown = false;
     updateMediaStatus();
 }
@@ -875,6 +964,39 @@ function replaceTrackOnPeers(kind, newTrack) {
                 errorName: error?.name,
                 errorMessage: error?.message
             });
+        });
+    });
+}
+
+function replaceVideoTrackOnPeers(newVideoTrack, reason = "video-replace") {
+    if (!newVideoTrack || newVideoTrack.kind !== "video") return;
+
+    Object.entries(peerConnections).forEach(([socketId, peer]) => {
+        const videoSender = peer?.getSenders?.().find(sender =>
+            sender.track && sender.track.kind === "video"
+        );
+
+        if (!videoSender) {
+            rtcLog(socketId, "video replace skipped; no video sender", {
+                reason,
+                trackId: newVideoTrack.id
+            }, "warn");
+            return;
+        }
+
+        rtcLog(socketId, "video sender replaceTrack", {
+            reason,
+            previousTrackId: videoSender.track?.id || null,
+            nextTrackId: newVideoTrack.id
+        });
+
+        videoSender.replaceTrack(newVideoTrack).catch(error => {
+            rtcLog(socketId, "replaceTrack failed", {
+                kind: "video",
+                reason,
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
         });
     });
 }
@@ -1031,6 +1153,16 @@ function addOrReplaceLocalTrack(peer, targetId, track, stream, reason = "local-t
     const kind = track.kind;
 
     if (kind === "audio") {
+        if (currentRole === "camera") {
+            audioLog("Mobile/table camera audio track removed intentionally", {
+                reason,
+                trackId: track.id,
+                targetId
+            }, "warn");
+            track.stop();
+            stream.removeTrack?.(track);
+            return;
+        }
         upsertAudioTrackForPeer(peer, track, targetId, reason);
         return;
     }
