@@ -6,6 +6,7 @@ const cameraSelect = document.getElementById("cameraSelect");
 const microphoneSelect = document.getElementById("microphoneSelect");
 const spectatorMicrophoneSelect = document.getElementById("spectatorMicrophoneSelect");
 const reconnectMediaBtn = document.getElementById("reconnectMediaBtn");
+const reloadSpectatorVideosBtn = document.getElementById("reloadSpectatorVideosBtn");
 
 const micStatusText = document.getElementById("micStatusText");
 const cameraStatusText = document.getElementById("cameraStatusText");
@@ -1147,6 +1148,62 @@ function syncLocalAudioTrackToPeers(reason = "audio-sync") {
     });
 }
 
+async function ensurePlayerVideoSentToPeer(targetId, reason = "ensure-video") {
+    if (!targetId) return;
+    const info = peerInfo[targetId] || {};
+    const peer = createPeerConnection(targetId);
+    const activeStream = getActiveLocalStream();
+
+    if (activeStream) {
+        if (currentRole === "camera") {
+            removeAudioTracksFromCameraStream(activeStream, `${reason}-camera-sanitize`);
+        }
+
+        activeStream.getVideoTracks().forEach(track => {
+            addOrReplaceLocalTrack(peer, targetId, track, activeStream, reason);
+        });
+
+        if (currentRole !== "camera") {
+            activeStream.getAudioTracks().forEach(track => {
+                addOrReplaceLocalTrack(peer, targetId, track, activeStream, reason);
+            });
+        }
+    }
+
+    ensureReceiveTransceivers(peer, targetId);
+    logPcStateDebug(targetId, peer, `${reason}-before-offer`);
+
+    if (peer.signalingState === "stable") {
+        await createOffer(targetId, info, { waitForStable: true });
+    } else {
+        rtcLog(targetId, "ensurePlayerVideoSentToPeer deferred; signaling not stable", {
+            reason,
+            signalingState: peer.signalingState
+        }, "warn");
+    }
+}
+
+async function refreshSpectatorVideoPeers(reason = "manual-refresh") {
+    if (currentRole !== "spectator") return;
+
+    spectatorLog("refreshing spectator video peers", {
+        reason,
+        peers: Object.entries(peerInfo).map(([socketId, info]) => ({
+            socketId,
+            role: info.role,
+            playerNumber: info.playerNumber,
+            linkedPlayer: info.linkedPlayer
+        }))
+    });
+
+    for (const [socketId, info] of Object.entries(peerInfo)) {
+        if (!["player", "camera"].includes(info.role)) continue;
+        await ensurePlayerVideoSentToPeer(socketId, `spectator-${reason}`);
+    }
+
+    routeAllStreams();
+}
+
 function addOrReplaceLocalTrack(peer, targetId, track, stream, reason = "local-track-sync") {
     if (!peer || !track || !stream) return;
 
@@ -1261,6 +1318,26 @@ function setVideoStream(videoElement, stream, muted = false) {
     }
 
     videoElement.onloadedmetadata = () => {
+        console.log("[SPECTATOR VIDEO DEBUG]", {
+            event: "video-loadedmetadata",
+            videoId: videoElement.id,
+            muted,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight,
+            streamId: stream.id,
+            videoTracks: stream.getVideoTracks().map(track => ({
+                id: track.id,
+                label: track.label,
+                enabled: track.enabled,
+                readyState: track.readyState
+            })),
+            audioTracks: stream.getAudioTracks().map(track => ({
+                id: track.id,
+                label: track.label,
+                enabled: track.enabled,
+                readyState: track.readyState
+            }))
+        });
         videoElement.play().catch(error => {
             audioLog("video play after metadata failed", {
                 videoId: videoElement.id,
@@ -1455,6 +1532,74 @@ function routeAllStreams() {
     });
 }
 
+function inferTrackSource(fromId, track) {
+    const info = peerInfo[fromId] || {};
+    if (info.role === "camera") return "mobileCamera";
+    if (track?.kind === "audio") return "roomAudio";
+    if (info.role === "player") return "tableCamera";
+    return "unknown";
+}
+
+function bindIncomingVideoTrack(fromId, track, stream, source = inferTrackSource(fromId, track)) {
+    if (!fromId || !track) return null;
+
+    if (!remoteStreams[fromId]) {
+        remoteStreams[fromId] = new MediaStream();
+    }
+
+    const targetStream = remoteStreams[fromId];
+    const candidateTracks = stream?.getTracks?.().length ? stream.getTracks() : [track];
+
+    candidateTracks.forEach(candidate => {
+        if (!targetStream.getTracks().some(existing => existing.id === candidate.id)) {
+            targetStream.addTrack(candidate);
+        }
+    });
+
+    console.log("[SPECTATOR VIDEO DEBUG]", {
+        fromId,
+        source,
+        trackKind: track.kind,
+        trackId: track.id,
+        trackLabel: track.label,
+        peerInfo: peerInfo[fromId] || {},
+        streams: (stream ? [stream] : []).map(item => ({
+            id: item.id,
+            videoTracks: item.getVideoTracks().map(videoTrack => ({
+                id: videoTrack.id,
+                label: videoTrack.label,
+                enabled: videoTrack.enabled,
+                readyState: videoTrack.readyState
+            })),
+            audioTracks: item.getAudioTracks().map(audioTrack => ({
+                id: audioTrack.id,
+                label: audioTrack.label,
+                enabled: audioTrack.enabled,
+                readyState: audioTrack.readyState
+            }))
+        })),
+        targetStream: {
+            id: targetStream.id,
+            videoTracks: targetStream.getVideoTracks().map(videoTrack => ({
+                id: videoTrack.id,
+                label: videoTrack.label,
+                enabled: videoTrack.enabled,
+                readyState: videoTrack.readyState
+            })),
+            audioTracks: targetStream.getAudioTracks().map(audioTrack => ({
+                id: audioTrack.id,
+                label: audioTrack.label,
+                enabled: audioTrack.enabled,
+                readyState: audioTrack.readyState
+            }))
+        }
+    });
+
+    routeStream(fromId, targetStream);
+    setTimeout(() => routeStream(fromId, targetStream), 500);
+    return targetStream;
+}
+
 /* =========================
    WEBRTC
 ========================= */
@@ -1500,6 +1645,29 @@ function createPeerConnection(targetId) {
     peer.ontrack = (event) => {
         let stream = event.streams[0];
 
+        console.log("[SPECTATOR VIDEO DEBUG]", {
+            fromId: targetId,
+            trackKind: event.track?.kind,
+            trackId: event.track?.id,
+            trackLabel: event.track?.label,
+            peerInfo: peerInfo[targetId] || {},
+            streams: event.streams?.map(item => ({
+                id: item.id,
+                videoTracks: item.getVideoTracks().map(track => ({
+                    id: track.id,
+                    label: track.label,
+                    enabled: track.enabled,
+                    readyState: track.readyState
+                })),
+                audioTracks: item.getAudioTracks().map(track => ({
+                    id: track.id,
+                    label: track.label,
+                    enabled: track.enabled,
+                    readyState: track.readyState
+                }))
+            })) || []
+        });
+
         rtcLog(targetId, "remote track received", {
             kind: event.track?.kind,
             muted: event.track?.muted,
@@ -1528,7 +1696,7 @@ function createPeerConnection(targetId) {
                 kind: event.track.kind,
                 readyState: event.track.readyState
             });
-            routeStream(targetId, remoteStreams[targetId] || stream);
+            bindIncomingVideoTrack(targetId, event.track, stream);
         };
 
         event.track.onended = () => {
@@ -1537,24 +1705,7 @@ function createPeerConnection(targetId) {
             });
         };
 
-        if (!stream) {
-            if (!remoteStreams[targetId]) {
-                remoteStreams[targetId] = new MediaStream();
-            }
-
-            if (!remoteStreams[targetId].getTracks().some(track => track.id === event.track.id)) {
-                remoteStreams[targetId].addTrack(event.track);
-            }
-            stream = remoteStreams[targetId];
-        } else {
-            remoteStreams[targetId] = stream;
-        }
-
-        routeStream(targetId, stream);
-
-        setTimeout(() => {
-            routeStream(targetId, stream);
-        }, 500);
+        stream = bindIncomingVideoTrack(targetId, event.track, stream);
     };
 
     peer.onicecandidate = (event) => {
@@ -1583,6 +1734,7 @@ function createPeerConnection(targetId) {
             signalingState: peer.signalingState,
             diagnostics: peerDiagnostics(peer)
         });
+        logPcStateDebug(targetId, peer, "ice-connection-state-change");
 
         if (
             !peer.__resenhaClosing &&
@@ -1628,6 +1780,7 @@ function createPeerConnection(targetId) {
             connectionState: peer.connectionState,
             diagnostics: peerDiagnostics(peer)
         });
+        logPcStateDebug(targetId, peer, "connection-state-change");
 
         if (peer.connectionState === "connected") {
             if (isPhoneCameraMode() && reconnectAttempts[targetId] > 0) {
@@ -2138,6 +2291,17 @@ if (reconnectMediaBtn) {
     });
 }
 
+if (reloadSpectatorVideosBtn) {
+    reloadSpectatorVideosBtn.addEventListener("click", () => {
+        refreshSpectatorVideoPeers("button").catch(error => {
+            spectatorLog("reload spectator videos failed", {
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        });
+    });
+}
+
 window.shutdownRoomConnection = function() {
     const shutdownRoomId = currentRoomId;
 
@@ -2316,6 +2480,32 @@ function peerDiagnostics(peer) {
             enabled: sender.track?.enabled ?? null
         }))
     };
+}
+
+function logPcStateDebug(targetId, peer, reason = "state") {
+    const info = peerInfo[targetId] || {};
+    console.log("[PC STATE DEBUG]", {
+        targetId,
+        reason,
+        role: info.role || "unknown",
+        connectionState: peer?.connectionState || null,
+        iceConnectionState: peer?.iceConnectionState || null,
+        signalingState: peer?.signalingState || null,
+        senders: peer?.getSenders?.().map(sender => ({
+            kind: sender.track?.kind,
+            id: sender.track?.id,
+            label: sender.track?.label,
+            enabled: sender.track?.enabled,
+            readyState: sender.track?.readyState
+        })) || [],
+        receivers: peer?.getReceivers?.().map(receiver => ({
+            kind: receiver.track?.kind,
+            id: receiver.track?.id,
+            label: receiver.track?.label,
+            enabled: receiver.track?.enabled,
+            readyState: receiver.track?.readyState
+        })) || []
+    });
 }
 
 function isPeerClosed(peer) {
@@ -2817,7 +3007,11 @@ socket.on("existing-peers", async ({ peers }) => {
             continue;
         }
 
-        await createOffer(peerData.socketId, peerData);
+        if (currentRole === "spectator" && ["player", "camera"].includes(peerData.role)) {
+            await ensurePlayerVideoSentToPeer(peerData.socketId, "spectator-existing-peer");
+        } else {
+            await createOffer(peerData.socketId, peerData);
+        }
     }
 });
 
@@ -2841,12 +3035,20 @@ socket.on("user-connected", (data) => {
         return;
     }
 
-    if (currentRole === "spectator" || (currentRole === "player" && data.role === "spectator")) {
+    if (
+        (currentRole === "spectator" && ["player", "camera"].includes(data.role)) ||
+        (["player", "camera"].includes(currentRole) && data.role === "spectator")
+    ) {
         spectatorLog("creating offer for spectator audio path", {
             target: data.socketId,
             remoteRole: data.role
         });
-        createOffer(data.socketId, data);
+        ensurePlayerVideoSentToPeer(data.socketId, "user-connected-spectator-video").catch(error => {
+            rtcLog(data.socketId, "ensure spectator video failed", {
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        });
     }
 });
 
