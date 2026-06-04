@@ -430,6 +430,14 @@ function createTournamentRoomButton(label, onClick, disabled = false) {
 }
 
 function getTournamentRoomScoreOptions(match, p1Name, p2Name) {
+    if (tournamentRoomContext?.tournament?.type === "round_table") {
+        return [
+            { player1GameWins: 1, player2GameWins: 0, result: "player1_win", label: `Vitória ${p1Name}` },
+            { player1GameWins: 0, player2GameWins: 1, result: "player2_win", label: `Vitória ${p2Name}` },
+            { player1GameWins: 0, player2GameWins: 0, result: "draw", label: "Empate" }
+        ];
+    }
+
     const scores = tournamentRoomContext?.tournament?.format === "BO1"
         ? [
             [1, 0, `${p1Name} 1x0 ${p2Name}`],
@@ -498,7 +506,9 @@ function renderTournamentRoomPanel() {
 
     if (tournamentRoomTitle) tournamentRoomTitle.innerText = tournament.name || "Torneio ResenhaON";
     if (tournamentRoomDetails) {
-        tournamentRoomDetails.innerText = `Rodada ${match.roundNumber || "-"} - Mesa ${match.tableNumber || "-"}`;
+        tournamentRoomDetails.innerText = tournament.type === "round_table"
+            ? `Mesa Redonda - Partida ${match.roundNumber || "-"}`
+            : `Rodada ${match.roundNumber || "-"} - Mesa ${match.tableNumber || "-"}`;
     }
     if (tournamentRoomPlayers) {
         tournamentRoomPlayers.innerText = `${p1Name} x ${p2Name}`;
@@ -522,7 +532,7 @@ function renderTournamentRoomPanel() {
             tournamentRoomActions.appendChild(externalLink);
         }
 
-        const isBye = !!match.isBye || !match.player2Id;
+        const isBye = !!match.isBye || !match.player2Id || !!match.result;
         getTournamentRoomScoreOptions(match, p1Name, p2Name).forEach(option => {
             tournamentRoomActions.appendChild(createTournamentRoomButton(option.label, () => reportTournamentRoomResult({
                 player1GameWins: option.player1GameWins,

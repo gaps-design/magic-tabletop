@@ -41,6 +41,14 @@
           Nome do torneio
           <input id="tournamentNameInput" maxlength="80" required placeholder="Ex: Modern da Resenha">
         </label>
+        <label>
+          Tipo de campeonato
+          <select id="tournamentTypeInput">
+            <option value="swiss" selected>Torneio Suico</option>
+            <option value="round_table">Mesa Redonda / Rei da Mesa</option>
+          </select>
+        </label>
+        <div id="swissSettings" class="swiss-settings">
         <div class="form-row">
           <label>
             Máx. jogadores
@@ -58,6 +66,7 @@
             <option value="BO3" selected>BO3</option>
           </select>
         </label>
+        </div>
         <button type="submit">Criar torneio</button>
         <p class="muted">Regra inicial: apenas 1 torneio ativo por vez.</p>
       </form>
@@ -87,7 +96,7 @@
       <div id="championBox" class="champion-box hidden"></div>
       <div class="table-wrap">
         <table>
-          <thead>
+          <thead id="standingsHead">
             <tr>
               <th>#</th>
               <th>Jogador</th>

@@ -20,10 +20,10 @@ const clientProfiles = {};
 const connectedUsers = {};
 const onlineUsers = new Map();
 const socketPresence = new Map();
+let activeTournament = null;
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
-let activeTournament = null;
 const CARD_SCAN_MESSAGE_LIMIT = 650;
 const CARD_SCAN_FIELD_LIMIT = 180;
 const CARD_SCAN_ORACLE_LIMIT = 420;
@@ -1000,9 +1000,6 @@ function moveSocketPresenceToLobby(socketId) {
   });
 }
 
-io.on("connection", (socket) => {
-  console.log("Conectado:", socket.id);
-
 /* =========================
    TORNEIOS MVP
 ========================= */
@@ -1035,11 +1032,16 @@ function findTournamentPlayer(tournament, userId) {
   return tournament.players.find(player => player.userId === userId || player.id === userId);
 }
 
+function isRoundTableTournament(tournament) {
+  return tournament?.type === "round_table";
+}
+
 function publicTournament(tournament) {
   if (!tournament) return null;
   const standings = getTournamentStandings(tournament);
   return {
     id: tournament.id,
+    type: tournament.type || "swiss",
     name: tournament.name,
     ownerId: tournament.ownerId,
     maxPlayers: tournament.maxPlayers,
@@ -1053,6 +1055,11 @@ function publicTournament(tournament) {
     players: tournament.players,
     rounds: tournament.rounds,
     matches: tournament.matches,
+    queue: tournament.queue || [],
+    currentChampionId: tournament.currentChampionId || null,
+    currentMatchId: tournament.currentMatchId || null,
+    roundTableHistory: tournament.roundTableHistory || [],
+    roundTable: getRoundTableSummary(tournament),
     standings,
     champion: tournament.status === "finished" ? standings[0] || null : null
   };
@@ -1077,6 +1084,8 @@ function resetTournamentPlayerStats(player) {
     player.opponentMatchWinRate = 0;
     player.matchesPlayed = 0;
     player.opponentIds = [];
+    player.currentStreak = 0;
+    player.bestStreak = 0;
 }
 
 function ensureTournamentPlayerStats(player) {
@@ -1093,6 +1102,8 @@ function ensureTournamentPlayerStats(player) {
   if (typeof player.opponentMatchWinRate !== "number") player.opponentMatchWinRate = player.opponentMatchWinPercentage;
   if (typeof player.matchesPlayed !== "number") player.matchesPlayed = 0;
   if (!Array.isArray(player.opponentIds)) player.opponentIds = [];
+  if (typeof player.currentStreak !== "number") player.currentStreak = 0;
+  if (typeof player.bestStreak !== "number") player.bestStreak = 0;
   player.points = player.matchPoints;
   player.wins = player.matchWins;
   player.draws = player.matchDraws;
@@ -1115,6 +1126,13 @@ function getMatchWinPercentage(player) {
 function compareTournamentPlayers(a, b) {
   ensureTournamentPlayerStats(a);
   ensureTournamentPlayerStats(b);
+  if (isRoundTableTournament(activeTournament)) {
+    return b.matchPoints - a.matchPoints ||
+      b.matchWins - a.matchWins ||
+      b.bestStreak - a.bestStreak ||
+      b.currentStreak - a.currentStreak ||
+      a.name.localeCompare(b.name);
+  }
   return b.matchPoints - a.matchPoints ||
     b.opponentMatchWinPercentage - a.opponentMatchWinPercentage ||
     b.gameDifferential - a.gameDifferential ||
@@ -1125,9 +1143,18 @@ function compareTournamentPlayers(a, b) {
 
 function getTournamentStandings(tournament) {
   return [...(tournament?.players || [])]
-    .filter(player => !player.dropped)
     .map(player => ensureTournamentPlayerStats(player))
-    .sort(compareTournamentPlayers);
+    .sort((a, b) => {
+      if (isRoundTableTournament(tournament)) {
+        return b.matchPoints - a.matchPoints ||
+          b.matchWins - a.matchWins ||
+          b.bestStreak - a.bestStreak ||
+          b.currentStreak - a.currentStreak ||
+          a.name.localeCompare(b.name);
+      }
+      if (a.dropped !== b.dropped) return a.dropped ? 1 : -1;
+      return compareTournamentPlayers(a, b);
+    });
 }
 
 function getMatchScoreFromResult(match, tournament) {
@@ -1328,9 +1355,198 @@ function createTournamentPlayer(user, tournamentId = "", joinedAt = Date.now()) 
     opponentMatchWinRate: 0,
     matchesPlayed: 0,
     opponentIds: [],
+    currentStreak: 0,
+    bestStreak: 0,
     dropped: false,
     joinedAt
   };
+}
+
+function getActiveRoundTableMatch(tournament) {
+  if (!isRoundTableTournament(tournament)) return null;
+  return tournament.matches.find(match => match.id === tournament.currentMatchId && !match.result) ||
+    tournament.matches.find(match => !match.result && match.status !== "completed") ||
+    null;
+}
+
+function removeFromRoundTableQueue(tournament, playerId) {
+  if (!Array.isArray(tournament.queue)) tournament.queue = [];
+  tournament.queue = tournament.queue.filter(id => id !== playerId);
+}
+
+function enqueueRoundTablePlayer(tournament, playerId) {
+  const player = findTournamentPlayer(tournament, playerId);
+  if (!player || player.dropped || player.id === tournament.currentChampionId) return;
+  removeFromRoundTableQueue(tournament, player.id);
+  tournament.queue.push(player.id);
+}
+
+function getRoundTableQueuePlayers(tournament) {
+  return (tournament.queue || [])
+    .map(id => findTournamentPlayer(tournament, id))
+    .filter(player => player && !player.dropped);
+}
+
+function getRoundTableSummary(tournament) {
+  if (!isRoundTableTournament(tournament)) return null;
+  const standings = getTournamentStandings(tournament);
+  const currentChampion = findTournamentPlayer(tournament, tournament.currentChampionId);
+  const bestStreakPlayer = standings.reduce((best, player) => {
+    if (!best || (player.bestStreak || 0) > (best.bestStreak || 0)) return player;
+    return best;
+  }, null);
+
+  return {
+    currentChampion,
+    currentMatch: getActiveRoundTableMatch(tournament),
+    queue: getRoundTableQueuePlayers(tournament),
+    totalMatches: tournament.matches.filter(match => match.result && match.result !== "drop").length,
+    bestStreakPlayer
+  };
+}
+
+function createRoundTableMatch(tournament) {
+  if (!isRoundTableTournament(tournament) || tournament.status === "finished") return null;
+  if (getActiveRoundTableMatch(tournament)) return getActiveRoundTableMatch(tournament);
+
+  const activePlayers = tournament.players.filter(player => !player.dropped);
+  if (activePlayers.length < 2) {
+    tournament.status = "registration_open";
+    tournament.currentMatchId = null;
+    tournament.updatedAt = Date.now();
+    return null;
+  }
+
+  let champion = findTournamentPlayer(tournament, tournament.currentChampionId);
+  if (!champion || champion.dropped) {
+    champion = activePlayers[0];
+    tournament.currentChampionId = champion.id;
+    removeFromRoundTableQueue(tournament, champion.id);
+  }
+
+  tournament.queue = (tournament.queue || []).filter(id => {
+    const player = findTournamentPlayer(tournament, id);
+    return player && !player.dropped && player.id !== champion.id;
+  });
+
+  const queuedChallenger = getRoundTableQueuePlayers(tournament)[0] ||
+    activePlayers.find(player => player.id !== champion.id);
+  if (!queuedChallenger) return null;
+
+  removeFromRoundTableQueue(tournament, queuedChallenger.id);
+  const matchNumber = tournament.matches.length + 1;
+  const roomId = `king-${tournament.inviteCode}-m${matchNumber}`;
+  const match = {
+    id: createId("match"),
+    tournamentId: tournament.id,
+    roundId: "round-table",
+    roundNumber: matchNumber,
+    tableNumber: 1,
+    player1Id: champion.id,
+    player2Id: queuedChallenger.id,
+    roomId,
+    roomUrl: `/sala.html?room=${encodeURIComponent(roomId)}&tournament=${encodeURIComponent(tournament.id)}&mode=round-table&table=1`,
+    status: "pending",
+    result: null,
+    player1GameWins: null,
+    player2GameWins: null,
+    isDraw: false,
+    resultLabel: "",
+    winnerId: null,
+    reportedBy: null,
+    reportedAt: null,
+    externalPlay: false,
+    externalUrl: "",
+    isBye: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  tournament.status = "in_progress";
+  tournament.currentMatchId = match.id;
+  tournament.matches.push(match);
+  tournament.updatedAt = Date.now();
+  return match;
+}
+
+function applyRoundTableResult(tournament, match, score, userId) {
+  const p1 = findTournamentPlayer(tournament, match.player1Id);
+  const p2 = findTournamentPlayer(tournament, match.player2Id);
+  if (!p1 || !p2) throw new Error("Jogadores da mesa não encontrados.");
+
+  match.player1GameWins = score.player1GameWins;
+  match.player2GameWins = score.player2GameWins;
+  match.result = score.result;
+  match.isDraw = score.isDraw;
+  match.winnerId = score.winnerId;
+  match.resultLabel = buildTournamentResultLabel(tournament, match, score.player1GameWins, score.player2GameWins);
+  match.status = "completed";
+  match.reportedBy = userId;
+  match.reportedAt = Date.now();
+  match.updatedAt = Date.now();
+
+  p1.matchesPlayed += 1;
+  p2.matchesPlayed += 1;
+  p1.opponentIds.push(p2.id);
+  p2.opponentIds.push(p1.id);
+  p1.gameWins += score.player1GameWins;
+  p1.gameLosses += score.player2GameWins;
+  p2.gameWins += score.player2GameWins;
+  p2.gameLosses += score.player1GameWins;
+
+  if (score.result === "draw") {
+    p1.matchPoints += 1;
+    p2.matchPoints += 1;
+    p1.matchDraws += 1;
+    p2.matchDraws += 1;
+    p1.draws = p1.matchDraws;
+    p2.draws = p2.matchDraws;
+    p1.currentStreak = 0;
+    p2.currentStreak = 0;
+    tournament.currentChampionId = p1.id;
+    enqueueRoundTablePlayer(tournament, p2.id);
+  } else if (score.result === "player1_win") {
+    p1.matchPoints += 3;
+    p1.matchWins += 1;
+    p1.wins = p1.matchWins;
+    p1.currentStreak += 1;
+    p1.bestStreak = Math.max(p1.bestStreak, p1.currentStreak);
+    p2.matchLosses += 1;
+    p2.losses = p2.matchLosses;
+    p2.currentStreak = 0;
+    tournament.currentChampionId = p1.id;
+    enqueueRoundTablePlayer(tournament, p2.id);
+  } else if (score.result === "player2_win") {
+    p2.matchPoints += 3;
+    p2.matchWins += 1;
+    p2.wins = p2.matchWins;
+    p2.currentStreak += 1;
+    p2.bestStreak = Math.max(p2.bestStreak, p2.currentStreak);
+    p1.matchLosses += 1;
+    p1.losses = p1.matchLosses;
+    p1.currentStreak = 0;
+    tournament.currentChampionId = p2.id;
+    enqueueRoundTablePlayer(tournament, p1.id);
+  }
+
+  [p1, p2].forEach(player => {
+    player.points = player.matchPoints;
+    player.gameDifferential = player.gameWins - player.gameLosses;
+    player.gameWinPercentage = getGameWinPercentage(player);
+    player.opponentMatchWinPercentage = 0;
+    player.opponentMatchWinRate = 0;
+  });
+
+  tournament.currentMatchId = null;
+  tournament.roundTableHistory = tournament.roundTableHistory || [];
+  tournament.roundTableHistory.unshift({
+    matchId: match.id,
+    label: match.resultLabel,
+    result: match.result,
+    reportedAt: match.reportedAt
+  });
+  tournament.updatedAt = Date.now();
+  createRoundTableMatch(tournament);
 }
 
 function normalizeTournamentScore(tournament, match, body = {}) {
@@ -1367,7 +1583,7 @@ function normalizeTournamentScore(tournament, match, body = {}) {
     : ["2-0", "2-1", "1-1", "0-2", "1-2"];
   const key = `${player1GameWins}-${player2GameWins}`;
   if (!validScores.includes(key)) {
-    throw new Error("Resultado inv?lido.");
+    throw new Error("Resultado inválido.");
   }
 
   let result = "draw";
@@ -1399,7 +1615,7 @@ function createTournamentRound(tournament) {
   }
 
   if (tournament.currentRound >= tournament.roundsTotal) {
-    throw new Error("Todas as rodadas j? foram lan?adas.");
+    throw new Error("Todas as rodadas já foram lançadas.");
   }
 
   const roundNumber = tournament.currentRound + 1;
@@ -1502,7 +1718,7 @@ app.get("/api/tournaments/room/:roomId", (req, res) => {
   const roomId = req.params.roomId;
   const match = activeTournament?.matches?.find(item => item.roomId === roomId);
   if (!activeTournament || !match) {
-    res.status(404).json({ error: "Partida de torneio n?o encontrada." });
+    res.status(404).json({ error: "Partida de torneio não encontrada." });
     return;
   }
 
@@ -1510,6 +1726,7 @@ app.get("/api/tournaments/room/:roomId", (req, res) => {
     tournament: {
       id: activeTournament.id,
       name: activeTournament.name,
+      type: activeTournament.type || "swiss",
       format: activeTournament.format
     },
     match,
@@ -1522,14 +1739,15 @@ app.post("/api/tournaments", (req, res) => {
   const user = requireTournamentUser(req, res);
   if (!user) return;
   if (activeTournament && activeTournament.status !== "finished") {
-    res.status(409).json({ error: "J? existe um torneio ativo." });
+    res.status(409).json({ error: "Já existe um torneio ativo." });
     return;
   }
 
   const name = limitText(req.body.name, 80);
+  const type = req.body.type === "round_table" ? "round_table" : "swiss";
   const maxPlayers = Math.min(64, Math.max(2, Number(req.body.maxPlayers || 8)));
-  const roundsTotal = Math.min(8, Math.max(1, Number(req.body.roundsTotal || 3)));
-  const format = req.body.format === "BO1" ? "BO1" : "BO3";
+  const roundsTotal = type === "round_table" ? 0 : Math.min(8, Math.max(1, Number(req.body.roundsTotal || 3)));
+  const format = type === "round_table" ? "BO1" : req.body.format === "BO1" ? "BO1" : "BO3";
 
   if (!name) {
     res.status(400).json({ error: "Informe o nome do torneio." });
@@ -1541,6 +1759,7 @@ app.post("/api/tournaments", (req, res) => {
 
   activeTournament = {
     id: createId("tournament"),
+    type,
     name,
     ownerId: user.id,
     maxPlayers,
@@ -1553,7 +1772,11 @@ app.post("/api/tournaments", (req, res) => {
     updatedAt: now,
     players: [ownerPlayer],
     rounds: [],
-    matches: []
+    matches: [],
+    queue: [],
+    currentChampionId: type === "round_table" ? ownerPlayer.id : null,
+    currentMatchId: null,
+    roundTableHistory: []
   };
   ownerPlayer.tournamentId = activeTournament.id;
 
@@ -1565,15 +1788,15 @@ app.post("/api/tournaments/:id/join", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio n?o encontrado." });
+    res.status(404).json({ error: "Torneio não encontrado." });
     return;
   }
-  if (tournament.status !== "registration_open") {
-    res.status(400).json({ error: "Inscri??es encerradas." });
+  if (tournament.status !== "registration_open" && (!isRoundTableTournament(tournament) || tournament.status === "finished")) {
+    res.status(400).json({ error: "Inscrições encerradas." });
     return;
   }
   if (findTournamentPlayer(tournament, user.id)) {
-    res.status(409).json({ error: "Voc? j? est? inscrito neste torneio." });
+    res.status(409).json({ error: "Você já está inscrito neste torneio." });
     return;
   }
   if (tournament.players.filter(player => !player.dropped).length >= tournament.maxPlayers) {
@@ -1581,7 +1804,65 @@ app.post("/api/tournaments/:id/join", (req, res) => {
     return;
   }
 
-  tournament.players.push(createTournamentPlayer(user, tournament.id));
+  const player = createTournamentPlayer(user, tournament.id);
+  tournament.players.push(player);
+  if (isRoundTableTournament(tournament)) {
+    enqueueRoundTablePlayer(tournament, player.id);
+    createRoundTableMatch(tournament);
+  }
+  tournament.updatedAt = Date.now();
+  res.json({ tournament: publicTournament(tournament) });
+});
+
+app.post("/api/tournaments/:id/drop", (req, res) => {
+  const user = requireTournamentUser(req, res);
+  if (!user) return;
+  const tournament = activeTournament;
+  if (!tournament || tournament.id !== req.params.id || !isRoundTableTournament(tournament)) {
+    res.status(404).json({ error: "Mesa Redonda nao encontrada." });
+    return;
+  }
+  if (tournament.status === "finished") {
+    res.status(400).json({ error: "Campeonato ja finalizado." });
+    return;
+  }
+
+  const requestedPlayerId = req.body.playerId || user.id;
+  const player = findTournamentPlayer(tournament, requestedPlayerId);
+  if (!player) {
+    res.status(404).json({ error: "Jogador nao encontrado." });
+    return;
+  }
+  if (!isTournamentOwner(tournament, user) && player.userId !== user.id) {
+    res.status(403).json({ error: "Voce so pode dropar a si mesmo." });
+    return;
+  }
+
+  player.dropped = true;
+  player.currentStreak = 0;
+  removeFromRoundTableQueue(tournament, player.id);
+
+  const activeMatch = getActiveRoundTableMatch(tournament);
+  if (activeMatch && (activeMatch.player1Id === player.id || activeMatch.player2Id === player.id)) {
+    const otherPlayerId = activeMatch.player1Id === player.id ? activeMatch.player2Id : activeMatch.player1Id;
+    activeMatch.status = "completed";
+    activeMatch.result = "drop";
+    activeMatch.resultLabel = `${player.name} dropou`;
+    activeMatch.reportedBy = user.id;
+    activeMatch.reportedAt = Date.now();
+    activeMatch.updatedAt = Date.now();
+    tournament.currentMatchId = null;
+    tournament.currentChampionId = findTournamentPlayer(tournament, otherPlayerId)?.dropped ? null : otherPlayerId;
+  }
+
+  if (tournament.currentChampionId === player.id) {
+    tournament.currentChampionId = getRoundTableQueuePlayers(tournament)[0]?.id ||
+      tournament.players.find(item => !item.dropped)?.id ||
+      null;
+    removeFromRoundTableQueue(tournament, tournament.currentChampionId);
+  }
+
+  createRoundTableMatch(tournament);
   tournament.updatedAt = Date.now();
   res.json({ tournament: publicTournament(tournament) });
 });
@@ -1591,7 +1872,7 @@ app.post("/api/tournaments/:id/remove-player", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio n?o encontrado." });
+    res.status(404).json({ error: "Torneio não encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
@@ -1599,7 +1880,7 @@ app.post("/api/tournaments/:id/remove-player", (req, res) => {
     return;
   }
   if (tournament.status !== "registration_open") {
-    res.status(400).json({ error: "S? ? poss?vel remover antes do in?cio." });
+    res.status(400).json({ error: "Só é possível remover antes do início." });
     return;
   }
 
@@ -1613,11 +1894,16 @@ app.post("/api/tournaments/:id/close-registration", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio n?o encontrado." });
+    res.status(404).json({ error: "Torneio não encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
-    res.status(403).json({ error: "Apenas o criador pode encerrar inscri??es." });
+    res.status(403).json({ error: "Apenas o criador pode encerrar inscrições." });
+    return;
+  }
+
+  if (isRoundTableTournament(tournament)) {
+    res.status(400).json({ error: "Mesa Redonda nao usa encerramento de inscricoes." });
     return;
   }
 
@@ -1631,15 +1917,19 @@ app.post("/api/tournaments/:id/launch-round", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio n?o encontrado." });
+    res.status(404).json({ error: "Torneio não encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
-    res.status(403).json({ error: "Apenas o criador pode lan?ar rodadas." });
+    res.status(403).json({ error: "Apenas o criador pode lançar rodadas." });
+    return;
+  }
+  if (isRoundTableTournament(tournament)) {
+    res.status(400).json({ error: "Mesa Redonda gera partidas automaticamente." });
     return;
   }
   if (tournament.players.filter(player => !player.dropped).length < 2) {
-    res.status(400).json({ error: "? preciso pelo menos 2 jogadores." });
+    res.status(400).json({ error: "É preciso pelo menos 2 jogadores." });
     return;
   }
 
@@ -1657,13 +1947,13 @@ app.post("/api/tournaments/:id/matches/:matchId/external", (req, res) => {
   const tournament = activeTournament;
   const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
   if (!tournament || !match) {
-    res.status(404).json({ error: "Partida n?o encontrada." });
+    res.status(404).json({ error: "Partida não encontrada." });
     return;
   }
 
   const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
   if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
-    res.status(403).json({ error: "Voc? n?o pode alterar esta partida." });
+    res.status(403).json({ error: "Você não pode alterar esta partida." });
     return;
   }
 
@@ -1681,17 +1971,17 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
   const tournament = activeTournament;
   const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
   if (!tournament || !match) {
-    res.status(404).json({ error: "Partida n?o encontrada." });
+    res.status(404).json({ error: "Partida não encontrada." });
     return;
   }
   if (false && !["player1_win", "player2_win", "draw"].includes(req.body.result)) {
-    res.status(400).json({ error: "Resultado inv?lido." });
+    res.status(400).json({ error: "Resultado inválido." });
     return;
   }
 
   const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
   if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
-    res.status(403).json({ error: "Voc? s? pode lan?ar resultado da sua partida." });
+    res.status(403).json({ error: "Você só pode lançar resultado da sua partida." });
     return;
   }
 
@@ -1700,6 +1990,16 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
     score = normalizeTournamentScore(tournament, match, req.body);
   } catch (error) {
     res.status(400).json({ error: error.message });
+    return;
+  }
+
+  if (isRoundTableTournament(tournament)) {
+    try {
+      applyRoundTableResult(tournament, match, score, user.id);
+      res.json({ tournament: publicTournament(tournament) });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
     return;
   }
 
@@ -1723,7 +2023,7 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio n?o encontrado." });
+    res.status(404).json({ error: "Torneio não encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
@@ -1732,10 +2032,16 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
   }
 
   tournament.status = "finished";
+  tournament.currentMatchId = null;
   tournament.updatedAt = Date.now();
-  recalculateTournamentStandings(tournament);
+  if (!isRoundTableTournament(tournament)) {
+    recalculateTournamentStandings(tournament);
+  }
   res.json({ tournament: publicTournament(tournament) });
 });
+
+io.on("connection", (socket) => {
+  console.log("Conectado:", socket.id);
 
   socket.emit("lobby-state", buildLobbyState());
   broadcastPresence(socket);
@@ -1981,7 +2287,6 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
     sendRoomState(roomId);
     broadcastLobbyState();
   });
-
 
   socket.on("join-overlay", ({ roomId } = {}) => {
     if (!roomId || typeof roomId !== "string" || roomId.length > 80) return;
