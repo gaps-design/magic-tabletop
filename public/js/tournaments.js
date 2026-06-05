@@ -1,11 +1,11 @@
 (() => {
   const apiBase = "/api/tournaments";
-  const tournamentBackgroundImages = [
-    "/assets/room-skins/leme-tempestade.png",
-    "/assets/room-skins/skinsala-floresta.png",
-    "/assets/room-skins/skinsala-pantano.png",
-    "/assets/room-skins/skinsala-planice.png",
-    "/assets/room-skins/skinsala-raios.png"
+  const tournamentBackgroundSkins = [
+    { image: "/assets/room-skins/leme-tempestade.png", name: "Trono da Tempestade" },
+    { image: "/assets/room-skins/skinsala-floresta.png", name: "Reino Esquecido" },
+    { image: "/assets/room-skins/skinsala-pantano.png", name: "Nebulosa Mistica" },
+    { image: "/assets/room-skins/skinsala-planice.png", name: "Tempestade Arcana" },
+    { image: "/assets/room-skins/skinsala-raios.png", name: "Inferno Escarlate" }
   ];
   let activeTournament = null;
   let authResolved = false;
@@ -28,25 +28,43 @@
   const joinBtn = document.getElementById("joinTournamentBtn");
   const refreshBtn = document.getElementById("refreshTournamentBtn");
   const bgSlides = Array.from(document.querySelectorAll(".tournaments-bg-slide"));
+  const bgDotsRoot = document.querySelector(".tournaments-bg-dots");
+  const bgName = document.querySelector(".tournaments-bg-name");
 
   function startTournamentBackgroundCarousel() {
-    if (bgSlides.length < 2 || !tournamentBackgroundImages.length) return;
+    if (bgSlides.length < 2 || !tournamentBackgroundSkins.length) return;
 
     let imageIndex = 0;
     let activeSlideIndex = 0;
+    const bgDots = tournamentBackgroundSkins.map((_, index) => {
+      const dot = document.createElement("span");
+      dot.className = "tournaments-bg-dot";
+      if (index === 0) dot.classList.add("is-active");
+      bgDotsRoot?.appendChild(dot);
+      return dot;
+    });
 
-    bgSlides[0].style.backgroundImage = `url("${tournamentBackgroundImages[0]}")`;
-    bgSlides[1].style.backgroundImage = `url("${tournamentBackgroundImages[1]}")`;
+    function setActiveBackgroundMeta(index) {
+      if (bgName) bgName.textContent = tournamentBackgroundSkins[index].name;
+      bgDots.forEach((dot, dotIndex) => {
+        dot.classList.toggle("is-active", dotIndex === index);
+      });
+    }
+
+    bgSlides[0].style.backgroundImage = `url("${tournamentBackgroundSkins[0].image}")`;
+    bgSlides[1].style.backgroundImage = `url("${tournamentBackgroundSkins[1]?.image || tournamentBackgroundSkins[0].image}")`;
+    setActiveBackgroundMeta(0);
 
     setInterval(() => {
-      const nextImageIndex = (imageIndex + 1) % tournamentBackgroundImages.length;
+      const nextImageIndex = (imageIndex + 1) % tournamentBackgroundSkins.length;
       const nextSlideIndex = activeSlideIndex === 0 ? 1 : 0;
       const activeSlide = bgSlides[activeSlideIndex];
       const nextSlide = bgSlides[nextSlideIndex];
 
-      nextSlide.style.backgroundImage = `url("${tournamentBackgroundImages[nextImageIndex]}")`;
+      nextSlide.style.backgroundImage = `url("${tournamentBackgroundSkins[nextImageIndex].image}")`;
       nextSlide.classList.add("is-active");
       activeSlide.classList.remove("is-active");
+      setActiveBackgroundMeta(nextImageIndex);
 
       imageIndex = nextImageIndex;
       activeSlideIndex = nextSlideIndex;
