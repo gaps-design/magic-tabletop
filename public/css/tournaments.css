@@ -23,6 +23,43 @@ body{
     linear-gradient(180deg,#06101e,#020617 70%);
 }
 
+.tournaments-bg-carousel,
+.tournaments-bg-overlay{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+}
+
+.tournaments-bg-carousel{
+  z-index:-3;
+  overflow:hidden;
+  background:#020617;
+}
+
+.tournaments-bg-slide{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  transform:scale(1.04);
+  transition:opacity 1.5s ease;
+  will-change:opacity;
+}
+
+.tournaments-bg-slide.is-active{
+  opacity:1;
+}
+
+.tournaments-bg-overlay{
+  z-index:-2;
+  background:
+    radial-gradient(circle at 15% 12%, rgba(34,211,238,.16), transparent 34%),
+    linear-gradient(180deg,rgba(2,6,23,.62),rgba(2,6,23,.88));
+  backdrop-filter:blur(2px);
+}
+
 a{color:inherit}
 button,input,select{
   font:inherit;

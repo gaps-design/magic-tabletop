@@ -1,5 +1,12 @@
 (() => {
   const apiBase = "/api/tournaments";
+  const tournamentBackgroundImages = [
+    "/assets/room-skins/leme-tempestade.png",
+    "/assets/room-skins/skinsala-floresta.png",
+    "/assets/room-skins/skinsala-pantano.png",
+    "/assets/room-skins/skinsala-planice.png",
+    "/assets/room-skins/skinsala-raios.png"
+  ];
   let activeTournament = null;
   let authResolved = false;
   let loggedUser = null;
@@ -20,6 +27,31 @@
   const roundsRoot = document.getElementById("roundsRoot");
   const joinBtn = document.getElementById("joinTournamentBtn");
   const refreshBtn = document.getElementById("refreshTournamentBtn");
+  const bgSlides = Array.from(document.querySelectorAll(".tournaments-bg-slide"));
+
+  function startTournamentBackgroundCarousel() {
+    if (bgSlides.length < 2 || !tournamentBackgroundImages.length) return;
+
+    let imageIndex = 0;
+    let activeSlideIndex = 0;
+
+    bgSlides[0].style.backgroundImage = `url("${tournamentBackgroundImages[0]}")`;
+    bgSlides[1].style.backgroundImage = `url("${tournamentBackgroundImages[1]}")`;
+
+    setInterval(() => {
+      const nextImageIndex = (imageIndex + 1) % tournamentBackgroundImages.length;
+      const nextSlideIndex = activeSlideIndex === 0 ? 1 : 0;
+      const activeSlide = bgSlides[activeSlideIndex];
+      const nextSlide = bgSlides[nextSlideIndex];
+
+      nextSlide.style.backgroundImage = `url("${tournamentBackgroundImages[nextImageIndex]}")`;
+      nextSlide.classList.add("is-active");
+      activeSlide.classList.remove("is-active");
+
+      imageIndex = nextImageIndex;
+      activeSlideIndex = nextSlideIndex;
+    }, 10000);
+  }
 
   function waitForAuth() {
     return new Promise(resolve => {
@@ -584,6 +616,7 @@
   refreshBtn?.addEventListener("click", loadTournament);
   typeInput?.addEventListener("change", updateCreateMode);
   updateCreateMode();
+  startTournamentBackgroundCarousel();
 
   waitForAuth().then(user => {
     loggedUser = user;
