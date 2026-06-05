@@ -254,6 +254,21 @@ spectatorMutePlayer1Btn?.addEventListener("click", () => toggleSpectatorLocalPla
 spectatorMutePlayer2Btn?.addEventListener("click", () => toggleSpectatorLocalPlayerMute(2));
 window.applySpectatorLocalAudioMute = updateSpectatorLocalMuteControls;
 
+function setSpectatorMicUi(isEnabled, label = "") {
+    if (spectatorMicStatus) {
+        spectatorMicStatus.innerText = label || (isEnabled ? "Microfone ativo" : "Você está mutado");
+        spectatorMicStatus.classList.toggle("active", !!isEnabled);
+        spectatorMicStatus.classList.toggle("muted", !isEnabled);
+    }
+
+    if (requestSpectatorMicBtn) {
+        requestSpectatorMicBtn.dataset.micEnabled = isEnabled ? "true" : "false";
+        requestSpectatorMicBtn.innerText = isEnabled ? "Mutar microfone" : "Ligar microfone";
+        requestSpectatorMicBtn.classList.toggle("active", !!isEnabled);
+        requestSpectatorMicBtn.disabled = false;
+    }
+}
+
 function normalizeDecklistUrl(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -1204,12 +1219,7 @@ socket.on("assigned-role", (data) => {
         closePlayerChatPanel();
         updateSpectatorLocalMuteControls();
 
-        if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone ativando...";
-        if (requestSpectatorMicBtn) {
-            requestSpectatorMicBtn.dataset.micEnabled = "true";
-            requestSpectatorMicBtn.innerText = "Mutar microfone";
-            requestSpectatorMicBtn.disabled = false;
-        }
+        setSpectatorMicUi(true, "Microfone ativando...");
 
         showLeaveSpectatorButton();
         updateFaceCameraControls();
@@ -1477,11 +1487,8 @@ socket.on("mic-status-update", ({ socketId, micEnabled, info }) => {
     }
 
     if (info?.role === "spectator") {
-        if (socketId === socket.id && spectatorMicStatus && requestSpectatorMicBtn) {
-            spectatorMicStatus.innerText = micEnabled ? "Microfone ativo" : "Você está mutado";
-            requestSpectatorMicBtn.dataset.micEnabled = micEnabled ? "true" : "false";
-            requestSpectatorMicBtn.innerText = micEnabled ? "Mutar microfone" : "Ligar microfone";
-            requestSpectatorMicBtn.disabled = false;
+        if (socketId === socket.id) {
+            setSpectatorMicUi(!!micEnabled);
         }
         return;
     }
@@ -2401,13 +2408,8 @@ if (spectatorsCountBtn) {
                 name: s.name || "Espectador",
                 photo: s.photo || "",
                 status: s.micEnabled ? "Microfone ativo" : "Microfone mutado",
-                actionLabel: selectedRole === "player" && s.micEnabled ? "Mutar" : "",
-                onAction: selectedRole === "player" && s.micEnabled
-                    ? () => socket.emit("spectator-mic-mute", {
-                        roomId,
-                        spectatorSocketId: s.socketId
-                    })
-                    : null
+                actionLabel: "",
+                onAction: null
             }))
         );
     });
@@ -2455,58 +2457,7 @@ if (resenhaBecomePlayerBtn) {
 }
 
 function showSpectatorMicRequest(data) {
-    const existing = document.querySelector(`[data-mic-request="${data.spectatorSocketId}"]`);
-    if (existing) existing.remove();
-
-    const prompt = document.createElement("div");
-    prompt.className = "mic-request-toast";
-    prompt.dataset.micRequest = data.spectatorSocketId;
-
-    const img = document.createElement("img");
-    img.src = data.photo || "/assets/default-avatar.png";
-    img.alt = data.name || "Espectador";
-
-    const text = document.createElement("div");
-    const title = document.createElement("strong");
-    title.innerText = data.name || "Espectador";
-    const subtitle = document.createElement("span");
-    subtitle.innerText = "solicitou microfone";
-    text.appendChild(title);
-    text.appendChild(subtitle);
-
-    const actions = document.createElement("div");
-    actions.className = "mic-request-actions";
-
-    const allow = document.createElement("button");
-    allow.type = "button";
-    allow.innerText = "Permitir áudio";
-    allow.addEventListener("click", () => {
-        socket.emit("spectator-mic-response", {
-            roomId,
-            spectatorSocketId: data.spectatorSocketId,
-            allow: true
-        });
-        prompt.remove();
-    });
-
-    const deny = document.createElement("button");
-    deny.type = "button";
-    deny.innerText = "Negar";
-    deny.addEventListener("click", () => {
-        socket.emit("spectator-mic-response", {
-            roomId,
-            spectatorSocketId: data.spectatorSocketId,
-            allow: false
-        });
-        prompt.remove();
-    });
-
-    actions.appendChild(allow);
-    actions.appendChild(deny);
-    prompt.appendChild(img);
-    prompt.appendChild(text);
-    prompt.appendChild(actions);
-    document.body.appendChild(prompt);
+    console.log("[AUDIO][SPECTATOR] legacy mic request ignored; spectators control their own microphone", data);
 }
 
 window.copyCameraLink = async function() {
@@ -4090,24 +4041,20 @@ if (requestSpectatorMicBtn) {
         if (selectedRole !== "spectator") return;
 
         const isEnabled = requestSpectatorMicBtn.dataset.micEnabled !== "false";
+        requestSpectatorMicBtn.disabled = true;
 
         if (isEnabled) {
             await window.disableSpectatorMicrophone?.();
-            if (spectatorMicStatus) spectatorMicStatus.innerText = "Você está mutado";
-            requestSpectatorMicBtn.dataset.micEnabled = "false";
-            requestSpectatorMicBtn.innerText = "Ligar microfone";
-            requestSpectatorMicBtn.disabled = false;
+            setSpectatorMicUi(false);
             return;
         }
 
         try {
             console.log("[AUDIO][SPECTATOR] local microphone enabled", { roomId });
             await window.enableSpectatorMicrophone?.();
-            if (spectatorMicStatus) spectatorMicStatus.innerText = "Microfone ativo";
-            requestSpectatorMicBtn.dataset.micEnabled = "true";
-            requestSpectatorMicBtn.innerText = "Mutar microfone";
-            requestSpectatorMicBtn.disabled = false;
+            setSpectatorMicUi(true);
         } catch (error) {
+            setSpectatorMicUi(false);
             alert("Não foi possível ativar seu microfone.");
         }
     });
@@ -4186,29 +4133,18 @@ socket.on("spectator-mic-requested", (data) => {
 });
 
 socket.on("spectator-mic-status", async ({ status }) => {
-    if (!spectatorMicStatus || !requestSpectatorMicBtn) return;
-
     if (status === "muted") {
         await window.disableSpectatorMicrophone?.();
-        spectatorMicStatus.innerText = "Você está mutado";
-        requestSpectatorMicBtn.dataset.micEnabled = "false";
-        requestSpectatorMicBtn.innerText = "Ligar microfone";
-        requestSpectatorMicBtn.disabled = false;
+        setSpectatorMicUi(false);
         return;
     }
 
     if (status === "allowed" || status === "enabled") {
-        spectatorMicStatus.innerText = "Microfone ativo";
-        requestSpectatorMicBtn.dataset.micEnabled = "true";
-        requestSpectatorMicBtn.innerText = "Mutar microfone";
-        requestSpectatorMicBtn.disabled = false;
+        setSpectatorMicUi(true);
         return;
     }
 
-    spectatorMicStatus.innerText = "Microfone disponível";
-    requestSpectatorMicBtn.dataset.micEnabled = "true";
-    requestSpectatorMicBtn.innerText = "Mutar microfone";
-    requestSpectatorMicBtn.disabled = false;
+    setSpectatorMicUi(true, "Microfone disponível");
 });
 
 socket.on("chat-cooldown", (data) => {

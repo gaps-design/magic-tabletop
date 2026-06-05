@@ -1148,6 +1148,34 @@ function syncLocalAudioTrackToPeers(reason = "audio-sync") {
     });
 }
 
+function logSpectatorPeerAudioState(targetId, peer, reason = "spectator-peer-audio") {
+    if (currentRole !== "spectator" && peerInfo[targetId]?.role !== "spectator") return;
+
+    audioLog("[RTC_DEBUG][AUDIO][SPECTATOR] peer audio state", {
+        targetId,
+        reason,
+        localRole: currentRole,
+        remoteRole: peerInfo[targetId]?.role || "unknown",
+        connectionState: peer?.connectionState || null,
+        iceConnectionState: peer?.iceConnectionState || null,
+        signalingState: peer?.signalingState || null,
+        audioSenders: peer?.getSenders?.()
+            .filter(sender => sender.track?.kind === "audio")
+            .map(sender => ({
+                trackId: sender.track.id,
+                enabled: sender.track.enabled,
+                readyState: sender.track.readyState
+            })) || [],
+        audioReceivers: peer?.getReceivers?.()
+            .filter(receiver => receiver.track?.kind === "audio")
+            .map(receiver => ({
+                trackId: receiver.track.id,
+                muted: receiver.track.muted,
+                readyState: receiver.track.readyState
+            })) || []
+    });
+}
+
 async function ensurePlayerVideoSentToPeer(targetId, reason = "ensure-video") {
     if (!targetId) return;
     const info = peerInfo[targetId] || {};
@@ -1626,6 +1654,7 @@ function createPeerConnection(targetId) {
     rtcLog(targetId, "createPeerConnection created peer", {
         iceServers: servers.iceServers.map(server => server.urls)
     });
+    logSpectatorPeerAudioState(targetId, peer, "peer-created");
 
     const activeStream = getActiveLocalStream();
 
@@ -1689,6 +1718,7 @@ function createPeerConnection(targetId) {
                 readyState: event.track.readyState,
                 streamId: stream?.id || null
             });
+            logSpectatorPeerAudioState(targetId, peer, "ontrack-audio");
         }
 
         event.track.onunmute = () => {
@@ -1735,6 +1765,7 @@ function createPeerConnection(targetId) {
             diagnostics: peerDiagnostics(peer)
         });
         logPcStateDebug(targetId, peer, "ice-connection-state-change");
+        logSpectatorPeerAudioState(targetId, peer, "ice-connection-state-change");
 
         if (
             !peer.__resenhaClosing &&
@@ -1781,6 +1812,7 @@ function createPeerConnection(targetId) {
             diagnostics: peerDiagnostics(peer)
         });
         logPcStateDebug(targetId, peer, "connection-state-change");
+        logSpectatorPeerAudioState(targetId, peer, "connection-state-change");
 
         if (peer.connectionState === "connected") {
             if (isPhoneCameraMode() && reconnectAttempts[targetId] > 0) {
@@ -2090,7 +2122,6 @@ function schedulePeerReconnect(targetId, baseDelay = 1200) {
         if (!peerInfo[targetId]) return;
 
         if (currentRole === "camera" && info.role === "camera") return;
-        if (info.role === "spectator") return;
 
         try {
             const existingPeer = peerConnections[targetId];
@@ -2253,7 +2284,6 @@ async function reconnectAllMediaPeers(reason = "manual") {
     for (const [socketId, info] of Object.entries(peerInfo)) {
         if (!info) continue;
         if (currentRole === "camera" && info.role === "camera") continue;
-        if (info.role === "spectator") continue;
 
         try {
             const peer = peerConnections[socketId];
@@ -2919,6 +2949,10 @@ socket.on("connect", async () => {
             await startWebcam();
         }
 
+        if (currentRole === "spectator" && !getLocalAudioTrack()) {
+            await window.enableSpectatorMicrophone?.();
+        }
+
         routeLocalPreview();
         refreshCameraModeResilience("socket-reconnect");
         socket.emit("join-room", lastJoinPayload);
@@ -3035,16 +3069,28 @@ socket.on("user-connected", (data) => {
         return;
     }
 
-    if (
-        (currentRole === "spectator" && ["player", "camera"].includes(data.role)) ||
-        (["player", "camera"].includes(currentRole) && data.role === "spectator")
-    ) {
-        spectatorLog("creating offer for spectator audio path", {
+    if (currentRole === "spectator" || data.role === "spectator") {
+        spectatorLog("creating normal peer path for spectator", {
             target: data.socketId,
+            localRole: currentRole,
             remoteRole: data.role
         });
-        ensurePlayerVideoSentToPeer(data.socketId, "user-connected-spectator-video").catch(error => {
-            rtcLog(data.socketId, "ensure spectator video failed", {
+
+        if (
+            (currentRole === "spectator" && ["player", "camera"].includes(data.role)) ||
+            (["player", "camera"].includes(currentRole) && data.role === "spectator")
+        ) {
+            ensurePlayerVideoSentToPeer(data.socketId, "user-connected-spectator-video").catch(error => {
+                rtcLog(data.socketId, "ensure spectator video failed", {
+                    errorName: error?.name,
+                    errorMessage: error?.message
+                }, "warn");
+            });
+            return;
+        }
+
+        createOffer(data.socketId, data).catch(error => {
+            rtcLog(data.socketId, "spectator peer offer failed", {
                 errorName: error?.name,
                 errorMessage: error?.message
             }, "warn");

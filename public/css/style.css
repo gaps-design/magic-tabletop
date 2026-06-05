@@ -5079,3 +5079,31 @@ body.spectator-mode .readonly-marker-summary{
         text-align: center;
     }
 }
+
+/* Espectadores falam como peers normais: estado local do microfone sempre visivel. */
+body.spectator-mode #spectatorMicStatus{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    padding:5px 8px !important;
+    border:1px solid rgba(148,163,184,.28) !important;
+    border-radius:999px !important;
+    background:rgba(15,23,42,.72) !important;
+    color:#d8e7ff !important;
+}
+
+body.spectator-mode #spectatorMicStatus.active{
+    border-color:rgba(134,239,172,.42) !important;
+    background:rgba(22,163,74,.2) !important;
+    color:#bbf7d0 !important;
+}
+
+body.spectator-mode #spectatorMicStatus.muted{
+    border-color:rgba(251,113,133,.42) !important;
+    background:rgba(127,29,29,.24) !important;
+    color:#fecdd3 !important;
+}
+
+body.spectator-mode #requestSpectatorMicBtn.active{
+    background:#16a34a !important;
+}

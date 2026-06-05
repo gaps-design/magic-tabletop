@@ -2589,16 +2589,14 @@ io.on("connection", (socket) => {
     if (!profile) return;
 
     profile.micAllowed = true;
-    profile.micEnabled = false;
-    room.micStatus[spectatorSocketId] = false;
-    console.log("[AUDIO][SPECTATOR] legacy mic response", {
+    console.log("[AUDIO][SPECTATOR] legacy mic response ignored; spectators self-manage microphone", {
       roomId,
       spectatorSocketId,
       allow: !!allow
     });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
-      status: allow ? "allowed" : "denied"
+      status: "enabled"
     });
 
     sendRoomState(roomId);
@@ -2613,21 +2611,19 @@ io.on("connection", (socket) => {
     if (!profile) return;
 
     profile.micAllowed = true;
-    profile.micEnabled = false;
-    room.micStatus[spectatorSocketId] = false;
-    console.log("[AUDIO][SPECTATOR] legacy mic permission command", {
+    console.log("[AUDIO][SPECTATOR] legacy mic permission command ignored; spectators self-manage microphone", {
       roomId,
       spectatorSocketId,
       allow: !!allow
     });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
-      status: allow ? "allowed" : "muted"
+      status: "enabled"
     });
 
     io.to(roomId).emit("mic-status-update", {
       socketId: spectatorSocketId,
-      micEnabled: false,
+      micEnabled: !!profile.micEnabled,
       info: getClientInfo(spectatorSocketId)
     });
 
@@ -2643,21 +2639,19 @@ io.on("connection", (socket) => {
     if (!profile) return;
 
     profile.micAllowed = true;
-    profile.micEnabled = false;
-    room.micStatus[spectatorSocketId] = false;
-    console.log("[AUDIO][SPECTATOR] non-blocking spectator mute command", {
+    console.log("[AUDIO][SPECTATOR] spectator mute command ignored; spectators self-manage microphone", {
       roomId,
       spectatorSocketId,
       mutedBy: socket.id
     });
 
     io.to(spectatorSocketId).emit("spectator-mic-status", {
-      status: "muted"
+      status: "enabled"
     });
 
     io.to(roomId).emit("mic-status-update", {
       socketId: spectatorSocketId,
-      micEnabled: false,
+      micEnabled: !!profile.micEnabled,
       info: getClientInfo(spectatorSocketId)
     });
 
