@@ -27,6 +27,32 @@ body{
     linear-gradient(180deg,#06101e,#020617 70%);
 }
 
+body.hall-of-fame-page{
+  position:relative;
+  isolation:isolate;
+  background-image:url("/assets/hall-bg.jpg");
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  background-attachment:fixed;
+}
+
+body.hall-of-fame-page::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background:rgba(0,0,0,.45);
+}
+
+body.hall-of-fame-page .hero-card,
+body.hall-of-fame-page .panel,
+body.hall-of-fame-page .round-table-summary article{
+  background:rgba(8,18,32,.88);
+  backdrop-filter:blur(10px);
+}
+
 .tournaments-bg-carousel,
 .tournaments-bg-overlay,
 .tournaments-bg-meta,

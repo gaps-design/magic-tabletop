@@ -213,6 +213,7 @@ body:not([data-local-room-skin="none"]) .top-actions button{
     inset:0;
     pointer-events:none;
     z-index:20;
+    overflow:hidden;
 }
 
 .table-skin-frame{
@@ -223,6 +224,44 @@ body:not([data-local-room-skin="none"]) .top-actions button{
     object-fit:fill;
     pointer-events:none;
     display:block;
+}
+
+.table-skin-mono-red .table-skin-frame{
+    inset:0;
+    width:100%;
+    height:100%;
+    max-width:none;
+    max-height:none;
+    object-fit:fill;
+    transform:none;
+}
+
+.table-skin-custom-text{
+    position:absolute;
+    left:50%;
+    bottom:5.4%;
+    width:min(62%, 760px);
+    transform:translateX(-50%);
+    overflow:hidden;
+    color:#fff7d6;
+    font-size:clamp(11px, 1.35vw, 22px);
+    font-weight:900;
+    line-height:1.12;
+    letter-spacing:.02em;
+    text-align:center;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    text-shadow:
+        0 2px 4px rgba(0,0,0,.92),
+        0 0 12px rgba(245,215,122,.48);
+}
+
+.custom-skin-text-control{
+    min-width:230px;
+}
+
+.custom-skin-text-control input{
+    min-width:230px;
 }
 
 .camera-card.table-skin-active{

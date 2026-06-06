@@ -32,6 +32,9 @@ const CHAT_BLOCK_MS = 3000;
 const CARD_SCAN_MESSAGE_LIMIT = 650;
 const CARD_SCAN_FIELD_LIMIT = 180;
 const CARD_SCAN_ORACLE_LIMIT = 420;
+const CUSTOM_SKIN_TEXT_LIMIT = 80;
+const TABLE_SKINS = new Set(["none", "mono-white", "mono-blue", "mono-black", "mono-red", "mono-green", "custom"]);
+const CUSTOM_SKIN_BLOCKED_WORDS = ["porra", "caralho", "puta", "fdp", "viado", "merda"];
 const FLOATING_EMOJIS = new Set([
   "\u{1F525}",
   "\u{1F602}",
@@ -67,6 +70,25 @@ function sanitizeCardScan(card = {}) {
     oracleText: limitText(card.oracleText, CARD_SCAN_ORACLE_LIMIT),
     imageUrl: /^https:\/\/cards\.scryfall\.io\//.test(imageUrl) ? imageUrl : ""
   };
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeTableSkin(skinId) {
+  return TABLE_SKINS.has(skinId) ? skinId : "none";
+}
+
+function sanitizeCustomSkinText(value = "") {
+  let text = limitText(value, CUSTOM_SKIN_TEXT_LIMIT);
+
+  CUSTOM_SKIN_BLOCKED_WORDS.forEach(word => {
+    const pattern = new RegExp(`\\b${escapeRegExp(word)}\\b`, "gi");
+    text = text.replace(pattern, "****");
+  });
+
+  return text;
 }
 
 const MARKER_LABELS = {
@@ -287,6 +309,28 @@ function createDefaultPlayerThemes() {
   return { 1: "none", 2: "none" };
 }
 
+function createDefaultTableSkins() {
+  return {
+    1: { skinId: "none", customText: "" },
+    2: { skinId: "none", customText: "" }
+  };
+}
+
+function publicTableSkinState(room) {
+  const state = room?.tableSkins || createDefaultTableSkins();
+
+  return {
+    1: {
+      skinId: normalizeTableSkin(state[1]?.skinId || state["1"]?.skinId || "none"),
+      customText: sanitizeCustomSkinText(state[1]?.customText || state["1"]?.customText || "")
+    },
+    2: {
+      skinId: normalizeTableSkin(state[2]?.skinId || state["2"]?.skinId || "none"),
+      customText: sanitizeCustomSkinText(state[2]?.customText || state["2"]?.customText || "")
+    }
+  };
+}
+
 function publicTimer(timer) {
   return {
     duration: timer.duration,
@@ -312,6 +356,7 @@ function ensureRoom(roomId) {
       markerState: { 1: {}, 2: {} },
       cameraFraming: { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } },
       playerThemes: createDefaultPlayerThemes(),
+      tableSkins: createDefaultTableSkins(),
       overlays: [],
       currentScannerCard: null
     };
@@ -319,6 +364,10 @@ function ensureRoom(roomId) {
 
   if (!rooms[roomId].playerThemes) {
     rooms[roomId].playerThemes = createDefaultPlayerThemes();
+  }
+
+  if (!rooms[roomId].tableSkins) {
+    rooms[roomId].tableSkins = createDefaultTableSkins();
   }
 
   if (!rooms[roomId].cameraFraming) {
@@ -497,9 +546,11 @@ function sendRoomState(roomId) {
     markerState: room.markerState || { 1: {}, 2: {} },
     cameraFraming: room.cameraFraming || { 1: { zoom: 1, x: 0, y: 0 }, 2: { zoom: 1, x: 0, y: 0 } },
     playerThemes: room.playerThemes || createDefaultPlayerThemes(),
+    tableSkins: publicTableSkinState(room),
     currentScannerCard: room.currentScannerCard || null,
     users: buildRoomUsers(room)
   });
+  io.to(roomId).emit("table-skin-state", publicTableSkinState(room));
 }
 
 function getClientInfo(socketId) {
@@ -593,6 +644,7 @@ function resetPublicRoomIfEmpty(roomId) {
       faceCams: {},
       markerState: { 1: {}, 2: {} },
       playerThemes: createDefaultPlayerThemes(),
+      tableSkins: createDefaultTableSkins(),
       overlays: [],
       currentScannerCard: null
     };
@@ -2501,6 +2553,53 @@ io.on("connection", (socket) => {
     sendRoomState(roomId);
   });
 
+  socket.on("table-skin-change", ({ roomId, playerNumber, skinId, customText }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+
+    const normalizedPlayerNumber = Number(playerNumber);
+    if (Number(player.playerNumber) !== normalizedPlayerNumber) return;
+
+    room.tableSkins = room.tableSkins || createDefaultTableSkins();
+    room.tableSkins[normalizedPlayerNumber] = {
+      skinId: normalizeTableSkin(skinId),
+      customText: sanitizeCustomSkinText(customText)
+    };
+
+    io.to(roomId).emit("table-skin-update", {
+      roomId,
+      playerNumber: normalizedPlayerNumber,
+      ...room.tableSkins[normalizedPlayerNumber]
+    });
+  });
+
+  socket.on("table-skin-text-change", ({ roomId, playerNumber, customText }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+
+    const normalizedPlayerNumber = Number(playerNumber);
+    if (Number(player.playerNumber) !== normalizedPlayerNumber) return;
+
+    room.tableSkins = room.tableSkins || createDefaultTableSkins();
+    const current = room.tableSkins[normalizedPlayerNumber] || { skinId: "none", customText: "" };
+    room.tableSkins[normalizedPlayerNumber] = {
+      skinId: normalizeTableSkin(current.skinId),
+      customText: sanitizeCustomSkinText(customText)
+    };
+
+    io.to(roomId).emit("table-skin-text-update", {
+      roomId,
+      playerNumber: normalizedPlayerNumber,
+      customText: room.tableSkins[normalizedPlayerNumber].customText
+    });
+  });
+
   socket.on("camera-framing-update", ({ roomId, playerNumber, settings }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -3061,6 +3160,7 @@ io.on("connection", (socket) => {
     sendRoomState(roomId);
     broadcastLobbyState();
   });
+
   socket.on("set-timer", ({ roomId, minutes }) => {
     const room = rooms[roomId];
     if (!room) return;
