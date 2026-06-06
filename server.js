@@ -3030,6 +3030,37 @@ io.on("connection", (socket) => {
     broadcastLobbyState();
   });
 
+  socket.on("reset-player-state", ({ roomId, playerNumber }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = getPlayerBySocket(room, socket.id);
+    if (!player) return;
+
+    const normalizedPlayerNumber = Number(playerNumber);
+    if (player.playerNumber !== normalizedPlayerNumber) return;
+
+    const oldLife = player.life;
+    player.life = 20;
+    room.lifeHistory = [];
+    room.markerState = room.markerState || { 1: {}, 2: {} };
+    room.markerState[String(normalizedPlayerNumber)] = {};
+
+    io.to(roomId).emit("system-event", {
+      type: "player-state-reset",
+      message: `${player.name || `Jogador ${normalizedPlayerNumber}`} reiniciou vida, histórico, notas e marcadores da partida.`,
+      time: new Date().toLocaleTimeString("pt-BR")
+    });
+
+    io.to(socket.id).emit("player-state-reset", {
+      playerNumber: normalizedPlayerNumber,
+      oldLife,
+      newLife: 20
+    });
+
+    sendRoomState(roomId);
+    broadcastLobbyState();
+  });
   socket.on("set-timer", ({ roomId, minutes }) => {
     const room = rooms[roomId];
     if (!room) return;

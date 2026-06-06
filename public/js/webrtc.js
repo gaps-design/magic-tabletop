@@ -33,6 +33,7 @@ let selectedSpectatorMicrophoneId = localStorage.getItem("magicSelectedSpectator
 const peerConnections = {};
 const peerInfo = {};
 const remoteStreams = {};
+const remoteAudioElements = {};
 const pendingCandidates = {};
 const reconnectAttempts = {};
 const reconnectTimers = {};
@@ -57,6 +58,7 @@ window.webrtcDebug = {
     peerConnections,
     peerInfo,
     remoteStreams,
+    remoteAudioElements,
     pendingCandidates
 };
 
@@ -761,6 +763,13 @@ async function startWebcam(
         const settings = videoTrack.getSettings();
         selectedCameraId = settings.deviceId || selectedCameraId;
         localStorage.setItem("magicSelectedCamera", selectedCameraId);
+        mediaLog("[RTC_DEBUG][MEDIA] local video ready", {
+            role: currentRole,
+            trackId: videoTrack.id,
+            enabled: videoTrack.enabled,
+            readyState: videoTrack.readyState,
+            deviceId: settings.deviceId || "default"
+        });
 
         if (cameraSelect) {
             cameraSelect.value = selectedCameraId;
@@ -771,6 +780,13 @@ async function startWebcam(
         const settings = audioTrack.getSettings();
         selectedMicrophoneId = settings.deviceId || selectedMicrophoneId;
         localStorage.setItem("magicSelectedMicrophone", selectedMicrophoneId);
+        audioLog("[RTC_DEBUG][AUDIO] local audio ready", {
+            role: currentRole,
+            trackId: audioTrack.id,
+            enabled: audioTrack.enabled,
+            readyState: audioTrack.readyState,
+            deviceId: settings.deviceId || "default"
+        });
         audioLog("[RTC_DEBUG][AUDIO] local audio track ready", {
             role: currentRole,
             trackId: audioTrack.id,
@@ -1107,6 +1123,13 @@ function upsertAudioTrackForPeer(peerConnection, audioTrack, targetId, reason = 
         reason,
         trackId: audioTrack.id
     });
+    audioLog("[RTC_DEBUG][AUDIO] audio track added to peer", {
+        targetId,
+        reason,
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState
+    });
 
     peerConnection.addTrack(audioTrack, activeStream);
     return true;
@@ -1283,6 +1306,15 @@ function addOrReplaceLocalTrack(peer, targetId, track, stream, reason = "local-t
     }
 
     peer.addTrack(track, stream);
+    if (kind === "video") {
+        mediaLog("[RTC_DEBUG][MEDIA] video track added to peer", {
+            targetId,
+            reason,
+            trackId: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState
+        });
+    }
     rtcLog(targetId, "local track added", {
         kind,
         reason,
@@ -1377,6 +1409,67 @@ function setVideoStream(videoElement, stream, muted = false) {
 
     setTimeout(() => window.ResenhaONRoomSkins?.syncRoomSkinVisuals?.(), 0);
     setTimeout(() => window.ResenhaONRoomSkins?.syncRoomSkinVisuals?.(), 300);
+}
+
+function setRemoteAudioStream(socketId, stream) {
+    if (!socketId || !stream) return;
+
+    const info = peerInfo[socketId] || {};
+    if (info.role !== "spectator") return;
+
+    const audioTracks = stream.getAudioTracks?.().filter(track => track.readyState === "live") || [];
+    if (!audioTracks.length) return;
+
+    let audioElement = remoteAudioElements[socketId];
+
+    if (!audioElement) {
+        audioElement = document.createElement("audio");
+        audioElement.autoplay = true;
+        audioElement.playsInline = true;
+        audioElement.dataset.remoteAudioPeer = socketId;
+        audioElement.className = "remote-peer-audio";
+        audioElement.style.display = "none";
+        document.body.appendChild(audioElement);
+        remoteAudioElements[socketId] = audioElement;
+    }
+
+    if (audioElement.srcObject !== stream) {
+        audioLog("[RTC_DEBUG][AUDIO] remote spectator audio attached", {
+            socketId,
+            streamId: stream.id,
+            audioTracks: audioTracks.map(track => ({
+                id: track.id,
+                label: track.label,
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            }))
+        });
+        audioElement.srcObject = stream;
+    }
+
+    audioElement.muted = false;
+
+    const playPromise = audioElement.play();
+    if (playPromise?.catch) {
+        playPromise.catch(error => {
+            audioLog("[RTC_DEBUG][AUDIO] remote spectator audio play blocked or delayed", {
+                socketId,
+                errorName: error?.name,
+                errorMessage: error?.message
+            }, "warn");
+        });
+    }
+}
+
+function clearRemoteAudio(socketId) {
+    const audioElement = remoteAudioElements[socketId];
+    if (!audioElement) return;
+
+    audioElement.pause?.();
+    audioElement.srcObject = null;
+    audioElement.remove();
+    delete remoteAudioElements[socketId];
 }
 
 function clearVideoIfStream(videoElement, stream) {
@@ -1501,6 +1594,8 @@ function routeStream(socketId, stream) {
             readyState: track.readyState
         }))
     });
+
+    setRemoteAudioStream(socketId, stream);
 
     if (currentRole === "spectator") {
         if (info.role === "camera") {
@@ -1719,6 +1814,15 @@ function createPeerConnection(targetId) {
                 streamId: stream?.id || null
             });
             logSpectatorPeerAudioState(targetId, peer, "ontrack-audio");
+        }
+
+        if (event.track?.kind === "video") {
+            mediaLog("[RTC_DEBUG][MEDIA] remote video track received", {
+                targetId,
+                muted: event.track.muted,
+                readyState: event.track.readyState,
+                streamId: stream?.id || null
+            });
         }
 
         event.track.onunmute = () => {
@@ -2222,6 +2326,7 @@ function closePeerConnection(socketId, reason = "cleanup", options = {}) {
 
     if (removeRemote) {
         delete remoteStreams[socketId];
+        clearRemoteAudio(socketId);
     }
 
     if (removeInfo) {
@@ -2247,6 +2352,7 @@ function cleanupPeer(socketId) {
 
     clearVideoIfStream(localVideo, stream);
     clearVideoIfStream(remoteVideo, stream);
+    clearRemoteAudio(socketId);
 
     if (info.role === "camera") {
         Object.entries(remoteStreams).forEach(([id, playerStream]) => {
@@ -2362,6 +2468,7 @@ window.shutdownRoomConnection = function() {
     Object.keys(remoteStreams).forEach(socketId => {
         delete remoteStreams[socketId];
     });
+    Object.keys(remoteAudioElements).forEach(clearRemoteAudio);
 
     Object.keys(pendingCandidates).forEach(socketId => {
         delete pendingCandidates[socketId];
@@ -3428,6 +3535,16 @@ window.toggleMicrophone = function() {
         track.enabled = micEnabled;
     });
 
+    audioLog("[RTC_DEBUG][AUDIO] mute state changed", {
+        role: currentRole,
+        micEnabled,
+        audioTracks: localStream.getAudioTracks().map(track => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState
+        }))
+    });
+
     updateMediaStatus();
 
     if (currentRoomId) {
@@ -3450,6 +3567,13 @@ window.enableSpectatorMicrophone = async function() {
             trackId: existingAudioTrack.id,
             peerCount: Object.keys(peerConnections).length
         });
+        audioLog("[RTC_DEBUG][AUDIO] local audio ready", {
+            role: currentRole,
+            trackId: existingAudioTrack.id,
+            enabled: existingAudioTrack.enabled,
+            readyState: existingAudioTrack.readyState,
+            reused: true
+        });
         audioLog("[RTC_DEBUG][AUDIO] spectator audio track ready", {
             trackId: existingAudioTrack.id,
             enabled: existingAudioTrack.enabled,
@@ -3463,6 +3587,14 @@ window.enableSpectatorMicrophone = async function() {
             reused: true
         });
         audioLog("[RTC_DEBUG][AUDIO] spectator microphone active", {
+            trackId: existingAudioTrack.id,
+            enabled: existingAudioTrack.enabled,
+            readyState: existingAudioTrack.readyState,
+            reused: true
+        });
+        audioLog("[RTC_DEBUG][AUDIO] mute state changed", {
+            role: currentRole,
+            micEnabled,
             trackId: existingAudioTrack.id,
             enabled: existingAudioTrack.enabled,
             readyState: existingAudioTrack.readyState,
@@ -3530,6 +3662,13 @@ window.enableSpectatorMicrophone = async function() {
         readyState: audioTrack.readyState,
         enabled: audioTrack.enabled
     });
+    audioLog("[RTC_DEBUG][AUDIO] local audio ready", {
+        role: currentRole,
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        deviceId: trackSettings.deviceId || "default"
+    });
     audioLog("[RTC_DEBUG][AUDIO] spectator audio track ready", {
         trackId: audioTrack.id,
         enabled: audioTrack.enabled,
@@ -3551,6 +3690,13 @@ window.enableSpectatorMicrophone = async function() {
 
     micEnabled = true;
     audioTrack.enabled = true;
+    audioLog("[RTC_DEBUG][AUDIO] mute state changed", {
+        role: currentRole,
+        micEnabled,
+        trackId: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState
+    });
 
     if (!localStream) {
         localStream = new MediaStream();
@@ -3595,6 +3741,16 @@ window.disableSpectatorMicrophone = async function() {
             });
         });
     }
+
+    audioLog("[RTC_DEBUG][AUDIO] mute state changed", {
+        role: currentRole,
+        micEnabled,
+        audioTracks: localStream?.getAudioTracks?.().map(track => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState
+        })) || []
+    });
 
     updateMediaStatus();
 

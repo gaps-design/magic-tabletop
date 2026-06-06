@@ -149,6 +149,7 @@ let tournamentRoomPanelOpen = false;
 let victoryOverlayTimer = null;
 const previousOfficialLife = {};
 const lifeDeltaTimers = {};
+const feedbackSequences = {};
 let hasSeenLoggedUser = false;
 let hasHandledLogout = false;
 let isRedirectingHome = false;
@@ -1874,6 +1875,7 @@ function showLifeDeltaBesideElement(timerKey, lifeElement, delta) {
 
     const container = lifeElement?.closest(".life-control-box");
     if (!lifeElement || !container) return;
+    const sequenceAmount = updateFeedbackSequence(timerKey, amount);
 
     const previousDelta = container.querySelector(".life-delta");
     if (previousDelta) previousDelta.remove();
@@ -1883,15 +1885,41 @@ function showLifeDeltaBesideElement(timerKey, lifeElement, delta) {
     }
 
     const deltaEl = document.createElement("span");
-    deltaEl.className = `life-delta ${amount > 0 ? "positive" : "negative"}`;
-    deltaEl.innerText = amount > 0 ? `+${amount}` : String(amount);
+    deltaEl.className = `life-delta ${sequenceAmount > 0 ? "positive" : "negative"}`;
+    deltaEl.innerText = sequenceAmount > 0 ? `+${sequenceAmount}` : String(sequenceAmount);
 
     container.appendChild(deltaEl);
 
     lifeDeltaTimers[timerKey] = setTimeout(() => {
         deltaEl.remove();
         delete lifeDeltaTimers[timerKey];
-    }, 1000);
+    }, 3000);
+}
+
+function updateFeedbackSequence(key, amount) {
+    const now = Date.now();
+    const direction = amount > 0 ? 1 : -1;
+    const previous = feedbackSequences[key];
+    const shouldContinue =
+        previous &&
+        previous.direction === direction &&
+        now - previous.updatedAt <= 3000;
+    const total = shouldContinue ? previous.total + amount : amount;
+
+    if (previous?.timer) {
+        clearTimeout(previous.timer);
+    }
+
+    feedbackSequences[key] = {
+        direction,
+        total,
+        updatedAt: now,
+        timer: setTimeout(() => {
+            delete feedbackSequences[key];
+        }, 3000)
+    };
+
+    return total;
 }
 
 function showLifeDelta(playerNumber, delta) {
@@ -2061,11 +2089,74 @@ window.resetLife = function(playerNumber) {
         return;
     }
 
-    socket.emit("reset-life", {
-        roomId,
-        playerNumber: myPlayerNumber
-    });
+    confirmMatchStateReset(() => resetPlayerMatchState(myPlayerNumber));
 };
+
+function confirmMatchStateReset(onConfirm) {
+    const existing = document.getElementById("matchStateResetModal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "matchStateResetModal";
+    modal.className = "match-reset-modal";
+    modal.innerHTML = `
+        <div class="match-reset-box" role="dialog" aria-modal="true" aria-labelledby="matchResetTitle">
+            <h2 id="matchResetTitle">ATENÇÃO</h2>
+            <p>Isso irá reiniciar vidas, histórico, anotações e marcadores desta partida. Deseja continuar?</p>
+            <div class="match-reset-actions">
+                <button type="button" data-reset-confirm>Confirmar Reset</button>
+                <button type="button" data-reset-cancel>Cancelar</button>
+            </div>
+        </div>
+    `;
+
+    const close = () => modal.remove();
+
+    modal.querySelector("[data-reset-confirm]")?.addEventListener("click", () => {
+        close();
+        onConfirm?.();
+    });
+
+    modal.querySelector("[data-reset-cancel]")?.addEventListener("click", close);
+    modal.addEventListener("click", event => {
+        if (event.target === modal) close();
+    });
+
+    document.body.appendChild(modal);
+}
+
+function resetLocalPlayerMatchState(playerNumber) {
+    const normalizedPlayer = Number(playerNumber);
+
+    const opponentBox = document.getElementById(`player${normalizedPlayer}OpponentLife`);
+    if (opponentBox) opponentBox.innerText = "20";
+
+    const notesInput = document.getElementById("tableNotesInput");
+    if (notesInput) notesInput.value = "";
+
+    localOpponentLifeHistory = [];
+    currentLifeHistory = [];
+    processedLifeEvents.clear();
+
+    playerMarkers[normalizedPlayer] = {};
+    currentRoomMarkerState[normalizedPlayer] = {};
+    savePlayerMarkers();
+    renderAllMarkerPanels();
+    renderLifeHistoryPanel();
+    renderSpectatorMarkerSummary(currentRoomMarkerState);
+}
+
+function resetPlayerMatchState(playerNumber) {
+    const normalizedPlayer = Number(playerNumber);
+    if (!isActivePlayer() || normalizedPlayer !== Number(myPlayerNumber)) return;
+
+    resetLocalPlayerMatchState(normalizedPlayer);
+
+    socket.emit("reset-player-state", {
+        roomId,
+        playerNumber: normalizedPlayer
+    });
+}
 
 /* =========================
    VIDA DO OPONENTE LOCAL
@@ -3310,6 +3401,8 @@ function getActiveMarkers(playerNumber) {
 function createActiveMarkerCard(playerNumber, marker) {
     const card = document.createElement("div");
     card.className = `dynamic-marker-card ${marker.placement === "floating" ? "is-floating" : ""}`;
+    card.dataset.markerPlayer = String(playerNumber);
+    card.dataset.markerId = marker.id;
 
     const header = document.createElement("div");
     header.className = "dynamic-marker-header";
@@ -3354,6 +3447,29 @@ function createActiveMarkerCard(playerNumber, marker) {
     card.appendChild(placement);
 
     return card;
+}
+
+function showMarkerDelta(playerNumber, markerId, amount) {
+    const normalizedAmount = Number(amount);
+    if (!normalizedAmount) return;
+
+    const safeMarkerId = window.CSS?.escape ? CSS.escape(markerId) : String(markerId).replace(/"/g, '\\"');
+    const selector = `[data-marker-player="${Number(playerNumber)}"][data-marker-id="${safeMarkerId}"]`;
+    const sequenceAmount = updateFeedbackSequence(`marker-${playerNumber}-${markerId}`, normalizedAmount);
+
+    document.querySelectorAll(selector).forEach(card => {
+        const previousDelta = card.querySelector(".marker-delta");
+        if (previousDelta) previousDelta.remove();
+
+        const deltaEl = document.createElement("span");
+        deltaEl.className = `marker-delta ${sequenceAmount > 0 ? "positive" : "negative"}`;
+        deltaEl.innerText = sequenceAmount > 0 ? `+${sequenceAmount}` : String(sequenceAmount);
+        card.appendChild(deltaEl);
+
+        setTimeout(() => {
+            if (card.contains(deltaEl)) deltaEl.remove();
+        }, 3000);
+    });
 }
 
 function getFloatingPlayerColumn(root, playerNumber) {
@@ -3515,6 +3631,7 @@ window.changePlayerMarker = function(playerNumber, markerId, amount) {
     renderAllMarkerPanels();
 
     if (marker.value !== oldValue) {
+        showMarkerDelta(playerNumber, markerId, normalizedAmount);
         emitMarkerUpdate(playerNumber, markerId, "change", normalizedAmount);
     }
 };
@@ -4125,6 +4242,12 @@ socket.on("spectator-joined", ({ name }) => {
 socket.on("system-event", (data) => {
     if (!data?.message) return;
     addMatchEvent(data.time ? `[${data.time}] ${data.message}` : data.message);
+});
+
+socket.on("player-state-reset", ({ playerNumber }) => {
+    if (selectedRole === "player" && Number(playerNumber) === Number(myPlayerNumber)) {
+        resetLocalPlayerMatchState(playerNumber);
+    }
 });
 
 socket.on("spectator-mic-requested", (data) => {
