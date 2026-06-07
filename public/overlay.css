@@ -753,6 +753,11 @@ body.scene-camera-j2 .player-block > video:not(.facecam-video) {
   background: #000;
 }
 
+body.scene-camera-j1 .table-skin-layer,
+body.scene-camera-j2 .table-skin-layer {
+  z-index: 20;
+}
+
 .empty-state {
   position: fixed;
   inset: 0;

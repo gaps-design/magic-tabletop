@@ -2578,6 +2578,8 @@ io.on("connection", (socket) => {
       playerNumber: normalizedPlayerNumber,
       ...room.tableSkins[normalizedPlayerNumber]
     });
+
+    sendRoomState(roomId);
   });
 
   socket.on("table-skin-text-change", ({ roomId, playerNumber, customText }) => {
@@ -2602,6 +2604,8 @@ io.on("connection", (socket) => {
       playerNumber: normalizedPlayerNumber,
       customText: room.tableSkins[normalizedPlayerNumber].customText
     });
+
+    sendRoomState(roomId);
   });
 
   socket.on("camera-framing-update", ({ roomId, playerNumber, settings }) => {
