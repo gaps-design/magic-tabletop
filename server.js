@@ -81,7 +81,11 @@ function normalizeTableSkin(skinId) {
 }
 
 function sanitizeCustomSkinText(value = "") {
-  let text = limitText(value, CUSTOM_SKIN_TEXT_LIMIT);
+  let text = String(value || "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, CUSTOM_SKIN_TEXT_LIMIT);
 
   CUSTOM_SKIN_BLOCKED_WORDS.forEach(word => {
     const pattern = new RegExp(`\\b${escapeRegExp(word)}\\b`, "gi");

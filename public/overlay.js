@@ -3,7 +3,7 @@
   const roomId = params.get("room") || "";
   const initialView = params.get("view") || "dual";
   const showControls = params.get("controls") === "1";
-  const transparent = params.get("transparent") === "1";
+  const transparent = params.get("transparent") === "1" || params.get("obs") === "1";
   const scene = params.get("scene") || "live";
   const socket = io();
 
@@ -30,6 +30,19 @@
   const faceCamSources = {};
   const chatMessages = [];
   const mutedPlayers = { 1: false, 2: false };
+  const tableSkinState = {
+    1: { skinId: "none", customText: "" },
+    2: { skinId: "none", customText: "" }
+  };
+  const tableSkins = {
+    none: { frame: null, customText: false },
+    "mono-white": { frame: "/assets/skins/mono-white/frame.png", customText: false },
+    "mono-blue": { frame: "/assets/skins/mono-blue/frame.png", customText: false },
+    "mono-black": { frame: "/assets/skins/mono-black/frame.png", customText: false },
+    "mono-red": { frame: "/assets/skins/mono-red/frame.png", customText: false },
+    "mono-green": { frame: "/assets/skins/mono-green/frame.png", customText: false },
+    custom: { frame: "/assets/skins/custom/frame.png", customText: true }
+  };
 
   const markerLabels = {
     storm: "Storm",
@@ -69,6 +82,97 @@
 
   function getVideoForPlayer(playerNumber) {
     return el(`player${playerNumber}Video`);
+  }
+
+  function normalizeTableSkin(skinId) {
+    return tableSkins[skinId] ? skinId : "none";
+  }
+
+  function sanitizeTableSkinText(value = "") {
+    return String(value || "")
+      .replace(/[\u0000-\u001F\u007F]/g, "")
+      .replace(/[<>]/g, "")
+      .replace(/\s+/g, " ")
+      .slice(0, 80);
+  }
+
+  function getPlayerBlock(playerNumber) {
+    return document.querySelector(`.player-block[data-player="${playerNumber}"]`);
+  }
+
+  function removeTableSkin(playerNumber) {
+    const block = getPlayerBlock(playerNumber);
+    if (!block) return;
+    block.querySelectorAll(":scope > .table-skin-layer").forEach(layer => layer.remove());
+    block.classList.remove("table-skin-active");
+    block.removeAttribute("data-table-skin");
+  }
+
+  function applyTableSkin(playerNumber) {
+    const skinId = normalizeTableSkin(tableSkinState[playerNumber]?.skinId || "none");
+    const skin = tableSkins[skinId];
+    const block = getPlayerBlock(playerNumber);
+
+    removeTableSkin(playerNumber);
+    if (!block || !skin?.frame) return;
+
+    const layer = document.createElement("div");
+    layer.className = `table-skin-layer table-skin-${skinId}`;
+    layer.setAttribute("aria-hidden", "true");
+    layer.dataset.skinId = skinId;
+
+    const frame = document.createElement("img");
+    frame.className = "table-skin-frame";
+    frame.src = skin.frame;
+    frame.alt = "";
+    frame.draggable = false;
+    frame.onerror = () => layer.remove();
+    layer.appendChild(frame);
+
+    if (skin.customText) {
+      const text = sanitizeTableSkinText(tableSkinState[playerNumber]?.customText || "");
+      const textEl = document.createElement("div");
+      textEl.className = "table-skin-custom-text";
+      textEl.textContent = text;
+      textEl.hidden = !text;
+      layer.appendChild(textEl);
+    }
+
+    block.classList.add("table-skin-active");
+    block.dataset.tableSkin = skinId;
+    block.appendChild(layer);
+  }
+
+  function applyTableSkinPayload(payload = {}) {
+    const playerNumber = Number(payload.playerNumber || 0);
+    if (![1, 2].includes(playerNumber)) return;
+
+    tableSkinState[playerNumber] = {
+      skinId: normalizeTableSkin(payload.skinId || tableSkinState[playerNumber]?.skinId || "none"),
+      customText: sanitizeTableSkinText(payload.customText ?? tableSkinState[playerNumber]?.customText ?? "")
+    };
+    applyTableSkin(playerNumber);
+  }
+
+  function applyTableSkinState(state = {}) {
+    [1, 2].forEach(playerNumber => {
+      const playerState = state[playerNumber] || state[String(playerNumber)];
+      if (!playerState) {
+        applyTableSkin(playerNumber);
+        return;
+      }
+
+      if (typeof playerState === "string") {
+        applyTableSkinPayload({ playerNumber, skinId: playerState });
+        return;
+      }
+
+      applyTableSkinPayload({
+        playerNumber,
+        skinId: playerState.skinId,
+        customText: playerState.customText || ""
+      });
+    });
   }
 
   function setVideoForPlayer(playerNumber, stream) {
@@ -231,6 +335,7 @@
     el("timerDisplay").innerText = formatTimer(state.timer);
     renderScore(state.matchScore || {});
     renderMarkers(state.markerState || {});
+    applyTableSkinState(state.tableSkins || {});
 
     if (state.currentScannerCard) renderScannerCard(state.currentScannerCard);
 
@@ -364,8 +469,10 @@
   function setupControls() {
     document.body.classList.toggle("controls-on", showControls);
     document.body.classList.toggle("transparent", transparent);
+    document.documentElement.classList.toggle("transparent", transparent);
     document.body.classList.add(`scene-${scene}`);
-    setView(scene === "j1" ? "j1" : scene === "j2" ? "j2" : initialView);
+    const cameraSceneView = scene === "camera-j1" ? "j1" : scene === "camera-j2" ? "j2" : "";
+    setView(cameraSceneView || (scene === "j1" ? "j1" : scene === "j2" ? "j2" : initialView));
 
     document.querySelectorAll("[data-view]").forEach(button => {
       button.addEventListener("click", () => setView(button.dataset.view));
@@ -422,6 +529,18 @@
   });
 
   socket.on("room-state", renderRoomState);
+  socket.on("table-skin-state", applyTableSkinState);
+  socket.on("table-skin-update", payload => {
+    if (!payload || payload.roomId !== roomId) return;
+    applyTableSkinPayload(payload);
+  });
+  socket.on("table-skin-text-update", payload => {
+    if (!payload || payload.roomId !== roomId) return;
+    const playerNumber = Number(payload.playerNumber || 0);
+    if (![1, 2].includes(playerNumber)) return;
+    tableSkinState[playerNumber].customText = sanitizeTableSkinText(payload.customText || "");
+    applyTableSkin(playerNumber);
+  });
   socket.on("timer-update", timer => { el("timerDisplay").innerText = formatTimer(timer); });
   socket.on("chat-message", appendChatMessage);
   socket.on("card-scan-shown", renderScannerCard);

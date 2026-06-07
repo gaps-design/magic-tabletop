@@ -25,7 +25,45 @@ body {
   font-family: Inter, Segoe UI, Arial, sans-serif;
 }
 
-body.transparent { background: transparent; }
+html.transparent,
+body.transparent {
+  background: transparent !important;
+}
+
+body.transparent .obs-overlay {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.transparent.scene-live .broadcast-title,
+body.transparent.scene-live .players-grid,
+body.transparent.scene-live .overlay-bottom {
+  display: none !important;
+}
+
+body.transparent.scene-live .obs-overlay {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  grid-template-rows: auto;
+  align-items: start;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+body.transparent.scene-live .overlay-top,
+body.transparent.scene-score .overlay-top {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+body.transparent.scene-live .overlay-top {
+  width: min(1500px, calc(100vw - 28px));
+  margin: 0 auto;
+}
+
 .hidden { display: none !important; }
 
 .broadcast-title {
@@ -248,6 +286,43 @@ body.transparent { background: transparent; }
   background:
     radial-gradient(circle at 50% 50%, rgba(255,255,255,.06), transparent 34%),
     #020407;
+}
+
+.table-skin-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.table-skin-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+  pointer-events: none;
+}
+
+.table-skin-custom-text {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(14px, 4vw, 56px);
+  max-width: min(78%, 820px);
+  transform: translateX(-50%);
+  padding: clamp(6px, 1vw, 12px) clamp(14px, 2vw, 28px);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #f8fbff;
+  font-size: clamp(18px, 2.4vw, 46px);
+  font-weight: 900;
+  line-height: 1.05;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .camera-placeholder {
@@ -601,6 +676,81 @@ body.scene-facecams .facecam-video {
   width: 100%;
   height: 100%;
   border-radius: 18px;
+}
+
+body.scene-camera-j1,
+body.scene-camera-j2 {
+  background: transparent;
+}
+
+body.scene-camera-j1 .broadcast-title,
+body.scene-camera-j1 .overlay-top,
+body.scene-camera-j1 .overlay-bottom,
+body.scene-camera-j1 .overlay-controls,
+body.scene-camera-j2 .broadcast-title,
+body.scene-camera-j2 .overlay-top,
+body.scene-camera-j2 .overlay-bottom,
+body.scene-camera-j2 .overlay-controls {
+  display: none !important;
+}
+
+body.scene-camera-j1 .obs-overlay,
+body.scene-camera-j2 .obs-overlay {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.scene-camera-j1 .players-grid,
+body.scene-camera-j2 .players-grid {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+body.scene-camera-j1 .player-block,
+body.scene-camera-j2 .player-block {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+}
+
+body.scene-camera-j1 .player-two,
+body.scene-camera-j2 .player-one {
+  display: none !important;
+}
+
+body.scene-camera-j1 .player-bar,
+body.scene-camera-j1 .camera-label,
+body.scene-camera-j1 .camera-placeholder,
+body.scene-camera-j1 .camera-status,
+body.scene-camera-j1 .facecam-video,
+body.scene-camera-j1 .marker-row,
+body.scene-camera-j1 .decklist-link,
+body.scene-camera-j2 .player-bar,
+body.scene-camera-j2 .camera-label,
+body.scene-camera-j2 .camera-placeholder,
+body.scene-camera-j2 .camera-status,
+body.scene-camera-j2 .facecam-video,
+body.scene-camera-j2 .marker-row,
+body.scene-camera-j2 .decklist-link {
+  display: none !important;
+}
+
+body.scene-camera-j1 .player-block > video:not(.facecam-video),
+body.scene-camera-j2 .player-block > video:not(.facecam-video) {
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  background: #000;
 }
 
 .empty-state {

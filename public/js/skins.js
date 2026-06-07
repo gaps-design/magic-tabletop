@@ -35,6 +35,7 @@
         1: "",
         2: ""
     };
+    let hasServerSkinState = false;
 
     function normalizeSkin(skinId) {
         return TABLE_SKINS[skinId] ? skinId : "none";
@@ -46,8 +47,9 @@
 
     function sanitizeCustomText(value = "") {
         let text = String(value || "")
+            .replace(/[\u0000-\u001F\u007F]/g, "")
+            .replace(/[<>]/g, "")
             .replace(/\s+/g, " ")
-            .trim()
             .slice(0, CUSTOM_TEXT_MAX_LENGTH);
 
         PROFANITY_WORDS.forEach(word => {
@@ -124,7 +126,7 @@
         const textEl = document.createElement("div");
 
         textEl.className = "table-skin-custom-text";
-        textEl.innerText = text;
+        textEl.textContent = text;
         textEl.hidden = !text;
 
         layer.appendChild(textEl);
@@ -173,7 +175,7 @@
         const card = getCameraCardByPlayer(playerNumber);
         const textEl = card?.querySelector(".table-skin-custom-text");
         if (textEl) {
-            textEl.innerText = sanitizedText;
+            textEl.textContent = sanitizedText;
             textEl.hidden = !sanitizedText;
         }
 
@@ -240,8 +242,12 @@
         if (!skinSelect) return;
 
         const localPlayerNumber = getLocalPlayerNumber();
-        const savedSkin = localStorage.getItem(getRoomStorageKey(localPlayerNumber)) || "none";
-        const savedCustomText = localStorage.getItem(getCustomTextStorageKey(localPlayerNumber)) || "";
+        const savedSkin = hasServerSkinState
+            ? playerSkins[localPlayerNumber] || "none"
+            : localStorage.getItem(getRoomStorageKey(localPlayerNumber)) || "none";
+        const savedCustomText = hasServerSkinState
+            ? playerCustomTexts[localPlayerNumber] || ""
+            : localStorage.getItem(getCustomTextStorageKey(localPlayerNumber)) || "";
         playerCustomTexts[localPlayerNumber] = sanitizeCustomText(savedCustomText);
 
         skinSelect.value = normalizeSkin(savedSkin);
@@ -276,24 +282,29 @@
     }
 
     function restoreLocalSkins() {
-        [1, 2].forEach(playerNumber => {
-            const savedSkin = localStorage.getItem(getRoomStorageKey(playerNumber));
-            const savedCustomText = localStorage.getItem(getCustomTextStorageKey(playerNumber));
+        if (hasServerSkinState) {
+            updateLocalSelect();
+            return;
+        }
 
-            if (savedCustomText !== null) {
-                applyCustomTextToPlayer(playerNumber, savedCustomText, { silent: true });
-            }
+        const localPlayerNumber = getLocalPlayerNumber();
+        const savedSkin = localStorage.getItem(getRoomStorageKey(localPlayerNumber));
+        const savedCustomText = localStorage.getItem(getCustomTextStorageKey(localPlayerNumber));
 
-            if (savedSkin) {
-                applySkinToPlayer(playerNumber, savedSkin, { silent: true });
-            }
-        });
+        if (savedCustomText !== null) {
+            applyCustomTextToPlayer(localPlayerNumber, savedCustomText, { silent: true });
+        }
+
+        if (savedSkin) {
+            applySkinToPlayer(localPlayerNumber, savedSkin, { silent: true });
+        }
 
         updateLocalSelect();
     }
 
     function applyTableSkinState(state) {
         if (!state) return;
+        hasServerSkinState = true;
 
         [1, 2].forEach(playerNumber => {
             const playerState = state[playerNumber] || state[String(playerNumber)];
@@ -328,7 +339,8 @@
             if (customTextInput.value !== sanitizedText) {
                 const selection = customTextInput.selectionStart;
                 customTextInput.value = sanitizedText;
-                customTextInput.setSelectionRange(selection, selection);
+                const nextSelection = Math.min(selection, sanitizedText.length);
+                customTextInput.setSelectionRange(nextSelection, nextSelection);
             }
 
             localStorage.setItem(getCustomTextStorageKey(localPlayerNumber), sanitizedText);
