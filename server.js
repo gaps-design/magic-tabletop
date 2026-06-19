@@ -6,6 +6,12 @@ const {
   updateHallOfFameFromEvent,
   validateEventForRanking
 } = require("./src/hallOfFame");
+const {
+  saveTournament,
+  saveTournamentResult,
+  loadActiveTournamentSnapshot
+} = require("./src/repositories/tournamentsRepository");
+const { logAudit } = require("./src/repositories/auditRepository");
 
 const app = express();
 const server = http.createServer(app);
@@ -17,6 +23,7 @@ const io = new Server(server, {
   }
 });
 
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static("public"));
 
 const rooms = {};
@@ -26,6 +33,35 @@ const connectedUsers = {};
 const onlineUsers = new Map();
 const socketPresence = new Map();
 let activeTournament = null;
+
+function persistTournamentAsync(reason = "update", metadata = {}) {
+  if (!activeTournament?.id) return;
+  saveTournament(activeTournament, reason).catch(error => {
+    console.error("[SUPABASE] Tournament persistence failed:", error.message);
+  });
+  logAudit(metadata.action || reason, {
+    ...metadata,
+    entityType: metadata.entityType || "tournament",
+    entityId: metadata.entityId || activeTournament.id,
+    tournamentId: activeTournament.id
+  }).catch(error => {
+    console.error("[SUPABASE] Audit persistence failed:", error.message);
+  });
+}
+
+function persistTournamentResultAsync(match, userId = "") {
+  if (!activeTournament?.id || !match?.id) return;
+  saveTournamentResult(activeTournament, match, userId).catch(error => {
+    console.error("[SUPABASE] Tournament result persistence failed:", error.message);
+  });
+}
+
+async function restoreActiveTournamentFromSupabase() {
+  const restored = await loadActiveTournamentSnapshot();
+  if (!restored || activeTournament) return;
+  activeTournament = restored;
+  console.log("[SUPABASE] Active tournament restored from PostgreSQL:", activeTournament.id);
+}
 
 const CHAT_LIMIT = 5;
 const CHAT_BLOCK_MS = 3000;
@@ -1857,6 +1893,13 @@ app.post("/api/tournaments", (req, res) => {
     roundTableHistory: []
   };
   ownerPlayer.tournamentId = activeTournament.id;
+  persistTournamentAsync("tournament_created", {
+    action: "tournament_created",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    metadata: { type }
+  });
 
   res.status(201).json({ tournament: publicTournament(activeTournament) });
 });
@@ -1889,6 +1932,14 @@ app.post("/api/tournaments/:id/join", (req, res) => {
     createRoundTableMatch(tournament);
   }
   tournament.updatedAt = Date.now();
+  persistTournamentAsync("tournament_player_joined", {
+    action: "tournament_player_joined",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    entityType: "tournament_player",
+    entityId: player.id
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -1942,6 +1993,14 @@ app.post("/api/tournaments/:id/drop", (req, res) => {
 
   createRoundTableMatch(tournament);
   tournament.updatedAt = Date.now();
+  persistTournamentAsync("tournament_player_dropped", {
+    action: "tournament_player_dropped",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    entityType: "tournament_player",
+    entityId: player.id
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -1964,6 +2023,14 @@ app.post("/api/tournaments/:id/remove-player", (req, res) => {
 
   tournament.players = tournament.players.filter(player => player.id !== req.body.playerId || player.userId === tournament.ownerId);
   tournament.updatedAt = Date.now();
+  persistTournamentAsync("tournament_player_removed", {
+    action: "tournament_player_removed",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    entityType: "tournament_player",
+    entityId: req.body.playerId
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -1987,6 +2054,12 @@ app.post("/api/tournaments/:id/close-registration", (req, res) => {
 
   tournament.status = "registration_closed";
   tournament.updatedAt = Date.now();
+  persistTournamentAsync("tournament_registration_closed", {
+    action: "tournament_registration_closed",
+    user,
+    actorId: user.id,
+    actorName: user.name
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -2013,6 +2086,13 @@ app.post("/api/tournaments/:id/launch-round", (req, res) => {
 
   try {
     createTournamentRound(tournament);
+    persistTournamentAsync("tournament_round_launched", {
+      action: "tournament_round_launched",
+      user,
+      actorId: user.id,
+      actorName: user.name,
+      metadata: { currentRound: tournament.currentRound }
+    });
     res.json({ tournament: publicTournament(tournament) });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -2040,6 +2120,15 @@ app.post("/api/tournaments/:id/matches/:matchId/external", (req, res) => {
   match.status = "playing_external";
   match.updatedAt = Date.now();
   tournament.updatedAt = Date.now();
+  persistTournamentAsync("tournament_match_external", {
+    action: "tournament_match_external",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    entityType: "match",
+    entityId: match.id,
+    matchId: match.id
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -2074,6 +2163,17 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
   if (isRoundTableTournament(tournament)) {
     try {
       applyRoundTableResult(tournament, match, score, user.id);
+      persistTournamentResultAsync(match, user.id);
+      persistTournamentAsync("tournament_match_result", {
+        action: "tournament_match_result",
+        user,
+        actorId: user.id,
+        actorName: user.name,
+        entityType: "match",
+        entityId: match.id,
+        matchId: match.id,
+        metadata: { result: match.result, resultLabel: match.resultLabel }
+      });
       res.json({ tournament: publicTournament(tournament) });
     } catch (error) {
       res.status(400).json({ error: error.message });
@@ -2093,6 +2193,17 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
   match.updatedAt = Date.now();
   tournament.updatedAt = Date.now();
   recalculateTournamentStandings(tournament);
+  persistTournamentResultAsync(match, user.id);
+  persistTournamentAsync("tournament_match_result", {
+    action: "tournament_match_result",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    entityType: "match",
+    entityId: match.id,
+    matchId: match.id,
+    metadata: { result: match.result, resultLabel: match.resultLabel }
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -2116,6 +2227,13 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
     recalculateTournamentStandings(tournament);
   }
   tournament.hallOfFameStatus = updateHallOfFameFromEvent(tournament);
+  persistTournamentAsync("tournament_finished", {
+    action: "tournament_finished",
+    user,
+    actorId: user.id,
+    actorName: user.name,
+    metadata: { hallOfFameStatus: tournament.hallOfFameStatus }
+  });
   res.json({ tournament: publicTournament(tournament) });
 });
 
@@ -3274,6 +3392,10 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+restoreActiveTournamentFromSupabase().catch(error => {
+  console.error("[SUPABASE] Active tournament restore failed:", error.message);
+}).finally(() => {
+  server.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+  });
 });

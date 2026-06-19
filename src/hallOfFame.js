@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { upsertRankingProfiles } = require("./repositories/rankingRepository");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const DATA_FILE = path.join(DATA_DIR, "hall-of-fame.json");
@@ -45,6 +46,12 @@ function saveState() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
 
+function persistRankingAsync() {
+  upsertRankingProfiles(Object.values(state.players)).catch(error => {
+    console.error("[SUPABASE] Hall da Fama ranking persistence failed:", error.message);
+  });
+}
+
 function normalizeText(value = "") {
   return String(value || "")
     .normalize("NFD")
@@ -62,6 +69,7 @@ function isTestName(name = "") {
 }
 
 function playerId(player = {}) {
+  if (!player) return "";
   return player.userId || player.id || player.email || "";
 }
 
@@ -279,6 +287,7 @@ function updateHallOfFameFromEvent(tournament = {}) {
 
   if (!validation.isRanked) {
     saveState();
+    persistRankingAsync();
     return { isRanked: false, reason: validation.reason };
   }
 
@@ -351,6 +360,7 @@ function updateHallOfFameFromEvent(tournament = {}) {
   }
 
   saveState();
+  persistRankingAsync();
   return { isRanked: true, reason: "" };
 }
 
