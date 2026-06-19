@@ -4,33 +4,29 @@
   const savedPlayerId = localStorage.getItem("resenhaon-simulator-player-id") || `sim-${Math.random().toString(36).slice(2)}-${Date.now()}`;
   const savedName = localStorage.getItem("resenhaon-simulator-name") || "";
   const socket = io();
+  const scryfallCache = new Map(JSON.parse(localStorage.getItem("resenhaon-sim-scryfall-cache") || "[]"));
 
   let playerId = savedPlayerId;
   let state = null;
+  let loadedDeck = null;
+  let activeCard = null;
+  let privateCards = [];
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
 
   const el = id => document.getElementById(id);
-  const zoneLabels = {
-    hand: "Mao",
-    battlefield: "Campo",
-    graveyard: "Cemiterio",
-    exile: "Exilio",
-    commandZone: "Comando",
-    library: "Grimorio"
-  };
-  const phaseLabels = {
+  const phases = {
     untap: "Untap",
-    upkeep: "Upkeep / Manutencao",
+    upkeep: "Upkeep",
     draw: "Draw",
-    main1: "Main Phase 1",
-    beginCombat: "Beginning of Combat",
-    attackers: "Declare Attackers",
-    blockers: "Declare Blockers",
-    damage: "Combat Damage",
-    endCombat: "End of Combat",
-    main2: "Main Phase 2",
+    main1: "Main 1",
+    beginCombat: "Begin Combat",
+    attackers: "Attackers",
+    blockers: "Blockers",
+    damage: "Damage",
+    endCombat: "End Combat",
+    main2: "Main 2",
     end: "End Step",
     cleanup: "Cleanup"
   };
@@ -45,236 +41,348 @@
     }[char]));
   }
 
-  function playerName() {
-    return el("playerNameInput")?.value.trim() || savedName || "Jogador";
+  function normalizeName(name) {
+    return String(name || "").replace(/\s+/g, " ").trim();
   }
 
-  function joinSimulator() {
-    const name = playerName();
-    localStorage.setItem("resenhaon-simulator-name", name);
-    socket.emit("simulator-join", { roomId, playerId, name });
+  function saveCache() {
+    localStorage.setItem("resenhaon-sim-scryfall-cache", JSON.stringify(Array.from(scryfallCache.entries()).slice(-300)));
   }
 
-  function sendAction(action) {
-    socket.emit("simulator-action", { roomId, playerId, action });
+  function parseDecklist(text) {
+    const main = [];
+    const side = [];
+    let sideMode = false;
+
+    String(text || "").split(/\r?\n/).forEach(rawLine => {
+      let line = rawLine.trim();
+      if (!line || line.startsWith("//") || line.startsWith("#")) return;
+      if (/^sideboard\s*:?\s*$/i.test(line)) {
+        sideMode = true;
+        return;
+      }
+
+      let target = sideMode ? side : main;
+      const sbMatch = line.match(/^SB:\s*(\d+)?\s*(.+)$/i);
+      if (sbMatch) {
+        target = side;
+        line = `${sbMatch[1] || 1} ${sbMatch[2]}`;
+      }
+
+      line = line.replace(/\s*\[[^\]]+\]\s*$/g, "").replace(/\s*\([^)]+\)\s*\d*$/g, "").trim();
+      const match = line.match(/^(\d+)x?\s+(.+)$/i);
+      const count = match ? Math.max(1, Math.min(99, Number(match[1]))) : 1;
+      const name = normalizeName(match ? match[2] : line);
+      if (!name) return;
+      for (let i = 0; i < count; i++) target.push(name);
+    });
+
+    return { main, side };
+  }
+
+  async function fetchCard(name, index) {
+    const key = name.toLowerCase();
+    if (scryfallCache.has(key)) return { ...scryfallCache.get(key), id: `${key}-${index}-${Math.random().toString(36).slice(2)}` };
+
+    try {
+      const response = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+      if (!response.ok) throw new Error("not found");
+      const card = await response.json();
+      const normalized = {
+        name: card.name || name,
+        type: card.type_line || "Card",
+        cost: card.mana_cost || "",
+        imageUrl: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || card.image_uris?.small || "",
+        oracleText: card.oracle_text || card.card_faces?.[0]?.oracle_text || "",
+        colors: card.colors || [],
+        scryfallId: card.id || ""
+      };
+      scryfallCache.set(key, normalized);
+      saveCache();
+      return { ...normalized, id: `${card.id || key}-${index}-${Math.random().toString(36).slice(2)}` };
+    } catch (error) {
+      const fallback = { name, type: "Carta nao encontrada", cost: "", imageUrl: "", oracleText: "", colors: [], scryfallId: "" };
+      scryfallCache.set(key, fallback);
+      saveCache();
+      return { ...fallback, id: `${key}-${index}-${Math.random().toString(36).slice(2)}` };
+    }
+  }
+
+  async function hydrateDeck(parsed) {
+    const total = parsed.main.length + parsed.side.length;
+    let loaded = 0;
+    const setStatus = () => {
+      el("deckStatus").textContent = `Carregando cartas... ${loaded}/${total}`;
+    };
+    setStatus();
+    const mainDeck = [];
+    const sideboard = [];
+    for (const name of parsed.main) {
+      mainDeck.push(await fetchCard(name, loaded));
+      loaded++;
+      setStatus();
+    }
+    for (const name of parsed.side) {
+      sideboard.push(await fetchCard(name, loaded));
+      loaded++;
+      setStatus();
+    }
+    const unique = new Set([...parsed.main, ...parsed.side].map(name => name.toLowerCase())).size;
+    loadedDeck = { mainDeck, sideboard };
+    const warning = parsed.main.length !== 60 || parsed.side.length > 15
+      ? " Aviso: lista fora do padrao 60/15, carregada em modo teste."
+      : "";
+    el("deckStatus").textContent = `Main deck: ${parsed.main.length} cartas | Sideboard: ${parsed.side.length} cartas | Cartas unicas: ${unique}.${warning}`;
+  }
+
+  function mockDeck() {
+    const names = ["Lightning Bolt", "Counterspell", "Island", "Llanowar Elves", "Sol Ring", "Command Tower", "Arcane Signet"];
+    return {
+      mainDeck: Array.from({ length: 60 }, (_, index) => ({
+        id: `mock-${index}-${Date.now()}`,
+        name: names[index % names.length],
+        type: index % 3 === 0 ? "Land" : "Spell",
+        cost: index % 3 === 0 ? "" : "1",
+        imageUrl: "",
+        oracleText: "",
+        colors: [],
+        scryfallId: ""
+      })),
+      sideboard: []
+    };
   }
 
   function selfPlayer() {
     return state?.players?.[playerId] || null;
   }
 
-  function render() {
-    const self = selfPlayer();
-    const players = Object.values(state?.players || {});
-    const currentPhase = state?.currentPhase || "main1";
-
-    el("roomTitle").textContent = `Sala ${roomId}`;
-    el("currentPhaseLabel").textContent = phaseLabels[currentPhase] || currentPhase;
-    el("playerCount").textContent = String(players.length);
-    el("activePlayerLabel").textContent = state?.activePlayerId
-      ? `${state.players[state.activePlayerId]?.name || "Jogador"} em ${phaseLabels[currentPhase] || currentPhase}`
-      : "Aguardando jogador";
-
-    document.querySelectorAll(".phase-bar button").forEach(button => {
-      button.classList.toggle("active", button.dataset.phase === currentPhase);
-    });
-
-    if (!self) {
-      renderEmpty();
-      return;
-    }
-
-    el("selfName").textContent = self.name || "Jogador";
-    el("selfLife").textContent = String(self.life ?? 40);
-    el("libraryCount").textContent = String(self.libraryCount || 0);
-    el("handCount").textContent = `${self.handCount || 0} carta${self.handCount === 1 ? "" : "s"}`;
-    el("graveyardCount").textContent = String(self.graveyard?.length || 0);
-    el("exileCount").textContent = String(self.exile?.length || 0);
-    el("commandCount").textContent = String(self.commandZone?.length || 0);
-
-    renderCards(el("handZone"), self.hand || [], "hand");
-    renderCards(el("battlefieldZone"), self.battlefield || [], "battlefield");
-    renderMiniZone(el("graveyardZone"), self.graveyard || [], "graveyard");
-    renderMiniZone(el("exileZone"), self.exile || [], "exile");
-    renderMiniZone(el("commandZone"), self.commandZone || [], "commandZone");
-    renderLog();
+  function opponentPlayer() {
+    return Object.values(state?.players || {}).find(player => player.id !== playerId) || null;
   }
 
-  function renderEmpty() {
-    ["handZone", "battlefieldZone", "graveyardZone", "exileZone", "commandZone", "actionLog"].forEach(id => {
-      el(id).innerHTML = `<div class="empty-zone">Entre no Simulator para carregar seu deck de teste.</div>`;
-    });
-    el("selfName").textContent = "Jogador";
-    el("selfLife").textContent = "40";
-    el("libraryCount").textContent = "0";
-    el("handCount").textContent = "0 cartas";
+  function sendAction(action) {
+    socket.emit("simulator-action", { roomId, playerId, action });
   }
 
-  function renderCards(container, cards, zone) {
-    if (!cards.length) {
-      container.innerHTML = `<div class="empty-zone">Nenhuma carta em ${zoneLabels[zone] || zone}.</div>`;
-      return;
-    }
+  function createGame() {
+    const name = el("playerNameInput").value.trim() || savedName || "Jogador";
+    localStorage.setItem("resenhaon-simulator-name", name);
+    socket.emit("simulator-join", { roomId, playerId, name });
+    sendAction({ type: "loadDeck", deck: loadedDeck || mockDeck() });
+    el("gameModal").classList.remove("active");
+    el("gameModal").classList.add("hidden");
+  }
 
-    container.innerHTML = cards.map(card => `
-      <article class="sim-card ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}" data-card-id="${escapeHtml(card.id)}">
-        <span class="cost">${escapeHtml(card.cost || "-")}</span>
-        <div>
-          ${card.token ? `<span class="token-tag">Token</span>` : ""}
+  function cardHtml(card, zone, owner) {
+    const image = card.imageUrl ? `style="background-image:url('${escapeHtml(card.imageUrl)}')"` : "";
+    return `
+      <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
+        ${image} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
+        <div class="card-text">
+          ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
+          ${Number(card.counters?.p1p1 || 0) ? `<span class="counter-tag">+1/+1 ${Number(card.counters.p1p1)}</span>` : ""}
+          ${Number(card.counters?.generic || 0) ? `<span class="counter-tag">M ${Number(card.counters.generic)}</span>` : ""}
           <h3>${escapeHtml(card.name)}</h3>
-          <p>${escapeHtml(card.type)}</p>
-          <p>+1/+1: ${Number(card.counters?.p1p1 || 0)} | Marcador: ${Number(card.counters?.generic || 0)}</p>
+          <p>${escapeHtml(card.type)} ${card.cost ? `| ${escapeHtml(card.cost)}` : ""}</p>
         </div>
-        <div class="card-actions">
-          ${cardActions(card, zone)}
-        </div>
-      </article>
-    `).join("");
+      </article>`;
   }
 
-  function cardActions(card, zone) {
-    if (zone === "hand") {
-      return `
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="battlefield">Jogar</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="graveyard">Descartar</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="exile">Exilar</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="library" data-position="top">Topo</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="library" data-position="bottom">Fundo</button>
-      `;
-    }
-
-    if (zone === "battlefield") {
-      return `
-        <button data-action="toggleTap" data-card-id="${escapeHtml(card.id)}">${card.tapped ? "Desvirar" : "Virar"}</button>
-        <button data-action="counter" data-card-id="${escapeHtml(card.id)}" data-counter="p1p1" data-value="1">+1/+1</button>
-        <button data-action="counter" data-card-id="${escapeHtml(card.id)}" data-counter="p1p1" data-value="-1">-1/-1</button>
-        <button data-action="counter" data-card-id="${escapeHtml(card.id)}" data-counter="generic" data-value="1">Marcador</button>
-        <button data-action="counter" data-card-id="${escapeHtml(card.id)}" data-counter="generic" data-value="-1">- Marcador</button>
-        <button data-action="combatFlag" data-card-id="${escapeHtml(card.id)}" data-flag="attacking" data-enabled="${!card.attacking}">${card.attacking ? "Remover atacante" : "Atacar"}</button>
-        <button data-action="combatFlag" data-card-id="${escapeHtml(card.id)}" data-flag="blocking" data-enabled="${!card.blocking}">${card.blocking ? "Remover bloqueio" : "Bloquear"}</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="graveyard">Cemiterio</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="exile">Exilio</button>
-        <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="hand">Mao</button>
-      `;
-    }
-
-    return "";
+  function miniCardHtml(card, zone, owner) {
+    const image = card.imageUrl ? `style="background-image:url('${escapeHtml(card.imageUrl)}')"` : "";
+    return `<article class="mini-card ${card.imageUrl ? "" : "no-image"}" ${image} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}"><span>${escapeHtml(card.name)}</span></article>`;
   }
 
-  function renderMiniZone(container, cards, zone) {
-    if (!cards.length) {
-      container.innerHTML = `<div class="empty-zone">Vazio</div>`;
+  function renderCards(container, cards, zone, owner) {
+    container.innerHTML = cards?.length
+      ? cards.map(card => cardHtml(card, zone, owner)).join("")
+      : `<div class="empty-zone">Vazio</div>`;
+  }
+
+  function renderSmall(container, cards, zone, owner) {
+    container.innerHTML = cards?.length
+      ? cards.map(card => miniCardHtml(card, zone, owner)).join("")
+      : "";
+  }
+
+  function renderHandBack(container, count) {
+    container.innerHTML = Array.from({ length: Math.min(12, count || 0) }, () => `<span class="hand-back"></span>`).join("");
+  }
+
+  function renderPlayer(player, side) {
+    const isSelf = side === "self";
+    if (!player) {
+      if (!isSelf) {
+        el("opponentName").textContent = "Aguardando oponente";
+        el("opponentLife").textContent = "20";
+        renderHandBack(el("opponentHand"), 0);
+        ["opponentBattlefield", "opponentStack", "opponentGraveyard", "opponentExile", "opponentRevealed"].forEach(id => { el(id).innerHTML = ""; });
+      }
       return;
     }
 
-    container.innerHTML = cards.map(card => `
-      <article class="mini-card">
-        <strong>${escapeHtml(card.name)}</strong>
-        <small>${escapeHtml(card.type)}</small>
-        <div>
-          <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="hand">Mao</button>
-          <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="battlefield">Campo</button>
-          <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="library" data-position="top">Topo</button>
-          <button data-action="moveCard" data-card-id="${escapeHtml(card.id)}" data-zone="library" data-position="bottom">Fundo</button>
-        </div>
-      </article>
-    `).join("");
+    if (isSelf) {
+      el("selfName").textContent = player.name;
+      el("selfLife").textContent = String(player.life ?? 20);
+      el("libraryCount").textContent = String(player.libraryCount || 0);
+      el("handCount").textContent = `${player.handCount || 0} cartas`;
+      el("selfPhaseLabel").textContent = phases[player.currentPhase] || player.currentPhase || "Untap";
+      renderCards(el("battlefieldZone"), player.battlefield || [], "battlefield", "self");
+      renderCards(el("selfStack"), player.stack || [], "stack", "self");
+      renderCards(el("handZone"), player.hand || [], "hand", "self");
+      renderSmall(el("graveyardZone"), player.graveyard || [], "graveyard", "self");
+      renderSmall(el("exileZone"), player.exile || [], "exile", "self");
+      renderSmall(el("selfRevealed"), player.revealed || [], "revealed", "self");
+    } else {
+      el("opponentName").textContent = player.name;
+      el("opponentLife").textContent = String(player.life ?? 20);
+      el("opponentLibraryCount").textContent = String(player.libraryCount || 0);
+      renderHandBack(el("opponentHand"), player.handCount || 0);
+      renderCards(el("opponentBattlefield"), player.battlefield || [], "battlefield", "opponent");
+      renderCards(el("opponentStack"), player.stack || [], "stack", "opponent");
+      renderSmall(el("opponentGraveyard"), player.graveyard || [], "graveyard", "opponent");
+      renderSmall(el("opponentExile"), player.exile || [], "exile", "opponent");
+      renderSmall(el("opponentRevealed"), player.revealed || [], "revealed", "opponent");
+    }
   }
 
   function renderLog() {
     const log = state?.log || [];
     el("actionLog").innerHTML = log.length
-      ? log.slice(0, 30).map(item => `<div class="log-item">${escapeHtml(item.message)}</div>`).join("")
-      : `<div class="empty-zone">Nenhuma acao registrada.</div>`;
+      ? log.slice(0, 50).map(item => `<div class="log-item">${escapeHtml(item.message)}</div>`).join("")
+      : `<div class="empty-zone">Sem acoes ainda.</div>`;
   }
 
-  function handleCardClick(event) {
-    const button = event.target.closest("button[data-action]");
-    if (!button) return;
+  function render() {
+    const self = selfPlayer();
+    const opponent = opponentPlayer();
+    const players = Object.values(state?.players || {});
+    const currentPhase = state?.currentPhase || "untap";
+    el("roomTitle").textContent = `Sala ${roomId}`;
+    el("sideRoomId").textContent = roomId;
+    el("playerCount").textContent = String(players.length);
+    el("currentPhaseLabel").textContent = phases[currentPhase] || currentPhase;
+    document.querySelectorAll(".phase-strip button").forEach(button => button.classList.toggle("active", button.dataset.phase === currentPhase));
+    renderPlayer(self, "self");
+    renderPlayer(opponent, "opponent");
+    renderLog();
+  }
 
-    const action = button.dataset.action;
-    if (action === "moveCard") {
-      sendAction({
-        type: "moveCard",
-        cardId: button.dataset.cardId,
-        toZone: button.dataset.zone,
-        position: button.dataset.position || "top"
-      });
-    } else if (action === "toggleTap") {
-      sendAction({ type: "toggleTap", cardId: button.dataset.cardId });
-    } else if (action === "counter") {
-      sendAction({
-        type: "counter",
-        cardId: button.dataset.cardId,
-        counterType: button.dataset.counter,
-        value: Number(button.dataset.value || 0)
-      });
-    } else if (action === "combatFlag") {
-      sendAction({
-        type: "combatFlag",
-        cardId: button.dataset.cardId,
-        flag: button.dataset.flag,
-        enabled: button.dataset.enabled === "true"
-      });
+  function openCardMenu(cardEl, x, y) {
+    const zone = cardEl.dataset.zone;
+    const owner = cardEl.dataset.owner;
+    const cardId = cardEl.dataset.cardId;
+    const menu = el("cardMenu");
+    if (owner !== "self") return;
+
+    const buttons = [];
+    if (zone === "hand") {
+      buttons.push(["Jogar para pilha", { type: "playToStack", cardId }]);
+      buttons.push(["Descartar", { type: "moveCard", cardId, toZone: "graveyard" }]);
+      buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
+      buttons.push(["Topo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "top" }]);
+      buttons.push(["Fundo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
+    } else if (zone === "stack") {
+      buttons.push(["Resolver para campo", { type: "resolveStack", cardId, toZone: "battlefield" }]);
+      buttons.push(["Resolver para cemiterio", { type: "resolveStack", cardId, toZone: "graveyard" }]);
+      buttons.push(["Resolver para exilio", { type: "resolveStack", cardId, toZone: "exile" }]);
+      buttons.push(["Voltar para mao", { type: "resolveStack", cardId, toZone: "hand" }]);
+    } else {
+      buttons.push(["Virar/desvirar", { type: "toggleTap", cardId }]);
+      buttons.push(["Enviar para pilha", { type: "moveCard", cardId, toZone: "stack" }]);
+      buttons.push(["Cemiterio", { type: "moveCard", cardId, toZone: "graveyard" }]);
+      buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
+      buttons.push(["Voltar para mao", { type: "moveCard", cardId, toZone: "hand" }]);
+      buttons.push(["Adicionar +1/+1", { type: "counter", cardId, counterType: "p1p1", value: 1 }]);
+      buttons.push(["Remover +1/+1", { type: "counter", cardId, counterType: "p1p1", value: -1 }]);
+      buttons.push(["Declarar atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: true }]);
+      buttons.push(["Remover atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: false }]);
+      buttons.push(["Declarar bloqueador", { type: "combatFlag", cardId, flag: "blocking", enabled: true }]);
+      buttons.push(["Remover bloqueador", { type: "combatFlag", cardId, flag: "blocking", enabled: false }]);
     }
+
+    menu.innerHTML = buttons.map(([label], index) => `<button data-menu-index="${index}">${escapeHtml(label)}</button>`).join("");
+    menu.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => {
+      sendAction(buttons[index][1]);
+      closeCardMenu();
+    }));
+    menu.style.left = `${Math.min(window.innerWidth - 220, x)}px`;
+    menu.style.top = `${Math.min(window.innerHeight - 260, y)}px`;
+    menu.classList.remove("hidden");
+  }
+
+  function closeCardMenu() {
+    el("cardMenu").classList.add("hidden");
+  }
+
+  function openPrivateModal(title, cards) {
+    privateCards = cards || [];
+    el("privateModalTitle").textContent = title;
+    el("privateModalContent").innerHTML = privateCards.length
+      ? privateCards.map(card => cardHtml(card, "private", "private")).join("")
+      : `<div class="empty-zone">Nada para mostrar.</div>`;
+    el("privateModal").classList.remove("hidden");
   }
 
   function bindEvents() {
     el("playerNameInput").value = savedName;
-    el("joinSimulatorBtn").addEventListener("click", joinSimulator);
-    el("playerNameInput").addEventListener("keydown", event => {
-      if (event.key === "Enter") joinSimulator();
+    el("openGameModalBtn").addEventListener("click", () => el("gameModal").classList.remove("hidden"));
+    el("cancelGameBtn").addEventListener("click", () => el("gameModal").classList.add("hidden"));
+    el("createGameBtn").addEventListener("click", createGame);
+    el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
+    el("deckFileInput").addEventListener("change", async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const parsed = parseDecklist(await file.text());
+      await hydrateDeck(parsed);
     });
 
     document.querySelectorAll("[data-life]").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "life", value: Number(button.dataset.life || 0) }));
     });
-
-    el("libraryButton").addEventListener("click", () => {
-      el("libraryMenu").classList.toggle("hidden");
+    document.querySelectorAll(".phase-strip button").forEach(button => {
+      button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
     });
+    el("createTokenBtn").addEventListener("click", () => sendAction({ type: "token", value: el("tokenSelect").value }));
+    el("rollD20Btn").addEventListener("click", () => alert(`d20: ${Math.floor(Math.random() * 20) + 1}`));
+    el("toggleCommandsBtn").addEventListener("click", () => el("commandsPanel").classList.toggle("collapsed"));
+    el("closePrivateModal").addEventListener("click", () => el("privateModal").classList.add("hidden"));
 
-    document.querySelectorAll("[data-library-action]").forEach(button => {
+    document.querySelectorAll("[data-command]").forEach(button => {
       button.addEventListener("click", () => {
-        const action = button.dataset.libraryAction;
-        if (action === "drawX") {
-          sendAction({ type: "draw", value: Number(el("drawXInput").value || 1) });
-        } else if (action === "scry") {
-          sendAction({ type: "scry", value: Number(el("scryInput").value || 1) });
-        } else {
-          sendAction({ type: action });
-        }
+        const command = button.dataset.command;
+        const self = selfPlayer();
+        if (command === "drawX") sendAction({ type: "draw", value: Number(prompt("Comprar quantas cartas?", "3") || 0) });
+        else if (command === "mill") sendAction({ type: "mill", value: Number(prompt("Colocar quantas cartas no cemiterio?", "3") || 0) });
+        else if (command === "viewDeck") openPrivateModal("Seu deck", self?.library || []);
+        else if (command === "peekTop") openPrivateModal("Carta do topo", (self?.library || []).slice(0, 1));
+        else if (command === "viewTopX") openPrivateModal("Cartas do topo", (self?.library || []).slice(0, Number(prompt("Ver quantas cartas?", "3") || 0)));
+        else sendAction({ type: command });
       });
     });
 
-    document.querySelectorAll(".phase-bar button").forEach(button => {
-      button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
+    document.body.addEventListener("click", event => {
+      const card = event.target.closest(".sim-card,.mini-card");
+      if (card && !event.target.closest("#privateModalContent")) {
+        openCardMenu(card, event.clientX, event.clientY);
+        return;
+      }
+      if (!event.target.closest("#cardMenu")) closeCardMenu();
     });
-
-    el("createTokenBtn").addEventListener("click", () => {
-      sendAction({ type: "token", value: el("tokenSelect").value });
-    });
-
-    el("resetPlayerBtn").addEventListener("click", () => {
-      if (confirm("Resetar seu estado do Simulator MVP?")) {
-        sendAction({ type: "reset" });
+    document.body.addEventListener("contextmenu", event => {
+      const card = event.target.closest(".sim-card,.mini-card");
+      if (card) {
+        event.preventDefault();
+        openCardMenu(card, event.clientX, event.clientY);
       }
     });
-
-    document.body.addEventListener("click", handleCardClick);
   }
 
-  socket.on("connect", () => {
-    if (savedName || el("playerNameInput").value.trim()) {
-      joinSimulator();
-    }
-  });
-
+  socket.on("connect", () => {});
   socket.on("simulator-state", payload => {
     state = payload;
     render();
   });
 
   bindEvents();
-  renderEmpty();
 })();

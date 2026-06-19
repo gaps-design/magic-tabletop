@@ -673,12 +673,16 @@ function ensureSimulator(room) {
   return room.simulator;
 }
 
-function publicSimulatorCard(card = {}) {
+function normalizeSimulatorCard(card = {}, playerId = "sim") {
   return {
-    id: card.id,
+    id: limitText(card.id, 120) || `${playerId}-card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name: card.name || "Carta",
     type: card.type || "Card",
     cost: card.cost || "",
+    imageUrl: limitText(card.imageUrl, 500),
+    oracleText: limitText(card.oracleText, 650),
+    colors: Array.isArray(card.colors) ? card.colors.slice(0, 5).map(color => limitText(color, 4)) : [],
+    scryfallId: limitText(card.scryfallId || card.oracleId || "", 120),
     token: card.token === true,
     tapped: card.tapped === true,
     attacking: card.attacking === true,
@@ -690,17 +694,25 @@ function publicSimulatorCard(card = {}) {
   };
 }
 
+function publicSimulatorCard(card = {}) {
+  return normalizeSimulatorCard(card);
+}
+
 function createSimulatorPlayer(playerId, name) {
   return {
     id: playerId,
     name: limitText(name, 80) || "Jogador",
-    life: 40,
+    life: 20,
+    currentPhase: "untap",
     library: createSimulatorDeck(playerId),
     hand: [],
     battlefield: [],
+    stack: [],
     graveyard: [],
     exile: [],
     commandZone: [],
+    sideboard: [],
+    revealed: [],
     notes: "",
     counters: {}
   };
@@ -737,7 +749,7 @@ function addSimulatorLog(simulator, message) {
 }
 
 function findSimulatorCard(player, cardId) {
-  const zones = ["library", "hand", "battlefield", "graveyard", "exile", "commandZone"];
+  const zones = ["library", "hand", "battlefield", "stack", "graveyard", "exile", "commandZone", "sideboard", "revealed"];
   for (const zone of zones) {
     const index = player[zone].findIndex(card => card.id === cardId);
     if (index >= 0) return { zone, index, card: player[zone][index] };
@@ -746,7 +758,7 @@ function findSimulatorCard(player, cardId) {
 }
 
 function moveSimulatorCard(player, cardId, toZone, position = "top") {
-  const allowedZones = new Set(["library", "hand", "battlefield", "graveyard", "exile", "commandZone"]);
+  const allowedZones = new Set(["library", "hand", "battlefield", "stack", "graveyard", "exile", "commandZone", "sideboard", "revealed"]);
   if (!allowedZones.has(toZone)) return null;
 
   const found = findSimulatorCard(player, cardId);
@@ -782,6 +794,24 @@ function drawSimulatorCards(player, amount = 1) {
   return drawn;
 }
 
+function loadSimulatorDeck(player, deck = {}) {
+  const mainDeck = Array.isArray(deck.mainDeck) ? deck.mainDeck : [];
+  const sideboard = Array.isArray(deck.sideboard) ? deck.sideboard : [];
+
+  player.life = 20;
+  player.currentPhase = "untap";
+  player.library = shuffleSimulatorCards(mainDeck.slice(0, 250).map(card => normalizeSimulatorCard(card, player.id)));
+  player.hand = [];
+  player.battlefield = [];
+  player.stack = [];
+  player.graveyard = [];
+  player.exile = [];
+  player.commandZone = [];
+  player.sideboard = sideboard.slice(0, 30).map(card => normalizeSimulatorCard(card, player.id));
+  player.revealed = [];
+  player.counters = {};
+}
+
 function applySimulatorAction(roomId, playerId, action = {}) {
   const room = ensureRoom(roomId);
   const simulator = ensureSimulator(room);
@@ -795,8 +825,11 @@ function applySimulatorAction(roomId, playerId, action = {}) {
 
   if (type === "life") {
     const amount = Math.max(-99, Math.min(99, Number(value) || 0));
-    player.life = Math.max(0, Math.min(999, Number(player.life || 40) + amount));
+    player.life = Math.max(0, Math.min(999, Number(player.life || 20) + amount));
     addSimulatorLog(simulator, `${playerName} ajustou a vida para ${player.life}`);
+  } else if (type === "loadDeck") {
+    loadSimulatorDeck(player, action.deck || {});
+    addSimulatorLog(simulator, `${playerName} carregou um deck no Simulator MVP`);
   } else if (type === "draw") {
     const drawn = drawSimulatorCards(player, value || 1);
     addSimulatorLog(simulator, `${playerName} comprou ${drawn.length} carta${drawn.length === 1 ? "" : "s"}`);
@@ -820,11 +853,18 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     addSimulatorLog(simulator, card ? `${playerName} colocou o topo no fundo` : `${playerName} tentou colocar o topo no fundo`);
   } else if (type === "scry") {
     const amount = Math.max(1, Math.min(10, Number(value) || 1));
-    const names = player.library.slice(0, amount).map(card => card.name).join(", ") || "grimorio vazio";
-    addSimulatorLog(simulator, `${playerName} fez Scry ${amount}: ${names}`);
+    addSimulatorLog(simulator, `${playerName} fez Scry ${amount}`);
   } else if (type === "moveCard") {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
     if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
+  } else if (type === "playToStack") {
+    const result = moveSimulatorCard(player, cardId, "stack");
+    if (result) addSimulatorLog(simulator, `${playerName} colocou ${result.card.name} na pilha`);
+  } else if (type === "resolveStack") {
+    const destination = String(action.toZone || "");
+    if (!["battlefield", "graveyard", "exile", "hand"].includes(destination)) return;
+    const result = moveSimulatorCard(player, cardId, destination);
+    if (result) addSimulatorLog(simulator, `${playerName} resolveu ${result.card.name} para ${destination}`);
   } else if (type === "toggleTap") {
     const found = findSimulatorCard(player, cardId);
     if (found?.card) {
@@ -863,6 +903,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     if (!SIMULATOR_PHASES.has(phase)) return;
     simulator.currentPhase = phase;
     simulator.activePlayerId = playerId;
+    player.currentPhase = phase;
     if (phase === "untap") {
       player.battlefield.forEach(card => {
         card.tapped = false;
@@ -883,6 +924,30 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   } else if (type === "reset") {
     simulator.players[playerId] = createSimulatorPlayer(playerId, player.name);
     addSimulatorLog(simulator, `${playerName} reiniciou o estado do Simulator MVP`);
+  } else if (type === "mill") {
+    const amount = Math.max(1, Math.min(60, Number(value) || 1));
+    let moved = 0;
+    for (let i = 0; i < amount; i++) {
+      const card = player.library.shift();
+      if (!card) break;
+      player.graveyard.unshift(card);
+      moved++;
+    }
+    addSimulatorLog(simulator, `${playerName} colocou ${moved} carta${moved === 1 ? "" : "s"} do topo no cemiterio`);
+  } else if (type === "revealHand") {
+    player.revealed = player.hand.map(card => ({ ...card }));
+    addSimulatorLog(simulator, `${playerName} revelou a mao`);
+  } else if (type === "revealRandom") {
+    if (player.hand.length) {
+      const card = player.hand[Math.floor(Math.random() * player.hand.length)];
+      player.revealed = [card];
+    }
+    addSimulatorLog(simulator, `${playerName} revelou uma carta aleatoria da mao`);
+  } else if (type === "clearRevealed") {
+    player.revealed = [];
+    addSimulatorLog(simulator, `${playerName} limpou as cartas reveladas`);
+  } else if (type === "peekTop" || type === "viewDeck" || type === "viewTopX") {
+    addSimulatorLog(simulator, `${playerName} consultou informacoes privadas do grimorio`);
   }
 }
 
@@ -900,11 +965,17 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
         life: player.life,
         libraryCount: player.library.length,
         handCount: player.hand.length,
+        currentPhase: player.currentPhase || "untap",
         hand: isSelf ? player.hand.map(publicSimulatorCard) : [],
+        library: isSelf ? player.library.map(publicSimulatorCard) : [],
         battlefield: player.battlefield.map(publicSimulatorCard),
+        stack: player.stack.map(publicSimulatorCard),
         graveyard: player.graveyard.map(publicSimulatorCard),
         exile: player.exile.map(publicSimulatorCard),
         commandZone: player.commandZone.map(publicSimulatorCard),
+        sideboardCount: player.sideboard?.length || 0,
+        sideboard: isSelf ? (player.sideboard || []).map(publicSimulatorCard) : [],
+        revealed: (player.revealed || []).map(publicSimulatorCard),
         counters: player.counters || {}
       }];
     }))
