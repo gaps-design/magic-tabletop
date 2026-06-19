@@ -699,12 +699,14 @@ function publicSimulatorCard(card = {}) {
 }
 
 function createSimulatorPlayer(playerId, name) {
+  const starterLibrary = createSimulatorDeck(playerId);
   return {
     id: playerId,
     name: limitText(name, 80) || "Jogador",
     life: 20,
     currentPhase: "untap",
-    library: createSimulatorDeck(playerId),
+    mainDeck: starterLibrary.map(card => ({ ...card, counters: { ...(card.counters || {}) } })),
+    library: starterLibrary,
     hand: [],
     battlefield: [],
     stack: [],
@@ -794,20 +796,52 @@ function drawSimulatorCards(player, amount = 1) {
   return drawn;
 }
 
-function loadSimulatorDeck(player, deck = {}) {
-  const mainDeck = Array.isArray(deck.mainDeck) ? deck.mainDeck : [];
-  const sideboard = Array.isArray(deck.sideboard) ? deck.sideboard : [];
+function cloneSimulatorCard(card = {}, playerId = "sim", suffix = "") {
+  const normalized = normalizeSimulatorCard(card, playerId);
+  return {
+    ...normalized,
+    id: `${normalized.id || playerId}-${suffix || Date.now()}-${Math.random().toString(36).slice(2)}`,
+    counters: { ...(normalized.counters || { p1p1: 0, generic: 0 }) },
+    tapped: false,
+    attacking: false,
+    blocking: false
+  };
+}
+
+function resetSimulatorPlayerForNewGame(player) {
+  const baseDeck = Array.isArray(player.mainDeck) && player.mainDeck.length
+    ? player.mainDeck
+    : createSimulatorDeck(player.id);
 
   player.life = 20;
   player.currentPhase = "untap";
-  player.library = shuffleSimulatorCards(mainDeck.slice(0, 250).map(card => normalizeSimulatorCard(card, player.id)));
+  player.library = shuffleSimulatorCards(baseDeck.map((card, index) => cloneSimulatorCard(card, player.id, `new-${index}`)));
   player.hand = [];
   player.battlefield = [];
   player.stack = [];
   player.graveyard = [];
   player.exile = [];
   player.commandZone = [];
-  player.sideboard = sideboard.slice(0, 30).map(card => normalizeSimulatorCard(card, player.id));
+  player.revealed = [];
+  player.counters = {};
+}
+
+function loadSimulatorDeck(player, deck = {}) {
+  const mainDeck = Array.isArray(deck.mainDeck) ? deck.mainDeck : [];
+  const sideboard = Array.isArray(deck.sideboard) ? deck.sideboard : [];
+  const normalizedMain = mainDeck.map(card => normalizeSimulatorCard(card, player.id));
+
+  player.life = 20;
+  player.currentPhase = "untap";
+  player.mainDeck = normalizedMain;
+  player.library = shuffleSimulatorCards(normalizedMain.map((card, index) => cloneSimulatorCard(card, player.id, `load-${index}`)));
+  player.hand = [];
+  player.battlefield = [];
+  player.stack = [];
+  player.graveyard = [];
+  player.exile = [];
+  player.commandZone = [];
+  player.sideboard = sideboard.slice(0, 15).map(card => normalizeSimulatorCard(card, player.id));
   player.revealed = [];
   player.counters = {};
 }
@@ -830,6 +864,28 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   } else if (type === "loadDeck") {
     loadSimulatorDeck(player, action.deck || {});
     addSimulatorLog(simulator, `${playerName} carregou um deck no Simulator MVP`);
+  } else if (type === "openingHand") {
+    if (player.hand.length) {
+      player.library = shuffleSimulatorCards([...player.library, ...player.hand.map(card => cloneSimulatorCard(card, player.id, "opening"))]);
+      player.hand = [];
+    } else {
+      player.library = shuffleSimulatorCards(player.library);
+    }
+    const drawn = drawSimulatorCards(player, 7);
+    addSimulatorLog(simulator, `${playerName} comprou a mao inicial (${drawn.length} cartas)`);
+  } else if (type === "mulligan") {
+    player.library = shuffleSimulatorCards([...player.library, ...player.hand.map(card => cloneSimulatorCard(card, player.id, "mulligan"))]);
+    player.hand = [];
+    const drawn = drawSimulatorCards(player, 7);
+    addSimulatorLog(simulator, `${playerName} fez mulligan e comprou ${drawn.length} cartas`);
+  } else if (type === "newGame") {
+    resetSimulatorPlayerForNewGame(player);
+    simulator.currentPhase = "untap";
+    simulator.activePlayerId = playerId;
+    addSimulatorLog(simulator, `${playerName} iniciou uma nova partida`);
+  } else if (type === "concede") {
+    player.conceded = true;
+    addSimulatorLog(simulator, `${playerName} concedeu a partida`);
   } else if (type === "draw") {
     const drawn = drawSimulatorCards(player, value || 1);
     addSimulatorLog(simulator, `${playerName} comprou ${drawn.length} carta${drawn.length === 1 ? "" : "s"}`);
@@ -857,6 +913,19 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   } else if (type === "moveCard") {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
     if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
+  } else if (type === "privateMoveCard") {
+    const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
+    if (result) {
+      const publicZones = new Set(["battlefield", "graveyard", "exile", "stack"]);
+      const cardLabel = publicZones.has(result.toZone) ? ` ${result.card.name}` : " uma carta";
+      addSimulatorLog(simulator, `${playerName} moveu${cardLabel} para ${result.toZone}`);
+    }
+  } else if (type === "shuffleIntoLibrary") {
+    const result = moveSimulatorCard(player, cardId, "library", "bottom");
+    if (result) {
+      player.library = shuffleSimulatorCards(player.library);
+      addSimulatorLog(simulator, `${playerName} embaralhou uma carta no grimorio`);
+    }
   } else if (type === "playToStack") {
     const result = moveSimulatorCard(player, cardId, "stack");
     if (result) addSimulatorLog(simulator, `${playerName} colocou ${result.card.name} na pilha`);
@@ -968,6 +1037,7 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
         currentPhase: player.currentPhase || "untap",
         hand: isSelf ? player.hand.map(publicSimulatorCard) : [],
         library: isSelf ? player.library.map(publicSimulatorCard) : [],
+        mainDeckCount: player.mainDeck?.length || 0,
         battlefield: player.battlefield.map(publicSimulatorCard),
         stack: player.stack.map(publicSimulatorCard),
         graveyard: player.graveyard.map(publicSimulatorCard),

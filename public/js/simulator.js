@@ -11,6 +11,7 @@
   let loadedDeck = null;
   let activeCard = null;
   let privateCards = [];
+  let touchTimer = null;
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -92,7 +93,7 @@
         name: card.name || name,
         type: card.type_line || "Card",
         cost: card.mana_cost || "",
-        imageUrl: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || card.image_uris?.small || "",
+        imageUrl: card.image_uris?.large || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.large || card.card_faces?.[0]?.image_uris?.normal || "",
         oracleText: card.oracle_text || card.card_faces?.[0]?.oracle_text || "",
         colors: card.colors || [],
         scryfallId: card.id || ""
@@ -164,6 +165,20 @@
     socket.emit("simulator-action", { roomId, playerId, action });
   }
 
+  function allVisibleCards() {
+    const cards = [];
+    Object.values(state?.players || {}).forEach(player => {
+      ["hand", "library", "battlefield", "stack", "graveyard", "exile", "revealed", "sideboard"].forEach(zone => {
+        (player[zone] || []).forEach(card => cards.push({ ...card, zone, ownerId: player.id }));
+      });
+    });
+    return cards;
+  }
+
+  function getCardById(cardId) {
+    return allVisibleCards().find(card => card.id === cardId) || activeCard;
+  }
+
   function createGame() {
     const name = el("playerNameInput").value.trim() || savedName || "Jogador";
     localStorage.setItem("resenhaon-simulator-name", name);
@@ -171,6 +186,18 @@
     sendAction({ type: "loadDeck", deck: loadedDeck || mockDeck() });
     el("gameModal").classList.remove("active");
     el("gameModal").classList.add("hidden");
+  }
+
+  function cardDetailsHtml(card, includeImage = true) {
+    if (!card) return `<div class="empty-zone">Nenhuma carta selecionada.</div>`;
+    return `
+      ${includeImage && card.imageUrl ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}">` : ""}
+      <h3>${escapeHtml(card.name)}</h3>
+      <p><strong>${escapeHtml(card.cost || "")}</strong></p>
+      <p>${escapeHtml(card.type || "")}</p>
+      <p>${escapeHtml(card.oracleText || "")}</p>
+      <p>Zona: ${escapeHtml(card.zone || "")}</p>
+    `;
   }
 
   function cardHtml(card, zone, owner) {
@@ -246,6 +273,20 @@
     }
   }
 
+  function renderSelectedCard(card) {
+    const panel = el("selectedCardPanel");
+    if (!card) {
+      panel.classList.add("collapsed");
+      el("selectedCardContent").innerHTML = "";
+      return;
+    }
+    panel.classList.remove("collapsed");
+    el("selectedCardContent").innerHTML = cardDetailsHtml(card, true);
+    document.querySelectorAll(".sim-card,.mini-card").forEach(cardEl => {
+      cardEl.classList.toggle("selected", cardEl.dataset.cardId === card.id);
+    });
+  }
+
   function renderLog() {
     const log = state?.log || [];
     el("actionLog").innerHTML = log.length
@@ -266,6 +307,10 @@
     renderPlayer(self, "self");
     renderPlayer(opponent, "opponent");
     renderLog();
+    if (activeCard?.id) {
+      activeCard = getCardById(activeCard.id) || activeCard;
+      renderSelectedCard(activeCard);
+    }
   }
 
   function openCardMenu(cardEl, x, y) {
@@ -293,6 +338,8 @@
       buttons.push(["Cemiterio", { type: "moveCard", cardId, toZone: "graveyard" }]);
       buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
       buttons.push(["Voltar para mao", { type: "moveCard", cardId, toZone: "hand" }]);
+      buttons.push(["Topo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "top" }]);
+      buttons.push(["Fundo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
       buttons.push(["Adicionar +1/+1", { type: "counter", cardId, counterType: "p1p1", value: 1 }]);
       buttons.push(["Remover +1/+1", { type: "counter", cardId, counterType: "p1p1", value: -1 }]);
       buttons.push(["Declarar atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: true }]);
@@ -315,13 +362,53 @@
     el("cardMenu").classList.add("hidden");
   }
 
-  function openPrivateModal(title, cards) {
+  function privateActionButtons(card, sourceZone) {
+    const moves = [
+      ["Mao", "hand", "top"],
+      ["Cemiterio", "graveyard", "top"],
+      ["Exilio", "exile", "top"],
+      ["Campo", "battlefield", "top"],
+      ["Topo", "library", "top"],
+      ["Fundo", "library", "bottom"]
+    ];
+    return `<div class="private-card-actions">
+      ${moves.map(([label, zone, position]) => `<button data-private-card="${escapeHtml(card.id)}" data-private-zone="${zone}" data-private-position="${position}">${label}</button>`).join("")}
+      ${["graveyard", "exile"].includes(sourceZone) ? `<button data-private-card="${escapeHtml(card.id)}" data-private-shuffle="1">Embaralhar no grimorio</button>` : ""}
+    </div>`;
+  }
+
+  function privateCardHtml(card, sourceZone) {
+    return `<div class="private-card-wrap">${cardHtml(card, sourceZone, "self")}${privateActionButtons(card, sourceZone)}</div>`;
+  }
+
+  function openPrivateModal(title, cards, sourceZone = "library") {
     privateCards = cards || [];
     el("privateModalTitle").textContent = title;
     el("privateModalContent").innerHTML = privateCards.length
-      ? privateCards.map(card => cardHtml(card, "private", "private")).join("")
+      ? privateCards.map(card => privateCardHtml(card, sourceZone)).join("")
       : `<div class="empty-zone">Nada para mostrar.</div>`;
     el("privateModal").classList.remove("hidden");
+  }
+
+  function showHoverPreview(card, x, y) {
+    if (!card) return;
+    const preview = el("hoverPreview");
+    preview.innerHTML = cardDetailsHtml(card, true);
+    preview.style.left = `${Math.min(window.innerWidth - 330, x + 18)}px`;
+    preview.style.top = `${Math.min(window.innerHeight - 470, y + 18)}px`;
+    preview.classList.remove("hidden");
+  }
+
+  function hideHoverPreview() {
+    el("hoverPreview").classList.add("hidden");
+  }
+
+  function openZoom(card) {
+    if (!card) return;
+    el("zoomCardContent").innerHTML = card.imageUrl
+      ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}">${cardDetailsHtml(card, false)}`
+      : cardDetailsHtml(card, false);
+    el("zoomModal").classList.remove("hidden");
   }
 
   function bindEvents() {
@@ -329,7 +416,22 @@
     el("openGameModalBtn").addEventListener("click", () => el("gameModal").classList.remove("hidden"));
     el("cancelGameBtn").addEventListener("click", () => el("gameModal").classList.add("hidden"));
     el("createGameBtn").addEventListener("click", createGame);
+    el("concedeBtn").addEventListener("click", () => {
+      if (confirm("Tem certeza que deseja conceder a partida?")) sendAction({ type: "concede" });
+    });
+    el("newGameBtn").addEventListener("click", () => {
+      if (confirm("Iniciar nova partida e limpar zonas atuais?")) sendAction({ type: "newGame" });
+    });
+    el("layoutSizeSelect").addEventListener("change", event => {
+      document.querySelector(".sim-table-app").classList.remove("layout-compact", "layout-medium", "layout-spacious");
+      document.querySelector(".sim-table-app").classList.add(`layout-${event.target.value}`);
+    });
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
+    el("confirmDeckBtn").addEventListener("click", () => {
+      el("deckStatus").textContent = loadedDeck
+        ? `${el("deckStatus").textContent} Deck confirmado.`
+        : "Nenhum deck carregado. Ao criar jogo, sera usado deck de teste.";
+    });
     el("deckFileInput").addEventListener("change", async event => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -346,7 +448,19 @@
     el("createTokenBtn").addEventListener("click", () => sendAction({ type: "token", value: el("tokenSelect").value }));
     el("rollD20Btn").addEventListener("click", () => alert(`d20: ${Math.floor(Math.random() * 20) + 1}`));
     el("toggleCommandsBtn").addEventListener("click", () => el("commandsPanel").classList.toggle("collapsed"));
+    el("toggleToolsBtn").addEventListener("click", () => el("toolsPanel").classList.toggle("collapsed"));
     el("closePrivateModal").addEventListener("click", () => el("privateModal").classList.add("hidden"));
+    el("closeZoomModal").addEventListener("click", () => el("zoomModal").classList.add("hidden"));
+    el("zoomModal").addEventListener("click", event => {
+      if (event.target.id === "zoomModal") el("zoomModal").classList.add("hidden");
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        el("zoomModal").classList.add("hidden");
+        el("privateModal").classList.add("hidden");
+        closeCardMenu();
+      }
+    });
 
     document.querySelectorAll("[data-command]").forEach(button => {
       button.addEventListener("click", () => {
@@ -354,16 +468,66 @@
         const self = selfPlayer();
         if (command === "drawX") sendAction({ type: "draw", value: Number(prompt("Comprar quantas cartas?", "3") || 0) });
         else if (command === "mill") sendAction({ type: "mill", value: Number(prompt("Colocar quantas cartas no cemiterio?", "3") || 0) });
-        else if (command === "viewDeck") openPrivateModal("Seu deck", self?.library || []);
-        else if (command === "peekTop") openPrivateModal("Carta do topo", (self?.library || []).slice(0, 1));
-        else if (command === "viewTopX") openPrivateModal("Cartas do topo", (self?.library || []).slice(0, Number(prompt("Ver quantas cartas?", "3") || 0)));
+        else if (command === "openingHand") {
+          if (!self?.handCount || confirm("Sua mao nao esta vazia. Embaralhar a mao de volta e comprar 7?")) sendAction({ type: "openingHand" });
+        } else if (command === "mulligan") {
+          if (confirm("Fazer mulligan? A mao atual volta ao grimorio e voce compra 7.")) sendAction({ type: "mulligan" });
+        } else if (command === "viewDeck") {
+          openPrivateModal("Seu grimorio", self?.library || [], "library");
+          sendAction({ type: "viewDeck" });
+        } else if (command === "peekTop") {
+          openPrivateModal("Carta do topo", (self?.library || []).slice(0, 1), "library");
+          sendAction({ type: "peekTop" });
+        } else if (command === "viewTopX") {
+          openPrivateModal("Cartas do topo", (self?.library || []).slice(0, Number(prompt("Ver quantas cartas?", "3") || 0)), "library");
+          sendAction({ type: "viewTopX" });
+        }
         else sendAction({ type: command });
       });
+    });
+
+    document.querySelectorAll("[data-view-zone]").forEach(button => {
+      button.addEventListener("click", () => {
+        const self = selfPlayer();
+        const opponent = opponentPlayer();
+        const map = {
+          graveyard: [self?.graveyard || [], "Cemiterio", "graveyard"],
+          exile: [self?.exile || [], "Exilio", "exile"],
+          "opponent-graveyard": [opponent?.graveyard || [], "Cemiterio do oponente", "opponent"],
+          "opponent-exile": [opponent?.exile || [], "Exilio do oponente", "opponent"]
+        };
+        const [cards, title, sourceZone] = map[button.dataset.viewZone] || [[], "Zona", "library"];
+        openPrivateModal(title, cards, sourceZone);
+      });
+    });
+
+    el("libraryButton").addEventListener("click", () => {
+      openPrivateModal("Seu grimorio", selfPlayer()?.library || [], "library");
+      sendAction({ type: "viewDeck" });
+    });
+
+    el("privateModalContent").addEventListener("click", event => {
+      const actionButton = event.target.closest("button[data-private-card]");
+      if (!actionButton) return;
+      const cardId = actionButton.dataset.privateCard;
+      if (actionButton.dataset.privateShuffle) {
+        sendAction({ type: "shuffleIntoLibrary", cardId });
+      } else {
+        sendAction({
+          type: "privateMoveCard",
+          cardId,
+          toZone: actionButton.dataset.privateZone,
+          position: actionButton.dataset.privatePosition || "top"
+        });
+      }
+      el("privateModal").classList.add("hidden");
     });
 
     document.body.addEventListener("click", event => {
       const card = event.target.closest(".sim-card,.mini-card");
       if (card && !event.target.closest("#privateModalContent")) {
+        activeCard = getCardById(card.dataset.cardId);
+        renderSelectedCard(activeCard);
         openCardMenu(card, event.clientX, event.clientY);
         return;
       }
@@ -376,6 +540,30 @@
         openCardMenu(card, event.clientX, event.clientY);
       }
     });
+    document.body.addEventListener("mouseover", event => {
+      const cardEl = event.target.closest(".sim-card,.mini-card");
+      if (!cardEl) return;
+      showHoverPreview(getCardById(cardEl.dataset.cardId), event.clientX, event.clientY);
+    });
+    document.body.addEventListener("mousemove", event => {
+      if (!el("hoverPreview").classList.contains("hidden")) {
+        el("hoverPreview").style.left = `${Math.min(window.innerWidth - 330, event.clientX + 18)}px`;
+        el("hoverPreview").style.top = `${Math.min(window.innerHeight - 470, event.clientY + 18)}px`;
+      }
+    });
+    document.body.addEventListener("mouseout", event => {
+      if (event.target.closest(".sim-card,.mini-card")) hideHoverPreview();
+    });
+    document.body.addEventListener("dblclick", event => {
+      const cardEl = event.target.closest(".sim-card,.mini-card");
+      if (cardEl) openZoom(getCardById(cardEl.dataset.cardId));
+    });
+    document.body.addEventListener("touchstart", event => {
+      const cardEl = event.target.closest(".sim-card,.mini-card");
+      if (!cardEl) return;
+      touchTimer = setTimeout(() => openZoom(getCardById(cardEl.dataset.cardId)), 550);
+    }, { passive: true });
+    document.body.addEventListener("touchend", () => clearTimeout(touchTimer), { passive: true });
   }
 
   socket.on("connect", () => {});

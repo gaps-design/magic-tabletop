@@ -9,17 +9,24 @@
   <link rel="stylesheet" href="/css/simulator.css">
 </head>
 <body>
-  <div class="sim-table-app">
+  <div class="sim-table-app layout-medium">
     <header class="sim-header">
-      <a href="/" class="sim-logo"><img src="/assets/logo-resenhaon.png" alt="ResenhaON"></a>
       <div>
-        <span>ResenhaON Simulator MVP</span>
-        <h1 id="roomTitle">Sala virtual</h1>
+        <span>Sala</span>
+        <strong id="roomTitle">Sala virtual</strong>
       </div>
       <div class="sim-header-actions">
         <button id="openGameModalBtn" type="button">Criar jogo</button>
         <button id="toggleCommandsBtn" type="button">Comandos</button>
-        <a href="/" class="sim-link">Voltar ao lobby</a>
+        <button id="toggleToolsBtn" type="button">Dados/Marcadores</button>
+        <button id="newGameBtn" type="button">Nova partida</button>
+        <button id="concedeBtn" type="button">Conceder</button>
+        <select id="layoutSizeSelect" aria-label="Tamanho da mesa">
+          <option value="compact">Compacto</option>
+          <option value="medium" selected>Medio</option>
+          <option value="spacious">Amplo</option>
+        </select>
+        <a href="/" class="sim-link">Sair</a>
       </div>
     </header>
 
@@ -37,8 +44,8 @@
           <div class="lane-board">
             <div class="zone-column">
               <button class="deck-pile card-back" data-zone-click="opponent-library"><span id="opponentLibraryCount">0</span></button>
-              <div class="zone-pile"><span>Cemiterio</span><div id="opponentGraveyard" class="small-zone"></div></div>
-              <div class="zone-pile"><span>Exilio</span><div id="opponentExile" class="small-zone"></div></div>
+              <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="opponent-graveyard" type="button">Ver</button><div id="opponentGraveyard" class="small-zone"></div></div>
+              <div class="zone-pile"><span>Exilio</span><button data-view-zone="opponent-exile" type="button">Ver</button><div id="opponentExile" class="small-zone"></div></div>
             </div>
             <div class="stack-zone">
               <span>PILHA</span>
@@ -68,8 +75,8 @@
           <div class="lane-board">
             <div class="zone-column">
               <button id="libraryButton" class="deck-pile card-back" type="button"><span id="libraryCount">0</span></button>
-              <div class="zone-pile"><span>Cemiterio</span><div id="graveyardZone" class="small-zone"></div></div>
-              <div class="zone-pile"><span>Exilio</span><div id="exileZone" class="small-zone"></div></div>
+              <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="graveyard" type="button">Ver</button><div id="graveyardZone" class="small-zone"></div></div>
+              <div class="zone-pile"><span>Exilio</span><button data-view-zone="exile" type="button">Ver</button><div id="exileZone" class="small-zone"></div></div>
             </div>
             <div class="stack-zone">
               <span>PILHA</span>
@@ -107,15 +114,10 @@
       </section>
 
       <aside class="resenha-side">
-        <section>
-          <h2>Status</h2>
-          <p><strong>Sala:</strong> <span id="sideRoomId">mtg-1002</span></p>
-          <p><strong>Jogadores:</strong> <span id="playerCount">0</span></p>
-          <p><strong>Fase atual:</strong> <span id="currentPhaseLabel">Untap</span></p>
-        </section>
-
-        <section>
+        <section class="tools-panel collapsed" id="toolsPanel">
           <h2>Dados e marcadores</h2>
+          <p><strong>Jogadores:</strong> <span id="playerCount">0</span></p>
+          <p><strong>Fase:</strong> <span id="currentPhaseLabel">Untap</span></p>
           <div class="quick-row">
             <button id="rollD20Btn" type="button">d20</button>
             <button id="createTokenBtn" type="button">Token</button>
@@ -134,6 +136,9 @@
           <h2>Comandos</h2>
           <button data-command="draw">Comprar 1 carta</button>
           <button data-command="drawX">Comprar X cartas</button>
+          <button data-command="openingHand">Comprar mao inicial</button>
+          <button data-command="mulligan">Mulligan</button>
+          <button data-command="shuffle">Embaralhar deck</button>
           <button data-command="revealHand">Revelar mao</button>
           <button data-command="revealRandom">Revelar carta aleatoria</button>
           <button data-command="viewDeck">Ver deck</button>
@@ -146,6 +151,11 @@
         <section>
           <h2>Anotacoes</h2>
           <textarea id="notesBox" placeholder="Anotacoes locais da partida"></textarea>
+        </section>
+
+        <section id="selectedCardPanel" class="selected-card-panel collapsed">
+          <h2>Carta selecionada</h2>
+          <div id="selectedCardContent"></div>
         </section>
 
         <section class="log-panel">
@@ -165,6 +175,7 @@
       <div class="deck-loader">
         <input id="deckFileInput" type="file" accept=".txt,.cod,.dec,text/plain">
         <button id="loadDeckBtn" type="button">Carregar deck</button>
+        <button id="confirmDeckBtn" type="button">Confirmar deck</button>
       </div>
       <div id="deckStatus" class="deck-status">Nenhum deck carregado. O MVP usa um deck de teste se voce criar sem arquivo.</div>
       <div class="modal-actions">
@@ -175,6 +186,13 @@
   </div>
 
   <div id="cardMenu" class="card-menu hidden"></div>
+  <div id="hoverPreview" class="hover-preview hidden"></div>
+  <div id="zoomModal" class="modal-backdrop hidden">
+    <div class="zoom-card-modal">
+      <button id="closeZoomModal" type="button">X</button>
+      <div id="zoomCardContent"></div>
+    </div>
+  </div>
   <div id="privateModal" class="modal-backdrop hidden">
     <div class="private-modal">
       <button id="closePrivateModal" type="button">Fechar</button>
