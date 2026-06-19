@@ -5,13 +5,38 @@
   const savedName = localStorage.getItem("resenhaon-simulator-name") || "";
   const socket = io();
   const scryfallCache = new Map(JSON.parse(localStorage.getItem("resenhaon-sim-scryfall-cache") || "[]"));
+  const TOKEN_OPTIONS = [
+    ["treasure", "Treasure", "Token Artifact"],
+    ["food", "Food", "Token Artifact"],
+    ["clue", "Clue", "Token Artifact"],
+    ["blood", "Blood", "Token Artifact"],
+    ["map", "Map", "Token Artifact"],
+    ["soldier", "Soldier", "Token Creature 1/1"],
+    ["zombie", "Zombie", "Token Creature 2/2"],
+    ["spirit", "Spirit", "Token Creature 1/1"],
+    ["goblin", "Goblin", "Token Creature 1/1"],
+    ["saproling", "Saproling", "Token Creature 1/1"],
+    ["angel", "Angel", "Token Creature 4/4"],
+    ["beast", "Beast", "Token Creature 3/3"],
+    ["human", "Human", "Token Creature 1/1"],
+    ["thopter", "Thopter", "Token Artifact Creature 1/1"]
+  ];
+  const COLORED_MARKERS = [
+    ["blue", "Azul"], ["green", "Verde"], ["red", "Vermelho"],
+    ["white", "Branco"], ["black", "Preto"], ["colorless", "Incolor"]
+  ];
+  const ABILITY_MARKERS = ["Voar", "Atropelar", "Infectar", "Vigilancia", "Impeto", "Toque mortifero", "Vinculo com a vida", "Ameacar", "Escudo", "Atordoar"];
 
   let playerId = savedPlayerId;
   let state = null;
   let loadedDeck = null;
+  let lastParsedDeck = null;
+  let lastMissingNames = [];
   let activeCard = null;
   let privateCards = [];
   let touchTimer = null;
+  let timerRemaining = Number(localStorage.getItem("resenhaon-sim-timer-remaining") || 3000);
+  let timerInterval = null;
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -46,6 +71,16 @@
     return String(name || "").replace(/\s+/g, " ").trim();
   }
 
+  function normalizeLookupName(name) {
+    return normalizeName(name)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s*\[[^\]]+\]\s*$/g, "")
+      .replace(/\s*\([A-Z0-9]{2,6}\)\s*\d*\s*$/i, "")
+      .replace(/\s+#?\d+[a-z]?\s*$/i, "")
+      .trim();
+  }
+
   function saveCache() {
     localStorage.setItem("resenhaon-sim-scryfall-cache", JSON.stringify(Array.from(scryfallCache.entries()).slice(-300)));
   }
@@ -73,7 +108,7 @@
       line = line.replace(/\s*\[[^\]]+\]\s*$/g, "").replace(/\s*\([^)]+\)\s*\d*$/g, "").trim();
       const match = line.match(/^(\d+)x?\s+(.+)$/i);
       const count = match ? Math.max(1, Math.min(99, Number(match[1]))) : 1;
-      const name = normalizeName(match ? match[2] : line);
+      const name = normalizeLookupName(match ? match[2] : line);
       if (!name) return;
       for (let i = 0; i < count; i++) target.push(name);
     });
@@ -81,16 +116,35 @@
     return { main, side };
   }
 
-  async function fetchCard(name, index) {
-    const key = name.toLowerCase();
+  function readDeckFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo."));
+      reader.readAsText(file);
+    });
+  }
+
+  async function requestScryfall(name, mode) {
+    const response = await fetch(`https://api.scryfall.com/cards/named?${mode}=${encodeURIComponent(name)}`);
+    if (!response.ok) throw new Error("not found");
+    return response.json();
+  }
+
+  async function fetchCard(name, index, retry = false) {
+    const cleanName = normalizeLookupName(name);
+    const key = cleanName.toLowerCase();
     if (scryfallCache.has(key)) return { ...scryfallCache.get(key), id: `${key}-${index}-${Math.random().toString(36).slice(2)}` };
 
     try {
-      const response = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
-      if (!response.ok) throw new Error("not found");
-      const card = await response.json();
+      let card;
+      try {
+        card = await requestScryfall(cleanName, "exact");
+      } catch {
+        card = await requestScryfall(cleanName, "fuzzy");
+      }
       const normalized = {
-        name: card.name || name,
+        name: card.name || cleanName,
         type: card.type_line || "Card",
         cost: card.mana_cost || "",
         imageUrl: card.image_uris?.large || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.large || card.card_faces?.[0]?.image_uris?.normal || "",
@@ -102,9 +156,7 @@
       saveCache();
       return { ...normalized, id: `${card.id || key}-${index}-${Math.random().toString(36).slice(2)}` };
     } catch (error) {
-      const fallback = { name, type: "Carta nao encontrada", cost: "", imageUrl: "", oracleText: "", colors: [], scryfallId: "" };
-      scryfallCache.set(key, fallback);
-      saveCache();
+      const fallback = { name: cleanName || name, type: "Carta nao encontrada", cost: "", imageUrl: "", oracleText: retry ? "Busca manual ainda disponivel." : "Use o botao de tentar faltantes ou ajuste o nome manualmente.", colors: [], scryfallId: "" };
       return { ...fallback, id: `${key}-${index}-${Math.random().toString(36).slice(2)}` };
     }
   }
@@ -118,13 +170,16 @@
     setStatus();
     const mainDeck = [];
     const sideboard = [];
+    lastMissingNames = [];
     for (const name of parsed.main) {
       mainDeck.push(await fetchCard(name, loaded));
+      if (mainDeck[mainDeck.length - 1].type === "Carta nao encontrada") lastMissingNames.push(name);
       loaded++;
       setStatus();
     }
     for (const name of parsed.side) {
       sideboard.push(await fetchCard(name, loaded));
+      if (sideboard[sideboard.length - 1].type === "Carta nao encontrada") lastMissingNames.push(name);
       loaded++;
       setStatus();
     }
@@ -133,7 +188,8 @@
     const warning = parsed.main.length !== 60 || parsed.side.length > 15
       ? " Aviso: lista fora do padrao 60/15, carregada em modo teste."
       : "";
-    el("deckStatus").textContent = `Main deck: ${parsed.main.length} cartas | Sideboard: ${parsed.side.length} cartas | Cartas unicas: ${unique}.${warning}`;
+    el("deckStatus").textContent = `Main deck: ${parsed.main.length} cartas | Sideboard: ${parsed.side.length} cartas | Cartas unicas: ${unique} | Encontradas: ${total - lastMissingNames.length} | Nao encontradas: ${lastMissingNames.length}.${warning}`;
+    el("retryMissingBtn").classList.toggle("hidden", !lastMissingNames.length);
   }
 
   function mockDeck() {
@@ -200,6 +256,22 @@
     `;
   }
 
+  function markerBadges(card) {
+    const counters = card.counters || {};
+    const colored = counters.colored || {};
+    const power = counters.power || {};
+    const badges = [];
+    if (Number(counters.p1p1 || 0)) badges.push(`<span class="counter-tag">+1/+1 ${Number(counters.p1p1)}</span>`);
+    if (Number(counters.generic || 0)) badges.push(`<span class="counter-tag">M ${Number(counters.generic)}</span>`);
+    Object.entries(colored).forEach(([color, count]) => {
+      if (Number(count || 0)) badges.push(`<span class="counter-tag ${escapeHtml(color)}">${escapeHtml(color)} ${Number(count)}</span>`);
+    });
+    if (Number(power.plus || 0)) badges.push(`<span class="counter-tag">+X/+X ${Number(power.plus)}</span>`);
+    if (Number(power.minus || 0)) badges.push(`<span class="counter-tag">-X/-X ${Number(power.minus)}</span>`);
+    (counters.abilities || []).forEach(ability => badges.push(`<span class="counter-tag ability-tag">${escapeHtml(ability)}</span>`));
+    return badges.join("");
+  }
+
   function cardHtml(card, zone, owner) {
     const image = card.imageUrl ? `style="background-image:url('${escapeHtml(card.imageUrl)}')"` : "";
     return `
@@ -207,8 +279,7 @@
         ${image} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
         <div class="card-text">
           ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
-          ${Number(card.counters?.p1p1 || 0) ? `<span class="counter-tag">+1/+1 ${Number(card.counters.p1p1)}</span>` : ""}
-          ${Number(card.counters?.generic || 0) ? `<span class="counter-tag">M ${Number(card.counters.generic)}</span>` : ""}
+          ${markerBadges(card)}
           <h3>${escapeHtml(card.name)}</h3>
           <p>${escapeHtml(card.type)} ${card.cost ? `| ${escapeHtml(card.cost)}` : ""}</p>
         </div>
@@ -234,6 +305,21 @@
 
   function renderHandBack(container, count) {
     container.innerHTML = Array.from({ length: Math.min(12, count || 0) }, () => `<span class="hand-back"></span>`).join("");
+  }
+
+  function setCardSize(value) {
+    const safeValue = Math.max(60, Math.min(160, Number(value) || 100));
+    document.documentElement.style.setProperty("--sim-card-scale", String(safeValue / 100));
+    localStorage.setItem("resenhaon-sim-card-size", String(safeValue));
+    if (el("cardSizeSlider")) el("cardSizeSlider").value = String(safeValue);
+  }
+
+  function previewSettings() {
+    return {
+      enabled: localStorage.getItem("resenhaon-sim-preview-enabled") !== "false",
+      mode: localStorage.getItem("resenhaon-sim-preview-mode") || "both",
+      size: localStorage.getItem("resenhaon-sim-preview-size") || "medium"
+    };
   }
 
   function renderPlayer(player, side) {
@@ -264,6 +350,7 @@
       el("opponentName").textContent = player.name;
       el("opponentLife").textContent = String(player.life ?? 20);
       el("opponentLibraryCount").textContent = String(player.libraryCount || 0);
+      el("opponentHandLabel").textContent = `${player.handCount || 0} cartas na mao`;
       renderHandBack(el("opponentHand"), player.handCount || 0);
       renderCards(el("opponentBattlefield"), player.battlefield || [], "battlefield", "opponent");
       renderCards(el("opponentStack"), player.stack || [], "stack", "opponent");
@@ -300,7 +387,6 @@
     const players = Object.values(state?.players || {});
     const currentPhase = state?.currentPhase || "untap";
     el("roomTitle").textContent = `Sala ${roomId}`;
-    el("sideRoomId").textContent = roomId;
     el("playerCount").textContent = String(players.length);
     el("currentPhaseLabel").textContent = phases[currentPhase] || currentPhase;
     document.querySelectorAll(".phase-strip button").forEach(button => button.classList.toggle("active", button.dataset.phase === currentPhase));
@@ -342,6 +428,13 @@
       buttons.push(["Fundo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
       buttons.push(["Adicionar +1/+1", { type: "counter", cardId, counterType: "p1p1", value: 1 }]);
       buttons.push(["Remover +1/+1", { type: "counter", cardId, counterType: "p1p1", value: -1 }]);
+      buttons.push(["+X/+X", { type: "marker", cardId, markerKind: "power", powerKind: "plus", value: 1 }]);
+      buttons.push(["-X/-X", { type: "marker", cardId, markerKind: "power", powerKind: "minus", value: 1 }]);
+      COLORED_MARKERS.forEach(([color, label]) => {
+        buttons.push([`+ marcador ${label}`, { type: "marker", cardId, markerKind: "colored", color, value: 1 }]);
+        buttons.push([`- marcador ${label}`, { type: "marker", cardId, markerKind: "colored", color, value: -1 }]);
+      });
+      ABILITY_MARKERS.forEach(ability => buttons.push([`Alternar ${ability}`, { type: "marker", cardId, markerKind: "ability", ability }]));
       buttons.push(["Declarar atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: true }]);
       buttons.push(["Remover atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: false }]);
       buttons.push(["Declarar bloqueador", { type: "combatFlag", cardId, flag: "blocking", enabled: true }]);
@@ -392,8 +485,13 @@
 
   function showHoverPreview(card, x, y) {
     if (!card) return;
+    const settings = previewSettings();
+    if (!settings.enabled) return;
     const preview = el("hoverPreview");
-    preview.innerHTML = cardDetailsHtml(card, true);
+    preview.className = `hover-preview preview-${settings.size}`;
+    const includeImage = settings.mode !== "text";
+    const includeText = settings.mode !== "image";
+    preview.innerHTML = includeText ? cardDetailsHtml(card, includeImage) : (card.imageUrl ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}">` : cardDetailsHtml(card, false));
     preview.style.left = `${Math.min(window.innerWidth - 330, x + 18)}px`;
     preview.style.top = `${Math.min(window.innerHeight - 470, y + 18)}px`;
     preview.classList.remove("hidden");
@@ -426,6 +524,11 @@
       document.querySelector(".sim-table-app").classList.remove("layout-compact", "layout-medium", "layout-spacious");
       document.querySelector(".sim-table-app").classList.add(`layout-${event.target.value}`);
     });
+    setCardSize(localStorage.getItem("resenhaon-sim-card-size") || 100);
+    const settings = previewSettings();
+    el("previewEnabledInput").checked = settings.enabled;
+    el("previewModeSelect").value = settings.mode;
+    el("previewSizeSelect").value = settings.size;
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
     el("confirmDeckBtn").addEventListener("click", () => {
       el("deckStatus").textContent = loadedDeck
@@ -435,9 +538,22 @@
     el("deckFileInput").addEventListener("change", async event => {
       const file = event.target.files?.[0];
       if (!file) return;
-      const parsed = parseDecklist(await file.text());
-      await hydrateDeck(parsed);
+      try {
+        const extensionOk = /\.(txt|cod|dec)$/i.test(file.name);
+        if (!extensionOk) throw new Error("Formato invalido. Use .txt, .cod ou .dec.");
+        lastParsedDeck = parseDecklist(await readDeckFile(file));
+        await hydrateDeck(lastParsedDeck);
+      } catch (error) {
+        el("deckStatus").textContent = error.message || "Erro ao carregar deck.";
+      }
     });
+    el("retryMissingBtn").addEventListener("click", async () => {
+      if (lastParsedDeck) await hydrateDeck(lastParsedDeck);
+    });
+    el("cardSizeSlider").addEventListener("input", event => setCardSize(event.target.value));
+    el("previewEnabledInput").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-enabled", event.target.checked ? "true" : "false"));
+    el("previewModeSelect").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-mode", event.target.value));
+    el("previewSizeSelect").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-size", event.target.value));
 
     document.querySelectorAll("[data-life]").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "life", value: Number(button.dataset.life || 0) }));
@@ -445,12 +561,15 @@
     document.querySelectorAll(".phase-strip button").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
     });
-    el("createTokenBtn").addEventListener("click", () => sendAction({ type: "token", value: el("tokenSelect").value }));
-    el("rollD20Btn").addEventListener("click", () => alert(`d20: ${Math.floor(Math.random() * 20) + 1}`));
-    el("toggleCommandsBtn").addEventListener("click", () => el("commandsPanel").classList.toggle("collapsed"));
+    el("openTokenModalBtn").addEventListener("click", () => el("tokenModal").classList.remove("hidden"));
+    el("closeTokenModal").addEventListener("click", () => el("tokenModal").classList.add("hidden"));
+    el("rollDiceBtn").addEventListener("click", () => rollDice());
     el("toggleToolsBtn").addEventListener("click", () => el("toolsPanel").classList.toggle("collapsed"));
     el("closePrivateModal").addEventListener("click", () => el("privateModal").classList.add("hidden"));
     el("closeZoomModal").addEventListener("click", () => el("zoomModal").classList.add("hidden"));
+    el("timerStartBtn").addEventListener("click", startTimer);
+    el("timerPauseBtn").addEventListener("click", pauseTimer);
+    el("timerResetBtn").addEventListener("click", resetTimer);
     el("zoomModal").addEventListener("click", event => {
       if (event.target.id === "zoomModal") el("zoomModal").classList.add("hidden");
     });
@@ -566,11 +685,67 @@
     document.body.addEventListener("touchend", () => clearTimeout(touchTimer), { passive: true });
   }
 
+  function renderTokenBank() {
+    el("tokenBank").innerHTML = TOKEN_OPTIONS.map(([key, label, type]) => `
+      <button data-token-key="${escapeHtml(key)}" type="button">
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(type)}</span>
+      </button>
+    `).join("");
+    el("tokenBank").querySelectorAll("[data-token-key]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const key = button.dataset.tokenKey;
+        const option = TOKEN_OPTIONS.find(item => item[0] === key);
+        const card = option ? await fetchCard(`${option[1]} Token`, Date.now(), true) : null;
+        sendAction({ type: "token", value: key, card: card?.type !== "Carta nao encontrada" ? { ...card, token: true } : null });
+        el("tokenModal").classList.add("hidden");
+      });
+    });
+  }
+
+  function updateTimerDisplay() {
+    const minutes = Math.floor(timerRemaining / 60).toString().padStart(2, "0");
+    const seconds = Math.floor(timerRemaining % 60).toString().padStart(2, "0");
+    el("simTimerDisplay").textContent = `${minutes}:${seconds}`;
+    localStorage.setItem("resenhaon-sim-timer-remaining", String(timerRemaining));
+  }
+
+  function startTimer() {
+    if (timerInterval) return;
+    timerInterval = setInterval(() => {
+      timerRemaining = Math.max(0, timerRemaining - 1);
+      updateTimerDisplay();
+      if (timerRemaining <= 0) pauseTimer();
+    }, 1000);
+  }
+
+  function pauseTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  function resetTimer() {
+    pauseTimer();
+    timerRemaining = 3000;
+    updateTimerDisplay();
+  }
+
+  function rollDice() {
+    const type = el("diceSelect").value;
+    const result = type === "coin"
+      ? (Math.random() > 0.5 ? "Cara" : "Coroa")
+      : String(Math.floor(Math.random() * Number(type.slice(1))) + 1);
+    el("diceResult").textContent = `Resultado: ${type} = ${result}`;
+    sendAction({ type: "dice", label: type, result });
+  }
+
   socket.on("connect", () => {});
   socket.on("simulator-state", payload => {
     state = payload;
     render();
   });
 
+  renderTokenBank();
+  updateTimerDisplay();
   bindEvents();
 })();

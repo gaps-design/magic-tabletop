@@ -89,9 +89,17 @@ const SIMULATOR_TOKENS = {
   treasure: { name: "Treasure", type: "Token Artifact", cost: "", token: true },
   food: { name: "Food", type: "Token Artifact", cost: "", token: true },
   clue: { name: "Clue", type: "Token Artifact", cost: "", token: true },
+  blood: { name: "Blood", type: "Token Artifact", cost: "", token: true },
+  map: { name: "Map", type: "Token Artifact", cost: "", token: true },
   soldier: { name: "Soldier", type: "Token Creature 1/1", cost: "", token: true },
   zombie: { name: "Zombie", type: "Token Creature 2/2", cost: "", token: true },
-  angel: { name: "Angel", type: "Token Creature 4/4", cost: "", token: true }
+  spirit: { name: "Spirit", type: "Token Creature 1/1", cost: "", token: true },
+  goblin: { name: "Goblin", type: "Token Creature 1/1", cost: "", token: true },
+  saproling: { name: "Saproling", type: "Token Creature 1/1", cost: "", token: true },
+  angel: { name: "Angel", type: "Token Creature 4/4", cost: "", token: true },
+  beast: { name: "Beast", type: "Token Creature 3/3", cost: "", token: true },
+  human: { name: "Human", type: "Token Creature 1/1", cost: "", token: true },
+  thopter: { name: "Thopter", type: "Token Artifact Creature 1/1", cost: "", token: true }
 };
 const SIMULATOR_MOCK_DECK = [
   { name: "Sol Ring", type: "Artifact", cost: "1" },
@@ -674,6 +682,10 @@ function ensureSimulator(room) {
 }
 
 function normalizeSimulatorCard(card = {}, playerId = "sim") {
+  const colored = card.counters?.colored || {};
+  const power = card.counters?.power || {};
+  const abilities = Array.isArray(card.counters?.abilities) ? card.counters.abilities : [];
+
   return {
     id: limitText(card.id, 120) || `${playerId}-card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name: card.name || "Carta",
@@ -689,7 +701,20 @@ function normalizeSimulatorCard(card = {}, playerId = "sim") {
     blocking: card.blocking === true,
     counters: {
       p1p1: Number(card.counters?.p1p1 || 0),
-      generic: Number(card.counters?.generic || 0)
+      generic: Number(card.counters?.generic || 0),
+      colored: {
+        blue: Number(colored.blue || 0),
+        green: Number(colored.green || 0),
+        red: Number(colored.red || 0),
+        white: Number(colored.white || 0),
+        black: Number(colored.black || 0),
+        colorless: Number(colored.colorless || 0)
+      },
+      power: {
+        plus: Number(power.plus || 0),
+        minus: Number(power.minus || 0)
+      },
+      abilities: abilities.slice(0, 12).map(ability => limitText(ability, 40))
     }
   };
 }
@@ -944,7 +969,31 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     const found = findSimulatorCard(player, cardId);
     const counterType = action.counterType === "generic" ? "generic" : "p1p1";
     if (found?.card) {
+      found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
       found.card.counters[counterType] = Math.max(0, Number(found.card.counters[counterType] || 0) + (Number(value) || 0));
+      addSimulatorLog(simulator, `${playerName} ajustou marcador em ${found.card.name}`);
+    }
+  } else if (type === "marker") {
+    const found = findSimulatorCard(player, cardId);
+    if (found?.card) {
+      found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
+      const markerKind = String(action.markerKind || "");
+      const delta = Number(value) || 0;
+      if (markerKind === "colored") {
+        const color = ["blue", "green", "red", "white", "black", "colorless"].includes(action.color) ? action.color : "colorless";
+        found.card.counters.colored[color] = Math.max(0, Number(found.card.counters.colored[color] || 0) + delta);
+      } else if (markerKind === "power") {
+        const powerKind = action.powerKind === "minus" ? "minus" : "plus";
+        found.card.counters.power[powerKind] = Math.max(0, Number(found.card.counters.power[powerKind] || 0) + delta);
+      } else if (markerKind === "ability") {
+        const ability = limitText(action.ability, 40);
+        if (ability) {
+          const current = new Set(found.card.counters.abilities || []);
+          if (current.has(ability)) current.delete(ability);
+          else current.add(ability);
+          found.card.counters.abilities = Array.from(current).slice(0, 12);
+        }
+      }
       addSimulatorLog(simulator, `${playerName} ajustou marcador em ${found.card.name}`);
     }
   } else if (type === "combatFlag") {
@@ -955,7 +1004,8 @@ function applySimulatorAction(roomId, playerId, action = {}) {
       addSimulatorLog(simulator, `${playerName} ${found.card[flag] ? "marcou" : "removeu"} ${found.card.name} como ${flag === "attacking" ? "atacante" : "bloqueador"}`);
     }
   } else if (type === "token") {
-    const token = SIMULATOR_TOKENS[String(value || "")];
+    const customToken = action.card ? normalizeSimulatorCard({ ...action.card, token: true }, playerId) : null;
+    const token = customToken || SIMULATOR_TOKENS[String(value || "")];
     if (token) {
       player.battlefield.unshift({
         ...token,
@@ -963,10 +1013,12 @@ function applySimulatorAction(roomId, playerId, action = {}) {
         tapped: false,
         attacking: false,
         blocking: false,
-        counters: { p1p1: 0, generic: 0 }
+        counters: normalizeSimulatorCard(token, playerId).counters
       });
       addSimulatorLog(simulator, `${playerName} criou token ${token.name}`);
     }
+  } else if (type === "dice") {
+    addSimulatorLog(simulator, `${playerName} rolou ${limitText(action.label || "dado", 30)}: ${limitText(action.result, 30)}`);
   } else if (type === "phase") {
     const phase = String(value || "");
     if (!SIMULATOR_PHASES.has(phase)) return;

@@ -17,10 +17,10 @@
       </div>
       <div class="sim-header-actions">
         <button id="openGameModalBtn" type="button">Criar jogo</button>
-        <button id="toggleCommandsBtn" type="button">Comandos</button>
         <button id="toggleToolsBtn" type="button">Dados/Marcadores</button>
         <button id="newGameBtn" type="button">Nova partida</button>
         <button id="concedeBtn" type="button">Conceder</button>
+        <label class="card-size-control">Cartas <input id="cardSizeSlider" type="range" min="60" max="160" value="100"></label>
         <select id="layoutSizeSelect" aria-label="Tamanho da mesa">
           <option value="compact">Compacto</option>
           <option value="medium" selected>Medio</option>
@@ -38,12 +38,16 @@
               <span>Oponente</span>
               <strong id="opponentName">Aguardando oponente</strong>
             </div>
-            <div class="life-pill"><span>Vida</span><strong id="opponentLife">20</strong></div>
-            <div class="hand-back-row" id="opponentHand"></div>
+            <div class="opponent-hand-summary">
+              <span>Mao do oponente</span>
+              <strong id="opponentHandLabel">0 cartas na mao</strong>
+              <div class="hand-back-row" id="opponentHand"></div>
+            </div>
           </div>
           <div class="lane-board">
             <div class="zone-column">
               <button class="deck-pile card-back" data-zone-click="opponent-library"><span id="opponentLibraryCount">0</span></button>
+              <div class="zone-life opponent-life"><span>Vida</span><strong id="opponentLife">20</strong></div>
               <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="opponent-graveyard" type="button">Ver</button><div id="opponentGraveyard" class="small-zone"></div></div>
               <div class="zone-pile"><span>Exilio</span><button data-view-zone="opponent-exile" type="button">Ver</button><div id="opponentExile" class="small-zone"></div></div>
             </div>
@@ -53,6 +57,7 @@
             </div>
             <div id="opponentBattlefield" class="battlefield"></div>
           </div>
+          <div class="revealed-header"><span>Reveladas do oponente</span><button data-command="clearRevealed" type="button">Fechar</button></div>
           <div id="opponentRevealed" class="revealed-row"></div>
         </div>
 
@@ -75,6 +80,16 @@
           <div class="lane-board">
             <div class="zone-column">
               <button id="libraryButton" class="deck-pile card-back" type="button"><span id="libraryCount">0</span></button>
+              <div class="zone-life self-life">
+                <span>Vida</span>
+                <div class="life-control">
+                  <button data-life="-5">-5</button>
+                  <button data-life="-1">-1</button>
+                  <strong id="selfLife">20</strong>
+                  <button data-life="1">+1</button>
+                  <button data-life="5">+5</button>
+                </div>
+              </div>
               <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="graveyard" type="button">Ver</button><div id="graveyardZone" class="small-zone"></div></div>
               <div class="zone-pile"><span>Exilio</span><button data-view-zone="exile" type="button">Ver</button><div id="exileZone" class="small-zone"></div></div>
             </div>
@@ -89,18 +104,12 @@
               <span>Jogador</span>
               <strong id="selfName">Jogador</strong>
             </div>
-            <div class="life-control">
-              <button data-life="-5">-5</button>
-              <button data-life="-1">-1</button>
-              <strong id="selfLife">20</strong>
-              <button data-life="1">+1</button>
-              <button data-life="5">+5</button>
-            </div>
             <div class="phase-status">
               <span>Sua fase</span>
               <strong id="selfPhaseLabel">Untap</strong>
             </div>
           </div>
+          <div class="revealed-header"><span>Suas reveladas</span><button data-command="clearRevealed" type="button">Fechar</button></div>
           <div id="selfRevealed" class="revealed-row"></div>
         </div>
 
@@ -110,6 +119,20 @@
             <strong id="handCount">0 cartas</strong>
           </div>
           <div id="handZone" class="hand-zone"></div>
+          <div class="command-row" id="commandRow">
+            <button data-command="draw">Comprar 1</button>
+            <button data-command="drawX">Comprar X</button>
+            <button data-command="openingHand">Mao inicial</button>
+            <button data-command="mulligan">Mulligan</button>
+            <button data-command="shuffle">Embaralhar</button>
+            <button data-command="revealHand">Revelar mao</button>
+            <button data-command="revealRandom">Revelar aleatoria</button>
+            <button data-command="viewDeck">Ver deck</button>
+            <button data-command="peekTop">Ver topo</button>
+            <button data-command="viewTopX">Ver X topo</button>
+            <button data-command="mill">Mill X</button>
+            <button data-command="clearRevealed">Limpar reveladas</button>
+          </div>
         </section>
       </section>
 
@@ -118,34 +141,37 @@
           <h2>Dados e marcadores</h2>
           <p><strong>Jogadores:</strong> <span id="playerCount">0</span></p>
           <p><strong>Fase:</strong> <span id="currentPhaseLabel">Untap</span></p>
-          <div class="quick-row">
-            <button id="rollD20Btn" type="button">d20</button>
-            <button id="createTokenBtn" type="button">Token</button>
+          <div class="timer-box">
+            <strong id="simTimerDisplay">50:00</strong>
+            <div>
+              <button id="timerStartBtn" type="button">Iniciar</button>
+              <button id="timerPauseBtn" type="button">Pausar</button>
+              <button id="timerResetBtn" type="button">Reset</button>
+            </div>
           </div>
-          <select id="tokenSelect">
-            <option value="treasure">Treasure</option>
-            <option value="food">Food</option>
-            <option value="clue">Clue</option>
-            <option value="soldier">Soldier 1/1</option>
-            <option value="zombie">Zombie 2/2</option>
-            <option value="angel">Angel 4/4</option>
-          </select>
-        </section>
-
-        <section class="commands-panel collapsed" id="commandsPanel">
-          <h2>Comandos</h2>
-          <button data-command="draw">Comprar 1 carta</button>
-          <button data-command="drawX">Comprar X cartas</button>
-          <button data-command="openingHand">Comprar mao inicial</button>
-          <button data-command="mulligan">Mulligan</button>
-          <button data-command="shuffle">Embaralhar deck</button>
-          <button data-command="revealHand">Revelar mao</button>
-          <button data-command="revealRandom">Revelar carta aleatoria</button>
-          <button data-command="viewDeck">Ver deck</button>
-          <button data-command="peekTop">Ver carta do topo</button>
-          <button data-command="viewTopX">Ver X cartas do topo</button>
-          <button data-command="mill">Colocar X no cemiterio</button>
-          <button data-command="clearRevealed">Limpar reveladas</button>
+          <div class="quick-row">
+            <select id="diceSelect" aria-label="Dado">
+              <option value="d6">d6</option>
+              <option value="d20" selected>d20</option>
+              <option value="coin">Moeda</option>
+            </select>
+            <button id="rollDiceBtn" type="button">Rolar</button>
+          </div>
+          <div id="diceResult" class="dice-result">Resultado: --</div>
+          <button id="openTokenModalBtn" type="button">Banco de tokens</button>
+          <div class="preview-settings">
+            <label><input id="previewEnabledInput" type="checkbox" checked> Preview expandido</label>
+            <select id="previewModeSelect">
+              <option value="both">Imagem + texto</option>
+              <option value="image">Somente imagem</option>
+              <option value="text">Somente texto</option>
+            </select>
+            <select id="previewSizeSelect">
+              <option value="small">Pequeno</option>
+              <option value="medium" selected>Medio</option>
+              <option value="large">Grande</option>
+            </select>
+          </div>
         </section>
 
         <section>
@@ -176,6 +202,7 @@
         <input id="deckFileInput" type="file" accept=".txt,.cod,.dec,text/plain">
         <button id="loadDeckBtn" type="button">Carregar deck</button>
         <button id="confirmDeckBtn" type="button">Confirmar deck</button>
+        <button id="retryMissingBtn" type="button" class="hidden">Tentar faltantes</button>
       </div>
       <div id="deckStatus" class="deck-status">Nenhum deck carregado. O MVP usa um deck de teste se voce criar sem arquivo.</div>
       <div class="modal-actions">
@@ -198,6 +225,14 @@
       <button id="closePrivateModal" type="button">Fechar</button>
       <h2 id="privateModalTitle">Consulta privada</h2>
       <div id="privateModalContent"></div>
+    </div>
+  </div>
+  <div id="tokenModal" class="modal-backdrop hidden">
+    <div class="private-modal token-modal">
+      <button id="closeTokenModal" type="button">Fechar</button>
+      <h2>Banco de tokens</h2>
+      <p>Crie tokens comuns direto no campo.</p>
+      <div id="tokenBank" class="token-bank"></div>
     </div>
   </div>
 
