@@ -1715,6 +1715,14 @@ body{
     linear-gradient(135deg, rgba(12,28,50,0.92), rgba(44,27,78,0.82));
 }
 
+.simulator-home-card{
+  border-color:rgba(34,211,238,0.42);
+  background:
+    radial-gradient(circle at 82% 14%, rgba(34,211,238,0.2), transparent 34%),
+    radial-gradient(circle at 18% 88%, rgba(250,204,21,0.16), transparent 34%),
+    linear-gradient(135deg, rgba(8,20,42,0.94), rgba(22,68,92,0.78));
+}
+
 .partners-home-card{
   border-color:rgba(34,211,238,0.34);
   background:

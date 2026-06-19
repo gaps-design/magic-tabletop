@@ -71,6 +71,37 @@ const CARD_SCAN_ORACLE_LIMIT = 420;
 const CUSTOM_SKIN_TEXT_LIMIT = 80;
 const TABLE_SKINS = new Set(["none", "mono-white", "mono-blue", "mono-black", "mono-red", "mono-green", "custom"]);
 const CUSTOM_SKIN_BLOCKED_WORDS = ["porra", "caralho", "puta", "fdp", "viado", "merda"];
+const SIMULATOR_PHASES = new Set([
+  "untap",
+  "upkeep",
+  "draw",
+  "main1",
+  "beginCombat",
+  "attackers",
+  "blockers",
+  "damage",
+  "endCombat",
+  "main2",
+  "end",
+  "cleanup"
+]);
+const SIMULATOR_TOKENS = {
+  treasure: { name: "Treasure", type: "Token Artifact", cost: "", token: true },
+  food: { name: "Food", type: "Token Artifact", cost: "", token: true },
+  clue: { name: "Clue", type: "Token Artifact", cost: "", token: true },
+  soldier: { name: "Soldier", type: "Token Creature 1/1", cost: "", token: true },
+  zombie: { name: "Zombie", type: "Token Creature 2/2", cost: "", token: true },
+  angel: { name: "Angel", type: "Token Creature 4/4", cost: "", token: true }
+};
+const SIMULATOR_MOCK_DECK = [
+  { name: "Sol Ring", type: "Artifact", cost: "1" },
+  { name: "Island", type: "Basic Land", cost: "" },
+  { name: "Counterspell", type: "Instant", cost: "UU" },
+  { name: "Llanowar Elves", type: "Creature", cost: "G" },
+  { name: "Lightning Bolt", type: "Instant", cost: "R" },
+  { name: "Command Tower", type: "Land", cost: "" },
+  { name: "Arcane Signet", type: "Artifact", cost: "2" }
+];
 const FLOATING_EMOJIS = new Set([
   "\u{1F525}",
   "\u{1F602}",
@@ -158,7 +189,7 @@ function isResenhaRoom(roomId) {
 function normalizeUser(user = {}) {
   return {
     uid: user.uid || "",
-    name: user.name || user.displayName || "Usuário",
+    name: user.name || user.displayName || "UsuÃ¡rio",
     email: user.email || "",
     photo: user.photo || user.photoURL || "/assets/default-avatar.png"
   };
@@ -210,7 +241,7 @@ function toLegacyPresenceUser(user = {}) {
   return {
     socketId: user.socketId,
     uid: user.uid || "",
-    name: user.name || "Usuário",
+    name: user.name || "UsuÃ¡rio",
     email: user.email || "",
     photo: user.photo || "/assets/default-avatar.png",
     status: user.status || "idle",
@@ -276,7 +307,7 @@ function setSocketPresence(socketId, user = {}, patch = {}) {
     ...patch,
     id: userId,
     uid: profile.uid || current.uid || "",
-    name: profile.name || current.name || "Usuário",
+    name: profile.name || current.name || "UsuÃ¡rio",
     email: profile.email || current.email || "",
     photo: profile.photo || current.photo || "/assets/default-avatar.png",
     status,
@@ -526,7 +557,7 @@ function buildRoomUsers(room) {
     cameras: room.cameraClients.map(c => ({
       socketId: c.socketId,
       linkedPlayer: c.linkedPlayer,
-      name: c.name || "Câmera",
+      name: c.name || "CÃ¢mera",
       photo: c.photo || "/assets/default-avatar.png"
     })),
     queue: (room.queue || []).map(item => ({
@@ -593,6 +624,309 @@ function sendRoomState(roomId) {
   io.to(roomId).emit("table-skin-state", publicTableSkinState(room));
 }
 
+function simulatorRoomId(roomId) {
+  return `simulator:${roomId}`;
+}
+
+function createSimulatorDeck(playerId) {
+  const deck = [];
+  for (let copy = 0; copy < 6; copy++) {
+    SIMULATOR_MOCK_DECK.forEach((card, index) => {
+      deck.push({
+        ...card,
+        id: `${playerId}-${copy}-${index}-${Date.now().toString(36)}`,
+        tapped: false,
+        attacking: false,
+        blocking: false,
+        counters: { p1p1: 0, generic: 0 }
+      });
+    });
+  }
+
+  return shuffleSimulatorCards(deck);
+}
+
+function shuffleSimulatorCards(cards = []) {
+  const copy = [...cards];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function createDefaultSimulator() {
+  return {
+    enabled: true,
+    currentPhase: "main1",
+    activePlayerId: null,
+    players: {},
+    log: []
+  };
+}
+
+function ensureSimulator(room) {
+  if (!room.simulator) {
+    room.simulator = createDefaultSimulator();
+  }
+
+  return room.simulator;
+}
+
+function publicSimulatorCard(card = {}) {
+  return {
+    id: card.id,
+    name: card.name || "Carta",
+    type: card.type || "Card",
+    cost: card.cost || "",
+    token: card.token === true,
+    tapped: card.tapped === true,
+    attacking: card.attacking === true,
+    blocking: card.blocking === true,
+    counters: {
+      p1p1: Number(card.counters?.p1p1 || 0),
+      generic: Number(card.counters?.generic || 0)
+    }
+  };
+}
+
+function createSimulatorPlayer(playerId, name) {
+  return {
+    id: playerId,
+    name: limitText(name, 80) || "Jogador",
+    life: 40,
+    library: createSimulatorDeck(playerId),
+    hand: [],
+    battlefield: [],
+    graveyard: [],
+    exile: [],
+    commandZone: [],
+    notes: "",
+    counters: {}
+  };
+}
+
+function ensureSimulatorPlayer(roomId, playerId, name) {
+  const room = ensureRoom(roomId);
+  const simulator = ensureSimulator(room);
+  const safePlayerId = limitText(playerId, 80) || `sim-${Date.now()}`;
+
+  if (!simulator.players[safePlayerId]) {
+    simulator.players[safePlayerId] = createSimulatorPlayer(safePlayerId, name);
+    addSimulatorLog(simulator, `${simulator.players[safePlayerId].name} entrou no Simulator MVP`);
+  } else if (name) {
+    simulator.players[safePlayerId].name = limitText(name, 80);
+  }
+
+  if (!simulator.activePlayerId) {
+    simulator.activePlayerId = safePlayerId;
+  }
+
+  return simulator.players[safePlayerId];
+}
+
+function addSimulatorLog(simulator, message) {
+  simulator.log = [
+    {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      time: Date.now(),
+      message: limitText(message, 180)
+    },
+    ...(simulator.log || [])
+  ].slice(0, 80);
+}
+
+function findSimulatorCard(player, cardId) {
+  const zones = ["library", "hand", "battlefield", "graveyard", "exile", "commandZone"];
+  for (const zone of zones) {
+    const index = player[zone].findIndex(card => card.id === cardId);
+    if (index >= 0) return { zone, index, card: player[zone][index] };
+  }
+  return null;
+}
+
+function moveSimulatorCard(player, cardId, toZone, position = "top") {
+  const allowedZones = new Set(["library", "hand", "battlefield", "graveyard", "exile", "commandZone"]);
+  if (!allowedZones.has(toZone)) return null;
+
+  const found = findSimulatorCard(player, cardId);
+  if (!found) return null;
+
+  const [card] = player[found.zone].splice(found.index, 1);
+  if (toZone !== "battlefield") {
+    card.tapped = false;
+    card.attacking = false;
+    card.blocking = false;
+  }
+
+  if (toZone === "library" && position === "bottom") {
+    player.library.push(card);
+  } else {
+    player[toZone].unshift(card);
+  }
+
+  return { card, fromZone: found.zone, toZone };
+}
+
+function drawSimulatorCards(player, amount = 1) {
+  const drawn = [];
+  const count = Math.max(1, Math.min(20, Number(amount) || 1));
+
+  for (let i = 0; i < count; i++) {
+    const card = player.library.shift();
+    if (!card) break;
+    player.hand.push(card);
+    drawn.push(card);
+  }
+
+  return drawn;
+}
+
+function applySimulatorAction(roomId, playerId, action = {}) {
+  const room = ensureRoom(roomId);
+  const simulator = ensureSimulator(room);
+  const player = simulator.players[playerId];
+  if (!player) return;
+
+  const type = String(action.type || "");
+  const value = action.value;
+  const cardId = String(action.cardId || "");
+  const playerName = player.name || "Jogador";
+
+  if (type === "life") {
+    const amount = Math.max(-99, Math.min(99, Number(value) || 0));
+    player.life = Math.max(0, Math.min(999, Number(player.life || 40) + amount));
+    addSimulatorLog(simulator, `${playerName} ajustou a vida para ${player.life}`);
+  } else if (type === "draw") {
+    const drawn = drawSimulatorCards(player, value || 1);
+    addSimulatorLog(simulator, `${playerName} comprou ${drawn.length} carta${drawn.length === 1 ? "" : "s"}`);
+  } else if (type === "shuffle") {
+    player.library = shuffleSimulatorCards(player.library);
+    addSimulatorLog(simulator, `${playerName} embaralhou o grimorio`);
+  } else if (type === "revealTop") {
+    const top = player.library[0];
+    addSimulatorLog(simulator, top ? `${playerName} revelou o topo: ${top.name}` : `${playerName} tentou revelar o topo, mas o grimorio esta vazio`);
+  } else if (type === "topToGraveyard") {
+    const card = player.library.shift();
+    if (card) player.graveyard.unshift(card);
+    addSimulatorLog(simulator, card ? `${playerName} colocou ${card.name} no cemiterio` : `${playerName} tentou mover o topo para o cemiterio`);
+  } else if (type === "topToExile") {
+    const card = player.library.shift();
+    if (card) player.exile.unshift(card);
+    addSimulatorLog(simulator, card ? `${playerName} exilou ${card.name} do topo` : `${playerName} tentou exilar o topo`);
+  } else if (type === "topToBottom") {
+    const card = player.library.shift();
+    if (card) player.library.push(card);
+    addSimulatorLog(simulator, card ? `${playerName} colocou o topo no fundo` : `${playerName} tentou colocar o topo no fundo`);
+  } else if (type === "scry") {
+    const amount = Math.max(1, Math.min(10, Number(value) || 1));
+    const names = player.library.slice(0, amount).map(card => card.name).join(", ") || "grimorio vazio";
+    addSimulatorLog(simulator, `${playerName} fez Scry ${amount}: ${names}`);
+  } else if (type === "moveCard") {
+    const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
+    if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
+  } else if (type === "toggleTap") {
+    const found = findSimulatorCard(player, cardId);
+    if (found?.card) {
+      found.card.tapped = !found.card.tapped;
+      addSimulatorLog(simulator, `${playerName} ${found.card.tapped ? "virou" : "desvirou"} ${found.card.name}`);
+    }
+  } else if (type === "counter") {
+    const found = findSimulatorCard(player, cardId);
+    const counterType = action.counterType === "generic" ? "generic" : "p1p1";
+    if (found?.card) {
+      found.card.counters[counterType] = Math.max(0, Number(found.card.counters[counterType] || 0) + (Number(value) || 0));
+      addSimulatorLog(simulator, `${playerName} ajustou marcador em ${found.card.name}`);
+    }
+  } else if (type === "combatFlag") {
+    const found = findSimulatorCard(player, cardId);
+    if (found?.card) {
+      const flag = action.flag === "blocking" ? "blocking" : "attacking";
+      found.card[flag] = action.enabled === true;
+      addSimulatorLog(simulator, `${playerName} ${found.card[flag] ? "marcou" : "removeu"} ${found.card.name} como ${flag === "attacking" ? "atacante" : "bloqueador"}`);
+    }
+  } else if (type === "token") {
+    const token = SIMULATOR_TOKENS[String(value || "")];
+    if (token) {
+      player.battlefield.unshift({
+        ...token,
+        id: `${playerId}-token-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        tapped: false,
+        attacking: false,
+        blocking: false,
+        counters: { p1p1: 0, generic: 0 }
+      });
+      addSimulatorLog(simulator, `${playerName} criou token ${token.name}`);
+    }
+  } else if (type === "phase") {
+    const phase = String(value || "");
+    if (!SIMULATOR_PHASES.has(phase)) return;
+    simulator.currentPhase = phase;
+    simulator.activePlayerId = playerId;
+    if (phase === "untap") {
+      player.battlefield.forEach(card => {
+        card.tapped = false;
+      });
+      addSimulatorLog(simulator, `${playerName} foi para Untap e desvirou permanentes`);
+    } else if (phase === "draw") {
+      drawSimulatorCards(player, 1);
+      addSimulatorLog(simulator, `${playerName} foi para Draw e comprou 1 carta`);
+    } else if (phase === "cleanup") {
+      player.battlefield.forEach(card => {
+        card.attacking = false;
+        card.blocking = false;
+      });
+      addSimulatorLog(simulator, `${playerName} foi para Cleanup`);
+    } else {
+      addSimulatorLog(simulator, `${playerName} foi para ${phase}`);
+    }
+  } else if (type === "reset") {
+    simulator.players[playerId] = createSimulatorPlayer(playerId, player.name);
+    addSimulatorLog(simulator, `${playerName} reiniciou o estado do Simulator MVP`);
+  }
+}
+
+function publicSimulatorStateFor(simulator, viewerPlayerId) {
+  return {
+    enabled: simulator.enabled === true,
+    currentPhase: simulator.currentPhase || "main1",
+    activePlayerId: simulator.activePlayerId || null,
+    log: simulator.log || [],
+    players: Object.fromEntries(Object.entries(simulator.players || {}).map(([playerId, player]) => {
+      const isSelf = playerId === viewerPlayerId;
+      return [playerId, {
+        id: player.id,
+        name: player.name,
+        life: player.life,
+        libraryCount: player.library.length,
+        handCount: player.hand.length,
+        hand: isSelf ? player.hand.map(publicSimulatorCard) : [],
+        battlefield: player.battlefield.map(publicSimulatorCard),
+        graveyard: player.graveyard.map(publicSimulatorCard),
+        exile: player.exile.map(publicSimulatorCard),
+        commandZone: player.commandZone.map(publicSimulatorCard),
+        counters: player.counters || {}
+      }];
+    }))
+  };
+}
+
+function broadcastSimulatorState(roomId) {
+  const room = rooms[roomId];
+  const simulator = room?.simulator;
+  if (!simulator) return;
+
+  const audience = io.sockets.adapter.rooms.get(simulatorRoomId(roomId));
+  if (!audience) return;
+
+  audience.forEach(socketId => {
+    const target = io.sockets.sockets.get(socketId);
+    if (!target) return;
+    const viewerPlayerId = target.data?.simulator?.playerId || "";
+    target.emit("simulator-state", publicSimulatorStateFor(simulator, viewerPlayerId));
+  });
+}
+
 function getClientInfo(socketId) {
   const profile = clientProfiles[socketId];
   if (!profile) return null;
@@ -601,7 +935,7 @@ function getClientInfo(socketId) {
     role: profile.role,
     playerNumber: profile.playerNumber || null,
     linkedPlayer: profile.linkedPlayer || null,
-    name: profile.name || "Usuário",
+    name: profile.name || "UsuÃ¡rio",
     photo: profile.photo || "/assets/default-avatar.png",
     micAllowed: profile.micAllowed === true,
     micEnabled: profile.micEnabled === true
@@ -631,7 +965,7 @@ function buildPeerList(room, excludeSocketId = null) {
       socketId: c.socketId,
       role: "camera",
       linkedPlayer: c.linkedPlayer,
-      name: c.name || "Câmera",
+      name: c.name || "CÃ¢mera",
       photo: c.photo || "/assets/default-avatar.png"
     })),
     ...room.spectators
@@ -739,7 +1073,7 @@ function addSpectator(socket, roomId, user, reason = "") {
         socketId: c.socketId,
         role: "camera",
         linkedPlayer: c.linkedPlayer,
-        name: c.name || "Câmera"
+        name: c.name || "CÃ¢mera"
       })),
       ...room.spectators
         .filter(id => id !== socket.id)
@@ -767,7 +1101,7 @@ function addSpectator(socket, roomId, user, reason = "") {
 
   io.to(roomId).emit("system-event", {
     type: "spectator-joined",
-    message: `👁️ ${profile.name} entrou como espectador.`,
+    message: `ðŸ‘ï¸ ${profile.name} entrou como espectador.`,
     time: new Date().toLocaleTimeString("pt-BR")
   });
 
@@ -1572,7 +1906,7 @@ function createRoundTableMatch(tournament) {
 function applyRoundTableResult(tournament, match, score, userId) {
   const p1 = findTournamentPlayer(tournament, match.player1Id);
   const p2 = findTournamentPlayer(tournament, match.player2Id);
-  if (!p1 || !p2) throw new Error("Jogadores da mesa não encontrados.");
+  if (!p1 || !p2) throw new Error("Jogadores da mesa nÃ£o encontrados.");
 
   match.player1GameWins = score.player1GameWins;
   match.player2GameWins = score.player2GameWins;
@@ -1683,7 +2017,7 @@ function normalizeTournamentScore(tournament, match, body = {}) {
     : ["2-0", "2-1", "1-1", "0-2", "1-2"];
   const key = `${player1GameWins}-${player2GameWins}`;
   if (!validScores.includes(key)) {
-    throw new Error("Resultado inválido.");
+    throw new Error("Resultado invÃ¡lido.");
   }
 
   let result = "draw";
@@ -1715,7 +2049,7 @@ function createTournamentRound(tournament) {
   }
 
   if (tournament.currentRound >= tournament.roundsTotal) {
-    throw new Error("Todas as rodadas já foram lançadas.");
+    throw new Error("Todas as rodadas jÃ¡ foram lanÃ§adas.");
   }
 
   const roundNumber = tournament.currentRound + 1;
@@ -1830,7 +2164,7 @@ app.get("/api/tournaments/room/:roomId", (req, res) => {
   const roomId = req.params.roomId;
   const match = activeTournament?.matches?.find(item => item.roomId === roomId);
   if (!activeTournament || !match) {
-    res.status(404).json({ error: "Partida de torneio não encontrada." });
+    res.status(404).json({ error: "Partida de torneio nÃ£o encontrada." });
     return;
   }
 
@@ -1851,7 +2185,7 @@ app.post("/api/tournaments", (req, res) => {
   const user = requireTournamentUser(req, res);
   if (!user) return;
   if (activeTournament && activeTournament.status !== "finished") {
-    res.status(409).json({ error: "Já existe um torneio ativo." });
+    res.status(409).json({ error: "JÃ¡ existe um torneio ativo." });
     return;
   }
 
@@ -1909,15 +2243,15 @@ app.post("/api/tournaments/:id/join", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio não encontrado." });
+    res.status(404).json({ error: "Torneio nÃ£o encontrado." });
     return;
   }
   if (tournament.status !== "registration_open" && (!isRoundTableTournament(tournament) || tournament.status === "finished")) {
-    res.status(400).json({ error: "Inscrições encerradas." });
+    res.status(400).json({ error: "InscriÃ§Ãµes encerradas." });
     return;
   }
   if (findTournamentPlayer(tournament, user.id)) {
-    res.status(409).json({ error: "Você já está inscrito neste torneio." });
+    res.status(409).json({ error: "VocÃª jÃ¡ estÃ¡ inscrito neste torneio." });
     return;
   }
   if (tournament.players.filter(player => !player.dropped).length >= tournament.maxPlayers) {
@@ -2009,7 +2343,7 @@ app.post("/api/tournaments/:id/remove-player", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio não encontrado." });
+    res.status(404).json({ error: "Torneio nÃ£o encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
@@ -2017,7 +2351,7 @@ app.post("/api/tournaments/:id/remove-player", (req, res) => {
     return;
   }
   if (tournament.status !== "registration_open") {
-    res.status(400).json({ error: "Só é possível remover antes do início." });
+    res.status(400).json({ error: "SÃ³ Ã© possÃ­vel remover antes do inÃ­cio." });
     return;
   }
 
@@ -2039,11 +2373,11 @@ app.post("/api/tournaments/:id/close-registration", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio não encontrado." });
+    res.status(404).json({ error: "Torneio nÃ£o encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
-    res.status(403).json({ error: "Apenas o criador pode encerrar inscrições." });
+    res.status(403).json({ error: "Apenas o criador pode encerrar inscriÃ§Ãµes." });
     return;
   }
 
@@ -2068,11 +2402,11 @@ app.post("/api/tournaments/:id/launch-round", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio não encontrado." });
+    res.status(404).json({ error: "Torneio nÃ£o encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
-    res.status(403).json({ error: "Apenas o criador pode lançar rodadas." });
+    res.status(403).json({ error: "Apenas o criador pode lanÃ§ar rodadas." });
     return;
   }
   if (isRoundTableTournament(tournament)) {
@@ -2080,7 +2414,7 @@ app.post("/api/tournaments/:id/launch-round", (req, res) => {
     return;
   }
   if (tournament.players.filter(player => !player.dropped).length < 2) {
-    res.status(400).json({ error: "É preciso pelo menos 2 jogadores." });
+    res.status(400).json({ error: "Ã‰ preciso pelo menos 2 jogadores." });
     return;
   }
 
@@ -2105,13 +2439,13 @@ app.post("/api/tournaments/:id/matches/:matchId/external", (req, res) => {
   const tournament = activeTournament;
   const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
   if (!tournament || !match) {
-    res.status(404).json({ error: "Partida não encontrada." });
+    res.status(404).json({ error: "Partida nÃ£o encontrada." });
     return;
   }
 
   const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
   if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
-    res.status(403).json({ error: "Você não pode alterar esta partida." });
+    res.status(403).json({ error: "VocÃª nÃ£o pode alterar esta partida." });
     return;
   }
 
@@ -2138,17 +2472,17 @@ app.post("/api/tournaments/:id/matches/:matchId/result", (req, res) => {
   const tournament = activeTournament;
   const match = tournament?.id === req.params.id ? findTournamentMatch(tournament, req.params.matchId) : null;
   if (!tournament || !match) {
-    res.status(404).json({ error: "Partida não encontrada." });
+    res.status(404).json({ error: "Partida nÃ£o encontrada." });
     return;
   }
   if (false && !["player1_win", "player2_win", "draw"].includes(req.body.result)) {
-    res.status(400).json({ error: "Resultado inválido." });
+    res.status(400).json({ error: "Resultado invÃ¡lido." });
     return;
   }
 
   const isPlayerInMatch = match.player1Id === user.id || match.player2Id === user.id;
   if (!isTournamentOwner(tournament, user) && !isPlayerInMatch) {
-    res.status(403).json({ error: "Você só pode lançar resultado da sua partida." });
+    res.status(403).json({ error: "VocÃª sÃ³ pode lanÃ§ar resultado da sua partida." });
     return;
   }
 
@@ -2212,7 +2546,7 @@ app.post("/api/tournaments/:id/finish", (req, res) => {
   if (!user) return;
   const tournament = activeTournament;
   if (!tournament || tournament.id !== req.params.id) {
-    res.status(404).json({ error: "Torneio não encontrado." });
+    res.status(404).json({ error: "Torneio nÃ£o encontrado." });
     return;
   }
   if (!isTournamentOwner(tournament, user)) {
@@ -2266,14 +2600,14 @@ io.on("connection", (socket) => {
 
     if (!isCamera && !isLoggedUser(user)) {
       socket.emit("auth-required", {
-        message: "Você precisa entrar com Google para acessar a sala."
+        message: "VocÃª precisa entrar com Google para acessar a sala."
       });
       return;
     }
 
     removeSocketFromAllRooms(socket.id);
 
-    const name = data.name || user.name || "Usuário";
+    const name = data.name || user.name || "UsuÃ¡rio";
     const deck = data.deck || "---";
     const guild = data.guild || "---";
     const decklistUrl = sanitizeDecklistUrl(data.decklistUrl);
@@ -2302,13 +2636,13 @@ io.on("connection", (socket) => {
 
     if (role === "camera") {
       if (![1, 2].includes(linkedPlayer)) {
-        socket.emit("camera-error", "Jogador inválido.");
+        socket.emit("camera-error", "Jogador invÃ¡lido.");
         return;
       }
 
       const linkedPlayerData = room.players.find(p => Number(p.playerNumber) === linkedPlayer);
       if (!linkedPlayerData || linkedPlayerData.cameraKey !== cameraKey) {
-        socket.emit("camera-error", "Link de câmera inválido ou expirado.");
+        socket.emit("camera-error", "Link de cÃ¢mera invÃ¡lido ou expirado.");
         return;
       }
 
@@ -2333,14 +2667,14 @@ io.on("connection", (socket) => {
       room.cameraClients.push({
         socketId: socket.id,
         linkedPlayer,
-        name: `Câmera Jogador ${linkedPlayer}`,
+        name: `CÃ¢mera Jogador ${linkedPlayer}`,
         photo: "/assets/default-avatar.png"
       });
 
       clientProfiles[socket.id] = {
         role: "camera",
         linkedPlayer,
-        name: `Câmera Jogador ${linkedPlayer}`,
+        name: `CÃ¢mera Jogador ${linkedPlayer}`,
         photo: "/assets/default-avatar.png",
         micEnabled: false
       };
@@ -2374,7 +2708,7 @@ io.on("connection", (socket) => {
         socketId: socket.id,
         role: "camera",
         linkedPlayer,
-        name: `Câmera Jogador ${linkedPlayer}`
+        name: `CÃ¢mera Jogador ${linkedPlayer}`
       });
 
       sendRoomState(roomId);
@@ -2456,7 +2790,7 @@ io.on("connection", (socket) => {
           socketId: c.socketId,
           role: "camera",
           linkedPlayer: c.linkedPlayer,
-          name: c.name || "Câmera"
+          name: c.name || "CÃ¢mera"
         })),
         ...room.spectators.map(id => ({
           socketId: id,
@@ -2593,7 +2927,7 @@ io.on("connection", (socket) => {
         playerNumber: top.playerNumber,
         playerName: top.playerName,
         total: top.total,
-        message: `Jogador ${top.playerNumber} escolhe se quer começar.`
+        message: `Jogador ${top.playerNumber} escolhe se quer comeÃ§ar.`
       });
     }
 
@@ -3086,13 +3420,13 @@ io.on("connection", (socket) => {
       if (!FLOATING_EMOJIS.has(safeMessage)) return;
 
       io.to(roomId).emit("floating-emoji", {
-        name: clientProfiles[socket.id]?.name || "Usuário",
+        name: clientProfiles[socket.id]?.name || "UsuÃ¡rio",
         message: safeMessage,
         time: new Date().toLocaleTimeString("pt-BR")
       });
     } else {
       io.to(roomId).emit("chat-message", {
-        name: clientProfiles[socket.id]?.name || "Usuário",
+        name: clientProfiles[socket.id]?.name || "UsuÃ¡rio",
         message: safeMessage,
         type: "text",
         time: new Date().toLocaleTimeString("pt-BR")
@@ -3142,7 +3476,7 @@ io.on("connection", (socket) => {
     const playerName = limitText(clientProfiles[socket.id]?.name || player.name || "Jogador", 80);
     const oracleSummary = limitText(safeCard.oracleText, 360);
     const message = limitText(
-      `${playerName} escaneou: ${safeCard.name} — ${safeCard.typeLine || "Carta"}. ${oracleSummary}`,
+      `${playerName} escaneou: ${safeCard.name} â€” ${safeCard.typeLine || "Carta"}. ${oracleSummary}`,
       CARD_SCAN_MESSAGE_LIMIT
     );
 
@@ -3155,7 +3489,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("card-scan-shown", room.currentScannerCard);
 
     io.to(roomId).emit("chat-message", {
-      name: "Oráculo ON",
+      name: "OrÃ¡culo ON",
       message,
       type: "card-scan",
       time: new Date().toLocaleTimeString("pt-BR")
@@ -3273,7 +3607,7 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("system-event", {
       type: "player-state-reset",
-      message: `${player.name || `Jogador ${normalizedPlayerNumber}`} reiniciou vida, histórico, notas e marcadores da partida.`,
+      message: `${player.name || `Jogador ${normalizedPlayerNumber}`} reiniciou vida, histÃ³rico, notas e marcadores da partida.`,
       time: new Date().toLocaleTimeString("pt-BR")
     });
 
@@ -3367,6 +3701,39 @@ io.on("connection", (socket) => {
 
     room.lifeHistory = [];
     sendRoomState(roomId);
+  });
+
+  socket.on("simulator-join", ({ roomId, playerId, name } = {}) => {
+    const safeRoomId = limitText(roomId, 80);
+    if (!safeRoomId) return;
+
+    const safePlayerId = limitText(playerId, 80) || socket.id;
+    const safeName = limitText(name, 80) || clientProfiles[socket.id]?.name || "Jogador";
+    const room = ensureRoom(safeRoomId);
+    ensureSimulator(room);
+
+    socket.join(simulatorRoomId(safeRoomId));
+    socket.data.simulator = {
+      roomId: safeRoomId,
+      playerId: safePlayerId
+    };
+
+    ensureSimulatorPlayer(safeRoomId, safePlayerId, safeName);
+    broadcastSimulatorState(safeRoomId);
+  });
+
+  socket.on("simulator-action", ({ roomId, playerId, action } = {}) => {
+    const safeRoomId = limitText(roomId, 80);
+    if (!safeRoomId || !action) return;
+
+    const session = socket.data?.simulator || {};
+    const safePlayerId = limitText(playerId, 80) || session.playerId || socket.id;
+
+    if (session.roomId && session.roomId !== safeRoomId) return;
+    if (session.playerId && session.playerId !== safePlayerId) return;
+
+    applySimulatorAction(safeRoomId, safePlayerId, action);
+    broadcastSimulatorState(safeRoomId);
   });
 
   socket.on("leave-room", ({ roomId }) => {

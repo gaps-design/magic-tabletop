@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ResenhaON Simulator MVP</title>
+  <meta name="description" content="MVP do simulador virtual de cartas integrado ao ResenhaON.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/css/simulator.css">
+</head>
+<body>
+  <div class="sim-shell">
+    <header class="sim-topbar">
+      <a class="sim-brand" href="/">
+        <img src="/assets/logo-resenhaon.png" alt="ResenhaON">
+      </a>
+      <div>
+        <span class="sim-kicker">ResenhaON Simulator MVP</span>
+        <h1 id="roomTitle">Sala virtual</h1>
+      </div>
+      <div class="sim-join">
+        <input id="playerNameInput" type="text" maxlength="60" placeholder="Nome do jogador">
+        <button id="joinSimulatorBtn" type="button">Entrar no Simulator</button>
+        <a class="ghost-link" href="/">Lobby</a>
+      </div>
+    </header>
+
+    <section class="phase-bar" aria-label="Fases do turno">
+      <button data-phase="untap">Untap</button>
+      <button data-phase="upkeep">Upkeep</button>
+      <button data-phase="draw">Draw</button>
+      <button data-phase="main1">Main 1</button>
+      <button data-phase="beginCombat">Begin Combat</button>
+      <button data-phase="attackers">Attackers</button>
+      <button data-phase="blockers">Blockers</button>
+      <button data-phase="damage">Damage</button>
+      <button data-phase="endCombat">End Combat</button>
+      <button data-phase="main2">Main 2</button>
+      <button data-phase="end">End Step</button>
+      <button data-phase="cleanup">Cleanup</button>
+    </section>
+
+    <main class="sim-layout">
+      <aside class="social-panel">
+        <h2>Area social</h2>
+        <p>Espaco reservado para video, audio e recursos da sala. O MVP do simulador roda separado para nao tocar no WebRTC atual.</p>
+        <div class="mini-status">
+          <span>Fase atual</span>
+          <strong id="currentPhaseLabel">Main 1</strong>
+        </div>
+        <div class="mini-status">
+          <span>Jogadores no simulator</span>
+          <strong id="playerCount">0</strong>
+        </div>
+      </aside>
+
+      <section class="battle-panel">
+        <div class="zone-header">
+          <div>
+            <span>Campo de batalha</span>
+            <h2 id="activePlayerLabel">Aguardando jogador</h2>
+          </div>
+          <div class="token-actions">
+            <select id="tokenSelect">
+              <option value="treasure">Treasure</option>
+              <option value="food">Food</option>
+              <option value="clue">Clue</option>
+              <option value="soldier">Soldier 1/1</option>
+              <option value="zombie">Zombie 2/2</option>
+              <option value="angel">Angel 4/4</option>
+            </select>
+            <button id="createTokenBtn" type="button">Criar Token</button>
+          </div>
+        </div>
+        <div id="battlefieldZone" class="card-grid battlefield-zone"></div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="life-card">
+          <span id="selfName">Jogador</span>
+          <div class="life-row">
+            <button data-life="-1">-1</button>
+            <strong id="selfLife">40</strong>
+            <button data-life="1">+1</button>
+          </div>
+        </section>
+
+        <section class="library-card">
+          <button id="libraryButton" type="button">
+            <span>Grimorio</span>
+            <strong id="libraryCount">0</strong>
+          </button>
+          <div id="libraryMenu" class="library-menu hidden">
+            <button data-library-action="draw">Comprar 1 carta</button>
+            <label>Comprar X <input id="drawXInput" type="number" min="1" max="20" value="3"></label>
+            <button data-library-action="drawX">Comprar X cartas</button>
+            <button data-library-action="shuffle">Embaralhar</button>
+            <button data-library-action="revealTop">Revelar topo</button>
+            <button data-library-action="topToGraveyard">Topo para cemiterio</button>
+            <button data-library-action="topToExile">Topo para exilio</button>
+            <button data-library-action="topToBottom">Topo para o fundo</button>
+            <label>Scry X <input id="scryInput" type="number" min="1" max="10" value="2"></label>
+            <button data-library-action="scry">Scry X</button>
+          </div>
+        </section>
+
+        <section class="zones-card">
+          <h3>Zonas</h3>
+          <div class="zone-mini">
+            <h4>Cemiterio <span id="graveyardCount">0</span></h4>
+            <div id="graveyardZone" class="mini-zone"></div>
+          </div>
+          <div class="zone-mini">
+            <h4>Exilio <span id="exileCount">0</span></h4>
+            <div id="exileZone" class="mini-zone"></div>
+          </div>
+          <div class="zone-mini">
+            <h4>Comando <span id="commandCount">0</span></h4>
+            <div id="commandZone" class="mini-zone"></div>
+          </div>
+        </section>
+
+        <section class="log-card">
+          <h3>Log de acoes</h3>
+          <div id="actionLog" class="action-log"></div>
+        </section>
+      </aside>
+    </main>
+
+    <section class="hand-panel">
+      <div class="zone-header">
+        <div>
+          <span>Mao do jogador</span>
+          <h2 id="handCount">0 cartas</h2>
+        </div>
+        <button id="resetPlayerBtn" type="button">Resetar estado</button>
+      </div>
+      <div id="handZone" class="card-grid hand-zone"></div>
+    </section>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/simulator.js"></script>
+</body>
+</html>
