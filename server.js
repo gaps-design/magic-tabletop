@@ -4230,7 +4230,52 @@ io.on("connection", (socket) => {
     broadcastSimulatorState(safeRoomId);
   });
 
+  socket.on("simulator-audio-join", ({ roomId, playerId } = {}) => {
+    const safeRoomId = limitText(roomId, 80);
+    if (!safeRoomId) return;
+    const safePlayerId = limitText(playerId, 80) || socket.data?.simulator?.playerId || socket.id;
+    const audioRoom = `${simulatorRoomId(safeRoomId)}:audio`;
+    socket.join(audioRoom);
+    socket.data.simulatorAudio = { roomId: safeRoomId, playerId: safePlayerId, audioRoom };
+
+    const peers = Array.from(io.sockets.adapter.rooms.get(audioRoom) || [])
+      .filter(socketId => socketId !== socket.id)
+      .map(socketId => {
+        const peerSocket = io.sockets.sockets.get(socketId);
+        return {
+          socketId,
+          playerId: peerSocket?.data?.simulatorAudio?.playerId || ""
+        };
+      });
+
+    socket.emit("simulator-audio-peers", { peers });
+    socket.to(audioRoom).emit("simulator-audio-peer-joined", {
+      socketId: socket.id,
+      playerId: safePlayerId
+    });
+  });
+
+  socket.on("simulator-audio-signal", ({ roomId, to, playerId, type, payload } = {}) => {
+    const safeRoomId = limitText(roomId, 80);
+    const targetSocketId = limitText(to, 80);
+    const safeType = limitText(type, 20);
+    if (!safeRoomId || !targetSocketId || !["offer", "answer", "ice"].includes(safeType)) return;
+    const session = socket.data?.simulatorAudio || {};
+    if (session.roomId && session.roomId !== safeRoomId) return;
+    io.to(targetSocketId).emit("simulator-audio-signal", {
+      from: socket.id,
+      fromPlayerId: limitText(playerId, 80) || session.playerId || "",
+      type: safeType,
+      payload
+    });
+  });
+
   socket.on("leave-room", ({ roomId }) => {
+    if (socket.data?.simulatorAudio?.audioRoom) {
+      socket.to(socket.data.simulatorAudio.audioRoom).emit("simulator-audio-peer-left", { socketId: socket.id });
+      socket.leave(socket.data.simulatorAudio.audioRoom);
+      socket.data.simulatorAudio = null;
+    }
     removeSocketFromAllRooms(socket.id);
     moveSocketPresenceToLobby(socket.id);
 
@@ -4245,6 +4290,9 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("Desconectado:", socket.id);
 
+    if (socket.data?.simulatorAudio?.audioRoom) {
+      socket.to(socket.data.simulatorAudio.audioRoom).emit("simulator-audio-peer-left", { socketId: socket.id });
+    }
     removeSocketFromAllRooms(socket.id);
     removeSocketPresence(socket.id);
     broadcastLobbyState();

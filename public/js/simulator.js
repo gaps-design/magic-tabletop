@@ -27,6 +27,18 @@
     ["white", "Branco"], ["black", "Preto"], ["colorless", "Incolor"]
   ];
   const ABILITY_MARKERS = ["Voar", "Atropelar", "Infectar", "Vigilancia", "Impeto", "Toque mortifero", "Vinculo com a vida", "Ameacar", "Escudo", "Atordoar"];
+  const simulatorAudioServers = {
+    iceTransportPolicy: "all",
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:global.stun.twilio.com:3478" },
+      { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+      { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
+    ]
+  };
 
   let playerId = savedPlayerId;
   let state = null;
@@ -53,6 +65,10 @@
   let arrowCounter = 0;
   let handResize = null;
   let stackResize = null;
+  let simulatorAudioStream = null;
+  let simulatorAudioMuted = false;
+  let simulatorAudioStarted = false;
+  const simulatorAudioPeers = new Map();
   const selectedCardIds = new Set();
   const selectedSideboardIds = new Set();
 
@@ -310,6 +326,139 @@
     render();
   }
 
+  function setSimulatorAudioStatus(message, kind = "") {
+    const status = el("simAudioStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.className = `sim-audio-status ${kind}`.trim();
+  }
+
+  function updateSimulatorAudioButtons() {
+    const toggle = el("simAudioToggleBtn");
+    if (!toggle) return;
+    toggle.textContent = simulatorAudioMuted ? "🎙️ Desmutar" : "🎙️ Mutar";
+    toggle.classList.toggle("muted", simulatorAudioMuted);
+  }
+
+  function ensureRemoteAudioElement(peerId) {
+    let audio = document.getElementById(`sim-audio-${peerId}`);
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.id = `sim-audio-${peerId}`;
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.dataset.simulatorAudioPeer = peerId;
+      document.body.appendChild(audio);
+    }
+    return audio;
+  }
+
+  async function ensureSimulatorAudioStream() {
+    if (simulatorAudioStream?.getAudioTracks().some(track => track.readyState === "live")) return simulatorAudioStream;
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Seu navegador nao suporta audio WebRTC.");
+    simulatorAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    simulatorAudioStream.getAudioTracks().forEach(track => {
+      track.enabled = !simulatorAudioMuted;
+      track.onended = () => {
+        setSimulatorAudioStatus("Microfone caiu. Reconecte o audio.", "error");
+        el("simAudioReconnectBtn")?.classList.remove("hidden");
+      };
+    });
+    return simulatorAudioStream;
+  }
+
+  function closeSimulatorAudioPeer(peerId) {
+    const peer = simulatorAudioPeers.get(peerId);
+    if (peer) {
+      try { peer.close(); } catch (_) {}
+      simulatorAudioPeers.delete(peerId);
+    }
+    document.getElementById(`sim-audio-${peerId}`)?.remove();
+  }
+
+  function createSimulatorAudioPeer(peerId) {
+    if (simulatorAudioPeers.has(peerId)) return simulatorAudioPeers.get(peerId);
+    const peer = new RTCPeerConnection(simulatorAudioServers);
+    simulatorAudioPeers.set(peerId, peer);
+    if (simulatorAudioStream) {
+      simulatorAudioStream.getAudioTracks().forEach(track => peer.addTrack(track, simulatorAudioStream));
+    }
+    peer.onicecandidate = event => {
+      if (event.candidate) {
+        socket.emit("simulator-audio-signal", {
+          roomId: activeRoomId,
+          to: peerId,
+          playerId,
+          type: "ice",
+          payload: event.candidate
+        });
+      }
+    };
+    peer.ontrack = event => {
+      const [stream] = event.streams;
+      if (!stream) return;
+      const audio = ensureRemoteAudioElement(peerId);
+      if (audio.srcObject !== stream) audio.srcObject = stream;
+      audio.play?.().catch(() => {});
+      setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado | Oponente conectado" : "Microfone ativo | Oponente conectado", simulatorAudioMuted ? "muted" : "active");
+    };
+    peer.onconnectionstatechange = () => {
+      if (["failed", "closed", "disconnected"].includes(peer.connectionState)) {
+        setSimulatorAudioStatus("Oponente sem audio/conectando", "error");
+        el("simAudioReconnectBtn")?.classList.remove("hidden");
+      } else if (peer.connectionState === "connected") {
+        setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado | Oponente conectado" : "Microfone ativo | Oponente conectado", simulatorAudioMuted ? "muted" : "active");
+      }
+    };
+    return peer;
+  }
+
+  async function startSimulatorAudio(force = false) {
+    if (localTwoPlayerMode) {
+      setSimulatorAudioStatus("Audio online indisponivel no teste local 2P", "");
+      return;
+    }
+    if (simulatorAudioStarted && !force) return;
+    try {
+      await ensureSimulatorAudioStream();
+      simulatorAudioStarted = true;
+      el("simAudioReconnectBtn")?.classList.add("hidden");
+      socket.emit("simulator-audio-join", { roomId: activeRoomId, playerId });
+      setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado | Aguardando oponente" : "Microfone ativo | Aguardando oponente", simulatorAudioMuted ? "muted" : "active");
+      updateSimulatorAudioButtons();
+    } catch (error) {
+      simulatorAudioStarted = false;
+      setSimulatorAudioStatus(error?.name === "NotAllowedError" ? "Permissao de microfone negada" : "Nao foi possivel ativar o audio", "error");
+      el("simAudioReconnectBtn")?.classList.remove("hidden");
+    }
+  }
+
+  async function reconnectSimulatorAudio() {
+    simulatorAudioPeers.forEach((_, peerId) => closeSimulatorAudioPeer(peerId));
+    simulatorAudioStarted = false;
+    if (simulatorAudioStream) {
+      simulatorAudioStream.getTracks().forEach(track => track.stop());
+      simulatorAudioStream = null;
+    }
+    await startSimulatorAudio(true);
+  }
+
+  function toggleSimulatorAudioMute() {
+    simulatorAudioMuted = !simulatorAudioMuted;
+    simulatorAudioStream?.getAudioTracks().forEach(track => {
+      track.enabled = !simulatorAudioMuted;
+    });
+    setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado" : "Microfone ativo", simulatorAudioMuted ? "muted" : "active");
+    updateSimulatorAudioButtons();
+  }
+
+  async function callSimulatorAudioPeer(peerId) {
+    const peer = createSimulatorAudioPeer(peerId);
+    const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+    await peer.setLocalDescription(offer);
+    socket.emit("simulator-audio-signal", { roomId: activeRoomId, to: peerId, playerId, type: "offer", payload: offer });
+  }
+
   function allVisibleCards() {
     const cards = [];
     Object.values(state?.players || {}).forEach(player => {
@@ -352,6 +501,7 @@
     localStorage.setItem("resenhaon-simulator-name", name);
     socket.emit("simulator-join", { roomId: activeRoomId, playerId, name });
     sendAction({ type: "loadDeck", deck: loadedDeck || mockDeck() });
+    startSimulatorAudio();
     el("switchLocalPlayerBtn").classList.add("hidden");
     el("gameModal").classList.remove("active");
     el("gameModal").classList.add("hidden");
@@ -984,6 +1134,11 @@
     el("openGameModalBtn").addEventListener("click", () => el("gameModal").classList.remove("hidden"));
     el("cancelGameBtn").addEventListener("click", () => el("gameModal").classList.add("hidden"));
     el("createGameBtn").addEventListener("click", createGame);
+    el("simAudioToggleBtn").addEventListener("click", async () => {
+      if (!simulatorAudioStarted) await startSimulatorAudio(true);
+      else toggleSimulatorAudioMute();
+    });
+    el("simAudioReconnectBtn").addEventListener("click", reconnectSimulatorAudio);
     el("switchLocalPlayerBtn").addEventListener("click", () => {
       if (!localTwoPlayerMode) return;
       setLocalView(playerId === localPlayerIds.p1 ? localPlayerIds.p2 : localPlayerIds.p1);
@@ -1405,6 +1560,39 @@
   socket.on("simulator-state", payload => {
     state = payload;
     render();
+  });
+  socket.on("simulator-audio-peers", async ({ peers = [] } = {}) => {
+    if (!simulatorAudioStarted) return;
+    for (const peer of peers) {
+      if (peer?.socketId) await callSimulatorAudioPeer(peer.socketId);
+    }
+    if (!peers.length) setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado | Aguardando oponente" : "Microfone ativo | Aguardando oponente", simulatorAudioMuted ? "muted" : "active");
+  });
+  socket.on("simulator-audio-peer-left", ({ socketId } = {}) => {
+    if (socketId) closeSimulatorAudioPeer(socketId);
+    setSimulatorAudioStatus(simulatorAudioMuted ? "Microfone mutado | Oponente sem audio" : "Microfone ativo | Oponente sem audio", simulatorAudioMuted ? "muted" : "");
+  });
+  socket.on("simulator-audio-signal", async ({ from, type, payload } = {}) => {
+    if (!from || !type) return;
+    try {
+      await ensureSimulatorAudioStream();
+      simulatorAudioStarted = true;
+      updateSimulatorAudioButtons();
+      const peer = createSimulatorAudioPeer(from);
+      if (type === "offer") {
+        await peer.setRemoteDescription(new RTCSessionDescription(payload));
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+        socket.emit("simulator-audio-signal", { roomId: activeRoomId, to: from, playerId, type: "answer", payload: answer });
+      } else if (type === "answer") {
+        await peer.setRemoteDescription(new RTCSessionDescription(payload));
+      } else if (type === "ice" && payload) {
+        await peer.addIceCandidate(new RTCIceCandidate(payload));
+      }
+    } catch (error) {
+      setSimulatorAudioStatus("Falha na conexao de audio", "error");
+      el("simAudioReconnectBtn")?.classList.remove("hidden");
+    }
   });
 
   renderTokenBank();
