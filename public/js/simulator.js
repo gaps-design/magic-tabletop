@@ -743,7 +743,9 @@
       el("selfName").textContent = player.name;
       el("selfLife").textContent = String(player.life ?? 20);
       renderManaPool(el("selfManaPool"), player.manaPool || {}, "self");
-      el("libraryCount").textContent = `${player.libraryCount || 0} cartas`;
+      const selfLibraryCount = player.libraryCount || 0;
+      el("libraryCount").textContent = `${selfLibraryCount} cartas`;
+      el("libraryCount").closest(".deck-wrap")?.querySelector("span")?.replaceChildren(`Deck (${selfLibraryCount})`);
       el("handCount").textContent = `${player.handCount || 0} cartas`;
       el("graveyardCount").textContent = String(player.graveyard?.length || 0);
       el("exileCount").textContent = String(player.exile?.length || 0);
@@ -757,7 +759,9 @@
       el("opponentName").textContent = player.name;
       el("opponentLife").textContent = String(player.life ?? 20);
       renderManaPool(el("opponentManaPool"), player.manaPool || {}, "opponent");
-      el("opponentLibraryCount").textContent = `${player.libraryCount || 0} cartas`;
+      const opponentLibraryCount = player.libraryCount || 0;
+      el("opponentLibraryCount").textContent = `${opponentLibraryCount} cartas`;
+      el("opponentLibraryCount").closest(".deck-wrap")?.querySelector("span")?.replaceChildren(`Deck (${opponentLibraryCount})`);
       el("opponentHandLabel").textContent = `${player.handCount || 0} cartas na mao`;
       el("opponentGraveyardCount").textContent = String(player.graveyard?.length || 0);
       el("opponentExileCount").textContent = String(player.exile?.length || 0);
@@ -1311,7 +1315,11 @@
     const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height");
     if (savedHandHeight) document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(130, Math.min(340, Number(savedHandHeight) || 168))}px`);
     const savedStackWidth = localStorage.getItem("resenhaon-sim-stack-width");
-    if (savedStackWidth) document.documentElement.style.setProperty("--sim-stack-width", `${Math.max(128, Math.min(260, Number(savedStackWidth) || 132))}px`);
+    if (savedStackWidth) {
+      const stackWidth = Number(savedStackWidth) || 110;
+      const compactedWidth = stackWidth > 124 ? Math.round(stackWidth * 0.8) : stackWidth;
+      document.documentElement.style.setProperty("--sim-stack-width", `${Math.max(104, Math.min(180, compactedWidth))}px`);
+    }
     setHandExpanded(handExpanded);
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
     el("loadDeckBtnP1").addEventListener("click", () => el("deckFileInputP1").click());
@@ -1623,7 +1631,7 @@
         return;
       }
       if (stackResize) {
-        const nextWidth = Math.max(128, Math.min(260, stackResize.startWidth + (event.clientX - stackResize.startX)));
+        const nextWidth = Math.max(104, Math.min(180, stackResize.startWidth + (event.clientX - stackResize.startX)));
         document.documentElement.style.setProperty("--sim-stack-width", `${nextWidth}px`);
         return;
       }
@@ -1666,7 +1674,7 @@
       }
       if (stackResize) {
         const value = getComputedStyle(document.documentElement).getPropertyValue("--sim-stack-width").replace("px", "").trim();
-        localStorage.setItem("resenhaon-sim-stack-width", value || "132");
+        localStorage.setItem("resenhaon-sim-stack-width", value || "110");
         stackResize = null;
         return;
       }
