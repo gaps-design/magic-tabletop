@@ -349,19 +349,20 @@
     const pt = powerToughnessLabel(card);
     const modifiedPt = modifiedPowerToughnessLabel(card);
     const isSelected = selectedCardIds.has(card.id);
+    const showCardOverlays = zone !== "hand";
     const position = zone === "battlefield"
       ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? (Math.floor(index / 9) * 112))}px"`
       : image;
     return `
       <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.missing ? "missing-card" : ""} ${isSelected ? "multi-selected" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
         ${position} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
-        <div class="card-text">
+        ${showCardOverlays ? `<div class="card-text">
           ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
           <h3>${escapeHtml(card.name)}</h3>
           <p>${escapeHtml(card.type)} ${card.cost ? `| ${escapeHtml(card.cost)}` : ""}</p>
-        </div>
-        ${markerBadges(card) ? `<div class="marker-strip">${markerBadges(card)}</div>` : ""}
-        ${modifiedPt ? `<span class="pt-badge modified">${escapeHtml(modifiedPt)}<small> / ${escapeHtml(pt || "base")}</small></span>` : (pt ? `<span class="pt-badge">${escapeHtml(pt)}</span>` : "")}
+        </div>` : ""}
+        ${showCardOverlays && markerBadges(card) ? `<div class="marker-strip">${markerBadges(card)}</div>` : ""}
+        ${showCardOverlays ? (modifiedPt ? `<span class="pt-badge modified">${escapeHtml(modifiedPt)}<small> / ${escapeHtml(pt || "base")}</small></span>` : (pt ? `<span class="pt-badge">${escapeHtml(pt)}</span>` : "")) : ""}
       </article>`;
   }
 
