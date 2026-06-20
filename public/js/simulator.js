@@ -45,6 +45,8 @@
   let arrowCounter = 0;
   let handResize = null;
   let stackResize = null;
+  const selectedCardIds = new Set();
+  const selectedSideboardIds = new Set();
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -61,7 +63,7 @@
     damage: "Damage",
     endCombat: "End Combat",
     main2: "Main 2",
-    end: "End Step",
+    end: "End",
     cleanup: "Cleanup"
   };
 
@@ -314,15 +316,11 @@
   function markerBadges(card) {
     const counters = card.counters || {};
     const colored = counters.colored || {};
-    const power = counters.power || {};
     const badges = [];
-    if (Number(counters.p1p1 || 0)) badges.push(`<span class="counter-tag">+1/+1 ${Number(counters.p1p1)}</span>`);
     if (Number(counters.generic || 0)) badges.push(`<span class="counter-tag">M ${Number(counters.generic)}</span>`);
     Object.entries(colored).forEach(([color, count]) => {
-      if (Number(count || 0)) badges.push(`<span class="counter-tag ${escapeHtml(color)}">${escapeHtml(color)} ${Number(count)}</span>`);
+      if (Number(count || 0)) badges.push(`<span class="color-dot ${escapeHtml(color)}">${Number(count)}</span>`);
     });
-    if (Number(power.plus || 0)) badges.push(`<span class="counter-tag">+X/+X ${Number(power.plus)}</span>`);
-    if (Number(power.minus || 0)) badges.push(`<span class="counter-tag">-X/-X ${Number(power.minus)}</span>`);
     (counters.abilities || []).forEach(ability => badges.push(`<span class="counter-tag ability-tag">${escapeHtml(ability)}</span>`));
     return badges.join("");
   }
@@ -333,22 +331,37 @@
     return match ? `${match[1]}/${match[2]}` : "";
   }
 
+  function modifiedPowerToughnessLabel(card = {}) {
+    const base = powerToughnessLabel(card);
+    const match = base.match(/^(-?\d+)\/(-?\d+)$/);
+    const p1p1 = Number(card.counters?.p1p1 || 0);
+    const plus = Number(card.counters?.power?.plus || 0);
+    const minus = Number(card.counters?.power?.minus || 0);
+    const delta = p1p1 + plus - minus;
+    if (!delta) return "";
+    if (match) return `${Number(match[1]) + delta}/${Number(match[2]) + delta}`;
+    const sign = delta > 0 ? "+" : "";
+    return `${sign}${delta}/${sign}${delta}`;
+  }
+
   function cardHtml(card, zone, owner, index = 0) {
     const image = card.imageUrl ? `style="background-image:url('${escapeHtml(card.imageUrl)}')"` : "";
     const pt = powerToughnessLabel(card);
+    const modifiedPt = modifiedPowerToughnessLabel(card);
+    const isSelected = selectedCardIds.has(card.id);
     const position = zone === "battlefield"
       ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? (Math.floor(index / 9) * 112))}px"`
       : image;
     return `
-      <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.missing ? "missing-card" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
+      <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.missing ? "missing-card" : ""} ${isSelected ? "multi-selected" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
         ${position} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
         <div class="card-text">
           ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
-          ${markerBadges(card)}
           <h3>${escapeHtml(card.name)}</h3>
           <p>${escapeHtml(card.type)} ${card.cost ? `| ${escapeHtml(card.cost)}` : ""}</p>
         </div>
-        ${pt ? `<span class="pt-badge">${escapeHtml(pt)}</span>` : ""}
+        ${markerBadges(card) ? `<div class="marker-strip">${markerBadges(card)}</div>` : ""}
+        ${modifiedPt ? `<span class="pt-badge modified">${escapeHtml(modifiedPt)}<small> / ${escapeHtml(pt || "base")}</small></span>` : (pt ? `<span class="pt-badge">${escapeHtml(pt)}</span>` : "")}
       </article>`;
   }
 
@@ -460,11 +473,12 @@
   function sideboardCardRow(group, fromZone) {
     const card = group.card;
     const targetLabel = fromZone === "mainDeck" ? "Mover para side" : "Mover para main";
+    const selected = group.ids.some(id => selectedSideboardIds.has(id));
     const image = card.imageUrl
       ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}">`
       : `<div class="sideboard-thumb">Sem img</div>`;
     return `
-      <article class="sideboard-card" data-card-id="${escapeHtml(group.ids[0])}" data-side-zone="${fromZone}">
+      <article class="sideboard-card ${selected ? "selected" : ""}" data-card-id="${escapeHtml(group.ids[0])}" data-card-ids="${escapeHtml(group.ids.join(","))}" data-side-zone="${fromZone}" data-card-count="${group.count}">
         ${image}
         <div>
           <strong>${group.count}x ${escapeHtml(card.name)}</strong>
@@ -498,6 +512,37 @@
     el("sideboardWarning").classList.toggle("hidden", !warning);
   }
 
+  function moveSideboardGroup(cardEl) {
+    if (!cardEl) return;
+    const fromZone = cardEl.dataset.sideZone;
+    const player = selfPlayer();
+    const zoneIds = new Set((player?.[fromZone] || []).map(card => card.id));
+    const selectedIds = Array.from(selectedSideboardIds).filter(id => zoneIds.has(id));
+    if (selectedIds.length) {
+      selectedIds.forEach(id => selectedSideboardIds.delete(id));
+      sendAction({
+        type: "sideboardMove",
+        cardIds: selectedIds,
+        cardId: selectedIds[0],
+        fromZone,
+        amount: selectedIds.length
+      });
+      return;
+    }
+    const ids = cardEl.dataset.cardIds.split(",").filter(Boolean);
+    const count = Number(cardEl.dataset.cardCount || ids.length || 1);
+    const amount = count > 1
+      ? Math.max(1, Math.min(count, Number(prompt(`Voce tem ${count} copias. Quantas deseja mover?`, "1") || 0)))
+      : 1;
+    sendAction({
+      type: "sideboardMove",
+      cardIds: ids.slice(0, amount),
+      cardId: ids[0],
+      fromZone,
+      amount
+    });
+  }
+
   function openSideboardModal() {
     el("sideboardModal").classList.remove("hidden");
     renderSideboardModal();
@@ -523,6 +568,22 @@
     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
+  function normalizeTablePoint(point) {
+    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, point.x / Math.max(1, rect.width))),
+      y: Math.max(0, Math.min(1, point.y / Math.max(1, rect.height)))
+    };
+  }
+
+  function denormalizeTablePoint(point) {
+    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
+    return {
+      x: Number(point.x || 0) * rect.width,
+      y: Number(point.y || 0) * rect.height
+    };
+  }
+
   function beginArrowFromActiveCard() {
     if (!activeCard?.id) {
       alert("Selecione uma carta antes de criar a seta.");
@@ -539,8 +600,9 @@
     line.setAttribute("y1", String(start.y));
     line.setAttribute("x2", String(start.x + 40));
     line.setAttribute("y2", String(start.y));
+    line.dataset.temp = "true";
     el("arrowLayer").appendChild(line);
-    arrowDraft = { id };
+    arrowDraft = { id, from: normalizeTablePoint(start) };
   }
 
   function updateArrowDraft(clientX, clientY) {
@@ -553,11 +615,30 @@
 
   function finishArrowDraft(clientX, clientY) {
     updateArrowDraft(clientX, clientY);
+    const to = normalizeTablePoint(tablePoint(clientX, clientY));
+    sendAction({ type: "addArrow", from: arrowDraft.from, to });
+    document.getElementById(arrowDraft.id)?.remove();
     arrowDraft = null;
   }
 
   function clearArrows() {
     el("arrowLayer").querySelectorAll("line").forEach(line => line.remove());
+  }
+
+  function renderArrows() {
+    const layer = el("arrowLayer");
+    layer.querySelectorAll("line:not([data-temp='true'])").forEach(line => line.remove());
+    (state?.arrows || []).forEach(arrow => {
+      const from = denormalizeTablePoint(arrow.from || {});
+      const to = denormalizeTablePoint(arrow.to || {});
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.dataset.arrowId = arrow.id;
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      layer.appendChild(line);
+    });
   }
 
   function renderSelectedCard(card) {
@@ -592,6 +673,7 @@
     document.querySelectorAll(".phase-strip button").forEach(button => button.classList.toggle("active", button.dataset.phase === currentPhase));
     renderPlayer(self, "self");
     renderPlayer(opponent, "opponent");
+    renderArrows();
     renderLog();
     el("goSideboardBtn").classList.toggle("hidden", !self?.canSideboard && !self?.sideboarding);
     if (self?.sideboarding) {
@@ -606,64 +688,113 @@
     }
   }
 
+  function renderMenuItems(items) {
+    return items.map((item, index) => {
+      if (item.children?.length) {
+        return `<div class="menu-row" data-menu-index="${index}"><button type="button">${escapeHtml(item.label)} &gt;</button><div class="submenu">${renderMenuItems(item.children)}</div></div>`;
+      }
+      return `<button type="button" data-menu-path="${escapeHtml(String(index))}">${escapeHtml(item.label)}</button>`;
+    }).join("");
+  }
+
+  function bindMenuItems(root, items) {
+    root.querySelectorAll(":scope > button[data-menu-path]").forEach(button => {
+      button.addEventListener("click", () => {
+        const item = items[Number(button.dataset.menuPath)];
+        item?.action?.();
+        closeCardMenu();
+      });
+    });
+    root.querySelectorAll(":scope > .menu-row").forEach((row, index) => {
+      const item = items[Number(row.dataset.menuIndex)];
+      bindMenuItems(row.querySelector(":scope > .submenu"), item?.children || []);
+    });
+  }
+
+  function openLayeredMenu(items, x, y) {
+    const menu = el("cardMenu");
+    menu.innerHTML = renderMenuItems(items);
+    bindMenuItems(menu, items);
+    menu.style.left = `${Math.min(window.innerWidth - 240, x)}px`;
+    menu.style.top = `${Math.min(window.innerHeight - 330, y)}px`;
+    menu.classList.remove("hidden");
+  }
+
+  function moveTargets(cardId, options = {}) {
+    const targets = [
+      { label: "Cemiterio", action: () => sendAction({ type: "moveCard", cardId, toZone: "graveyard" }) },
+      { label: "Exilio", action: () => sendAction({ type: "moveCard", cardId, toZone: "exile" }) },
+      { label: "Mao", action: () => sendAction({ type: "moveCard", cardId, toZone: "hand" }) },
+      { label: "Topo do grimorio", action: () => sendAction({ type: "moveCard", cardId, toZone: "library", position: "top" }) },
+      { label: "Fundo do grimorio", action: () => sendAction({ type: "moveCard", cardId, toZone: "library", position: "bottom" }) }
+    ];
+    if (options.includeOpponent) {
+      targets.push({ label: "Campo do oponente", action: () => sendAction({ type: "giveControl", cardId }) });
+    }
+    return targets;
+  }
+
+  function markerMenu(cardId, delta) {
+    return [
+      { label: "+1/+1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: delta }) },
+      { label: "+X/+X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "plus", value: delta }) },
+      { label: "-X/-X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "minus", value: delta }) },
+      ...COLORED_MARKERS.map(([color, label]) => ({ label, action: () => sendAction({ type: "marker", cardId, markerKind: "colored", color, value: delta }) }))
+    ];
+  }
+
   function openCardMenu(cardEl, x, y) {
     const zone = cardEl.dataset.zone;
     const owner = cardEl.dataset.owner;
     const cardId = cardEl.dataset.cardId;
-    const menu = el("cardMenu");
     if (owner !== "self") return;
 
-    const buttons = [];
+    const items = [];
     if (zone === "revealed") {
-      buttons.push(["Mover para pilha", { type: "moveCard", cardId, toZone: "stack" }]);
-      buttons.push(["Campo", { type: "moveCard", cardId, toZone: "battlefield" }]);
-      buttons.push(["Mao", { type: "moveCard", cardId, toZone: "hand" }]);
-      buttons.push(["Cemiterio", { type: "moveCard", cardId, toZone: "graveyard" }]);
-      buttons.push(["Exilio", { type: "moveCard", cardId, toZone: "exile" }]);
-      buttons.push(["Fundo", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
+      items.push({ label: "Mover para pilha", action: () => sendAction({ type: "moveCard", cardId, toZone: "stack" }) });
+      items.push({ label: "Enviar para", children: moveTargets(cardId) });
     } else if (zone === "hand") {
-      buttons.push(["Jogar para pilha", { type: "playToStack", cardId }]);
-      buttons.push(["Jogar no campo", { type: "moveCard", cardId, toZone: "battlefield" }]);
-      buttons.push(["Descartar", { type: "moveCard", cardId, toZone: "graveyard" }]);
-      buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
-      buttons.push(["Topo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "top" }]);
-      buttons.push(["Fundo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
+      items.push({ label: "Jogar para pilha", action: () => sendAction({ type: "playToStack", cardId }) });
+      items.push({ label: "Jogar no campo", action: () => sendAction({ type: "moveCard", cardId, toZone: "battlefield" }) });
+      items.push({ label: "Enviar para", children: moveTargets(cardId) });
     } else if (zone === "stack") {
-      buttons.push(["Resolver para campo", { type: "resolveStack", cardId, toZone: "battlefield" }]);
-      buttons.push(["Resolver para cemiterio", { type: "resolveStack", cardId, toZone: "graveyard" }]);
-      buttons.push(["Resolver para exilio", { type: "resolveStack", cardId, toZone: "exile" }]);
-      buttons.push(["Voltar para mao", { type: "resolveStack", cardId, toZone: "hand" }]);
+      items.push({ label: "Resolver para campo", action: () => sendAction({ type: "resolveStack", cardId, toZone: "battlefield" }) });
+      items.push({ label: "Resolver para cemiterio", action: () => sendAction({ type: "resolveStack", cardId, toZone: "graveyard" }) });
+      items.push({ label: "Resolver para exilio", action: () => sendAction({ type: "resolveStack", cardId, toZone: "exile" }) });
+      items.push({ label: "Voltar para mao", action: () => sendAction({ type: "resolveStack", cardId, toZone: "hand" }) });
     } else {
-      buttons.push(["Virar/desvirar", { type: "toggleTap", cardId }]);
-      buttons.push(["Enviar para pilha", { type: "moveCard", cardId, toZone: "stack" }]);
-      buttons.push(["Cemiterio", { type: "moveCard", cardId, toZone: "graveyard" }]);
-      buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
-      buttons.push(["Voltar para mao", { type: "moveCard", cardId, toZone: "hand" }]);
-      buttons.push(["Topo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "top" }]);
-      buttons.push(["Fundo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "bottom" }]);
-      buttons.push(["Adicionar +1/+1", { type: "counter", cardId, counterType: "p1p1", value: 1 }]);
-      buttons.push(["Remover +1/+1", { type: "counter", cardId, counterType: "p1p1", value: -1 }]);
-      buttons.push(["+X/+X", { type: "marker", cardId, markerKind: "power", powerKind: "plus", value: 1 }]);
-      buttons.push(["-X/-X", { type: "marker", cardId, markerKind: "power", powerKind: "minus", value: 1 }]);
-      COLORED_MARKERS.forEach(([color, label]) => {
-        buttons.push([`+ marcador ${label}`, { type: "marker", cardId, markerKind: "colored", color, value: 1 }]);
-        buttons.push([`- marcador ${label}`, { type: "marker", cardId, markerKind: "colored", color, value: -1 }]);
-      });
-      ABILITY_MARKERS.forEach(ability => buttons.push([`Alternar ${ability}`, { type: "marker", cardId, markerKind: "ability", ability }]));
-      buttons.push(["Declarar atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: true }]);
-      buttons.push(["Remover atacante", { type: "combatFlag", cardId, flag: "attacking", enabled: false }]);
-      buttons.push(["Declarar bloqueador", { type: "combatFlag", cardId, flag: "blocking", enabled: true }]);
-      buttons.push(["Remover bloqueador", { type: "combatFlag", cardId, flag: "blocking", enabled: false }]);
+      items.push({ label: "Virar / Desvirar", action: () => sendAction({ type: "toggleTap", cardId }) });
+      items.push({ label: "Enviar para", children: [{ label: "Pilha", action: () => sendAction({ type: "moveCard", cardId, toZone: "stack" }) }, ...moveTargets(cardId, { includeOpponent: true })] });
+      items.push({ label: "Marcadores", children: [
+        { label: "Adicionar marcador", children: markerMenu(cardId, 1) },
+        { label: "Remover marcador", children: markerMenu(cardId, -1) },
+        ...ABILITY_MARKERS.map(ability => ({ label: `Alternar ${ability}`, action: () => sendAction({ type: "marker", cardId, markerKind: "ability", ability }) }))
+      ] });
+      items.push({ label: "Poder / resistencia", children: [
+        { label: "+1/+1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: 1 }) },
+        { label: "-1/-1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: -1 }) },
+        { label: "+X/+X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "plus", value: 1 }) },
+        { label: "-X/-X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "minus", value: 1 }) }
+      ] });
+      items.push({ label: "Criar seta", action: beginArrowFromActiveCard });
+      items.push({ label: "Desfazer ultima acao da carta", action: () => sendAction({ type: "undo" }) });
+      items.push({ label: "Declarar atacante", action: () => sendAction({ type: "combatFlag", cardId, flag: "attacking", enabled: true }) });
+      items.push({ label: "Declarar bloqueador", action: () => sendAction({ type: "combatFlag", cardId, flag: "blocking", enabled: true }) });
+      if (selectedCardIds.size > 1) {
+        const cardIds = Array.from(selectedCardIds);
+        items.push({ label: `Acoes em massa (${cardIds.length})`, children: [
+          { label: "Cemiterio", action: () => sendAction({ type: "moveCards", cardIds, toZone: "graveyard" }) },
+          { label: "Exilio", action: () => sendAction({ type: "moveCards", cardIds, toZone: "exile" }) },
+          { label: "Mao", action: () => sendAction({ type: "moveCards", cardIds, toZone: "hand" }) },
+          { label: "Campo", action: () => sendAction({ type: "moveCards", cardIds, toZone: "battlefield" }) },
+          { label: "Topo do grimorio", action: () => sendAction({ type: "moveCards", cardIds, toZone: "library", position: "top" }) },
+          { label: "Fundo do grimorio", action: () => sendAction({ type: "moveCards", cardIds, toZone: "library", position: "bottom" }) },
+          { label: "Embaralhar no grimorio", action: () => sendAction({ type: "shuffleCardsIntoLibrary", cardIds }) }
+        ] });
+      }
     }
 
-    menu.innerHTML = buttons.map(([label], index) => `<button data-menu-index="${index}">${escapeHtml(label)}</button>`).join("");
-    menu.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => {
-      sendAction(buttons[index][1]);
-      closeCardMenu();
-    }));
-    menu.style.left = `${Math.min(window.innerWidth - 220, x)}px`;
-    menu.style.top = `${Math.min(window.innerHeight - 260, y)}px`;
-    menu.classList.remove("hidden");
+    openLayeredMenu(items, x, y);
   }
 
   function closeCardMenu() {
@@ -671,15 +802,7 @@
   }
 
   function openActionMenu(items, x, y) {
-    const menu = el("cardMenu");
-    menu.innerHTML = items.map(([label], index) => `<button data-menu-index="${index}">${escapeHtml(label)}</button>`).join("");
-    menu.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => {
-      items[index][1]();
-      closeCardMenu();
-    }));
-    menu.style.left = `${Math.min(window.innerWidth - 240, x)}px`;
-    menu.style.top = `${Math.min(window.innerHeight - 330, y)}px`;
-    menu.classList.remove("hidden");
+    openLayeredMenu(items.map(([label, action]) => ({ label, action })), x, y);
   }
 
   function openLibraryMenu(x, y) {
@@ -844,7 +967,8 @@
       setHandExpanded(!document.querySelector(".hand-dock").classList.contains("hand-expanded"));
     });
     el("createArrowBtn").addEventListener("click", beginArrowFromActiveCard);
-    el("clearArrowsBtn").addEventListener("click", clearArrows);
+    el("clearArrowsBtn").addEventListener("click", () => sendAction({ type: "clearArrows" }));
+    el("undoActionBtn").addEventListener("click", () => sendAction({ type: "undo" }));
     document.querySelectorAll(".phase-strip button").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
     });
@@ -854,6 +978,12 @@
     el("toggleToolsBtn").addEventListener("click", () => el("toolsPanel").classList.toggle("collapsed"));
     el("closePrivateModal").addEventListener("click", () => el("privateModal").classList.add("hidden"));
     el("closeZoomModal").addEventListener("click", () => el("zoomModal").classList.add("hidden"));
+    el("arrowLayer").addEventListener("contextmenu", event => {
+      const line = event.target.closest("line[data-arrow-id]");
+      if (!line) return;
+      event.preventDefault();
+      sendAction({ type: "removeArrow", arrowId: line.dataset.arrowId });
+    });
     el("timerStartBtn").addEventListener("click", startTimer);
     el("timerPauseBtn").addEventListener("click", pauseTimer);
     el("timerResetBtn").addEventListener("click", resetTimer);
@@ -863,11 +993,20 @@
     el("returnFromSideboardBtn").addEventListener("click", applySideboard);
     el("sideboardModal").addEventListener("dblclick", event => {
       const card = event.target.closest(".sideboard-card");
-      if (card) sendAction({ type: "sideboardMove", cardId: card.dataset.cardId, fromZone: card.dataset.sideZone });
+      if (card) moveSideboardGroup(card);
     });
     el("sideboardModal").addEventListener("click", event => {
+      const card = event.target.closest(".sideboard-card");
+      if (card && (event.ctrlKey || event.metaKey || event.shiftKey) && !event.target.closest("button")) {
+        card.dataset.cardIds.split(",").forEach(id => {
+          if (selectedSideboardIds.has(id)) selectedSideboardIds.delete(id);
+          else selectedSideboardIds.add(id);
+        });
+        renderSideboardModal();
+        return;
+      }
       const button = event.target.closest("[data-sideboard-move]");
-      if (button) sendAction({ type: "sideboardMove", cardId: button.dataset.sideboardMove, fromZone: button.dataset.sideboardFrom });
+      if (button) moveSideboardGroup(button.closest(".sideboard-card"));
     });
     el("zoomModal").addEventListener("click", event => {
       if (event.target.id === "zoomModal") el("zoomModal").classList.add("hidden");
@@ -952,6 +1091,13 @@
       const card = event.target.closest(".sim-card,.mini-card");
       if (card && !event.target.closest("#privateModalContent")) {
         activeCard = getCardById(card.dataset.cardId);
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (selectedCardIds.has(card.dataset.cardId)) selectedCardIds.delete(card.dataset.cardId);
+          else selectedCardIds.add(card.dataset.cardId);
+          renderSelectedCard(activeCard);
+          render();
+          return;
+        }
         renderSelectedCard(activeCard);
         openCardMenu(card, event.clientX, event.clientY);
         return;

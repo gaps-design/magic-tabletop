@@ -669,6 +669,8 @@ function createDefaultSimulator() {
     currentPhase: "main1",
     activePlayerId: null,
     priorityPlayerId: null,
+    arrows: [],
+    undoStack: [],
     players: {},
     log: []
   };
@@ -792,6 +794,33 @@ function addSimulatorLog(simulator, message) {
   ].slice(0, 80);
 }
 
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value || null));
+}
+
+function pushSimulatorUndo(simulator) {
+  simulator.undoStack = simulator.undoStack || [];
+  simulator.undoStack.unshift({
+    players: clonePlain(simulator.players || {}),
+    currentPhase: simulator.currentPhase || "main1",
+    activePlayerId: simulator.activePlayerId || null,
+    priorityPlayerId: simulator.priorityPlayerId || null,
+    arrows: clonePlain(simulator.arrows || [])
+  });
+  simulator.undoStack = simulator.undoStack.slice(0, 30);
+}
+
+function restoreSimulatorUndo(simulator) {
+  const snapshot = (simulator.undoStack || []).shift();
+  if (!snapshot) return false;
+  simulator.players = snapshot.players || {};
+  simulator.currentPhase = snapshot.currentPhase || "main1";
+  simulator.activePlayerId = snapshot.activePlayerId || null;
+  simulator.priorityPlayerId = snapshot.priorityPlayerId || simulator.activePlayerId || null;
+  simulator.arrows = snapshot.arrows || [];
+  return true;
+}
+
 function findSimulatorCard(player, cardId) {
   const zones = ["library", "hand", "battlefield", "stack", "graveyard", "exile", "commandZone", "sideboard", "revealed"];
   for (const zone of zones) {
@@ -864,6 +893,34 @@ function moveRevealedToBottomRandom(player) {
   player.library.push(...shuffleSimulatorCards(revealed));
   player.revealed = [];
   return revealed.length;
+}
+
+function getOpponentSimulatorPlayer(simulator, playerId) {
+  return Object.values(simulator.players || {}).find(simPlayer => simPlayer.id !== playerId) || null;
+}
+
+function giveSimulatorCardControl(simulator, player, cardId) {
+  const opponent = getOpponentSimulatorPlayer(simulator, player.id);
+  if (!opponent) return null;
+  const found = findSimulatorCard(player, cardId);
+  if (!found) return null;
+  if (found.zone !== "battlefield") return null;
+  const [card] = player[found.zone].splice(found.index, 1);
+  card.tapped = false;
+  card.attacking = false;
+  card.blocking = false;
+  delete card.position;
+  opponent.battlefield.unshift(card);
+  return { card, opponent };
+}
+
+function moveSimulatorCards(player, cardIds = [], toZone, position = "top") {
+  const moved = [];
+  cardIds.forEach(cardId => {
+    const result = moveSimulatorCard(player, cardId, toZone, position);
+    if (result) moved.push(result);
+  });
+  return moved;
 }
 
 function cloneSimulatorCard(card = {}, playerId = "sim", suffix = "") {
@@ -952,12 +1009,19 @@ function moveSimulatorSideboardCard(player, cardId, fromZone) {
   const from = fromZone === "sideboard" ? "sideboard" : "mainDeck";
   const to = from === "sideboard" ? "mainDeck" : "sideboard";
   if (!Array.isArray(player[from]) || !Array.isArray(player[to])) return false;
-  if (to === "sideboard" && player.sideboard.length >= 15) return false;
   const index = player[from].findIndex(card => card.id === cardId);
   if (index < 0) return false;
   const [card] = player[from].splice(index, 1);
   player[to].unshift(card);
   return true;
+}
+
+function moveSimulatorSideboardCards(player, cardIds = [], fromZone) {
+  let moved = 0;
+  cardIds.forEach(cardId => {
+    if (moveSimulatorSideboardCard(player, cardId, fromZone)) moved++;
+  });
+  return moved;
 }
 
 function validateSimulatorSideboard(player) {
@@ -979,6 +1043,17 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   const value = action.value;
   const cardId = String(action.cardId || "");
   const playerName = player.name || "Jogador";
+  const readOnlyActions = new Set(["peekTop", "viewDeck", "viewTopX", "scry"]);
+
+  if (type === "undo") {
+    if (restoreSimulatorUndo(simulator)) addSimulatorLog(simulator, `${playerName} desfez a ultima acao`);
+    else addSimulatorLog(simulator, `${playerName} tentou desfazer, mas nao havia historico`);
+    return;
+  }
+
+  if (!readOnlyActions.has(type)) {
+    pushSimulatorUndo(simulator);
+  }
 
   if (type === "life") {
     const amount = Math.max(-99, Math.min(99, Number(value) || 0));
@@ -1026,8 +1101,12 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     addSimulatorLog(simulator, `${playerName} foi para o sideboard`);
   } else if (type === "sideboardMove") {
     if (!player.sideboarding) return;
-    if (moveSimulatorSideboardCard(player, cardId, action.fromZone)) {
-      addSimulatorLog(simulator, `${playerName} ajustou o sideboard`);
+    const cardIds = Array.isArray(action.cardIds) && action.cardIds.length
+      ? action.cardIds.map(id => String(id || "")).filter(Boolean).slice(0, 99)
+      : [cardId];
+    const moved = moveSimulatorSideboardCards(player, cardIds, action.fromZone);
+    if (moved) {
+      addSimulatorLog(simulator, `${playerName} ajustou o sideboard: ${moved} carta${moved === 1 ? "" : "s"} movida${moved === 1 ? "" : "s"}`);
     }
   } else if (type === "resetSideboardChanges") {
     if (!player.sideboarding || !player.sideboardSnapshot) return;
@@ -1091,6 +1170,20 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
     if (result?.removed) addSimulatorLog(simulator, "Token removido do jogo.");
     else if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
+  } else if (type === "moveCards") {
+    const cardIds = Array.isArray(action.cardIds) ? action.cardIds.map(id => String(id || "")).filter(Boolean).slice(0, 80) : [];
+    const moved = moveSimulatorCards(player, cardIds, String(action.toZone || ""), action.position || "top");
+    if (moved.length) addSimulatorLog(simulator, `${playerName} moveu ${moved.length} carta${moved.length === 1 ? "" : "s"} para ${String(action.toZone || "")}`);
+  } else if (type === "shuffleCardsIntoLibrary") {
+    const cardIds = Array.isArray(action.cardIds) ? action.cardIds.map(id => String(id || "")).filter(Boolean).slice(0, 80) : [];
+    const moved = moveSimulatorCards(player, cardIds, "library", "bottom");
+    if (moved.length) {
+      player.library = shuffleSimulatorCards(player.library);
+      addSimulatorLog(simulator, `${playerName} embaralhou ${moved.length} carta${moved.length === 1 ? "" : "s"} no grimorio`);
+    }
+  } else if (type === "giveControl") {
+    const result = giveSimulatorCardControl(simulator, player, cardId);
+    if (result) addSimulatorLog(simulator, `${playerName} entregou o controle de ${result.card.name} para ${result.opponent.name}`);
   } else if (type === "privateMoveCard") {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
     if (result?.removed) {
@@ -1184,6 +1277,26 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     }
   } else if (type === "dice") {
     addSimulatorLog(simulator, `${playerName} rolou ${limitText(action.label || "dado", 30)}: ${limitText(action.result, 30)}`);
+  } else if (type === "addArrow") {
+    const from = action.from && typeof action.from === "object" ? action.from : {};
+    const to = action.to && typeof action.to === "object" ? action.to : {};
+    simulator.arrows = [
+      ...(simulator.arrows || []),
+      {
+        id: `arrow-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        ownerId: playerId,
+        from: { x: Math.max(0, Math.min(1, Number(from.x) || 0)), y: Math.max(0, Math.min(1, Number(from.y) || 0)) },
+        to: { x: Math.max(0, Math.min(1, Number(to.x) || 0)), y: Math.max(0, Math.min(1, Number(to.y) || 0)) }
+      }
+    ].slice(-60);
+    addSimulatorLog(simulator, `${playerName} criou uma seta`);
+  } else if (type === "removeArrow") {
+    const arrowId = String(action.arrowId || "");
+    simulator.arrows = (simulator.arrows || []).filter(arrow => arrow.id !== arrowId);
+    addSimulatorLog(simulator, `${playerName} removeu uma seta`);
+  } else if (type === "clearArrows") {
+    simulator.arrows = [];
+    addSimulatorLog(simulator, `${playerName} limpou as setas`);
   } else if (type === "phase") {
     const phase = String(value || "");
     if (!SIMULATOR_PHASES.has(phase)) return;
@@ -1253,6 +1366,7 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
     currentPhase: simulator.currentPhase || "main1",
     activePlayerId: simulator.activePlayerId || null,
     priorityPlayerId: simulator.priorityPlayerId || simulator.activePlayerId || null,
+    arrows: simulator.arrows || [],
     log: simulator.log || [],
     players: Object.fromEntries(Object.entries(simulator.players || {}).map(([playerId, player]) => {
       const isSelf = playerId === viewerPlayerId;
