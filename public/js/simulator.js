@@ -37,6 +37,10 @@
   let touchTimer = null;
   let timerRemaining = Number(localStorage.getItem("resenhaon-sim-timer-remaining") || 3000);
   let timerInterval = null;
+  let sideboardInterval = null;
+  let sideboardAutoApplied = false;
+  let battlefieldDrag = null;
+  let previewDrag = null;
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -131,6 +135,15 @@
     return response.json();
   }
 
+  async function searchScryfallCard(name) {
+    const response = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(`!"${name}"`)}&unique=cards`);
+    if (!response.ok) throw new Error("not found");
+    const payload = await response.json();
+    const card = payload.data?.[0];
+    if (!card) throw new Error("not found");
+    return card;
+  }
+
   async function fetchCard(name, index, retry = false) {
     const cleanName = normalizeLookupName(name);
     const key = cleanName.toLowerCase();
@@ -141,7 +154,11 @@
       try {
         card = await requestScryfall(cleanName, "exact");
       } catch {
-        card = await requestScryfall(cleanName, "fuzzy");
+        try {
+          card = await requestScryfall(cleanName.replace(/\s+\/\/\s+.+$/, ""), "fuzzy");
+        } catch {
+          card = await searchScryfallCard(cleanName.replace(/[-–—]/g, " "));
+        }
       }
       const normalized = {
         name: card.name || cleanName,
@@ -224,7 +241,7 @@
   function allVisibleCards() {
     const cards = [];
     Object.values(state?.players || {}).forEach(player => {
-      ["hand", "library", "battlefield", "stack", "graveyard", "exile", "revealed", "sideboard"].forEach(zone => {
+      ["hand", "library", "mainDeck", "battlefield", "stack", "graveyard", "exile", "revealed", "sideboard"].forEach(zone => {
         (player[zone] || []).forEach(card => cards.push({ ...card, zone, ownerId: player.id }));
       });
     });
@@ -272,11 +289,14 @@
     return badges.join("");
   }
 
-  function cardHtml(card, zone, owner) {
+  function cardHtml(card, zone, owner, index = 0) {
     const image = card.imageUrl ? `style="background-image:url('${escapeHtml(card.imageUrl)}')"` : "";
+    const position = zone === "battlefield"
+      ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? (Math.floor(index / 9) * 112))}px"`
+      : image;
     return `
       <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
-        ${image} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
+        ${position} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
         <div class="card-text">
           ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
           ${markerBadges(card)}
@@ -292,8 +312,9 @@
   }
 
   function renderCards(container, cards, zone, owner) {
+    container.classList.toggle("free-layout", zone === "battlefield");
     container.innerHTML = cards?.length
-      ? cards.map(card => cardHtml(card, zone, owner)).join("")
+      ? cards.map((card, index) => cardHtml(card, zone, owner, index)).join("")
       : `<div class="empty-zone">Vazio</div>`;
   }
 
@@ -329,6 +350,7 @@
         el("opponentName").textContent = "Aguardando oponente";
         el("opponentLife").textContent = "20";
         renderHandBack(el("opponentHand"), 0);
+        el("opponentSideboardNotice").classList.add("hidden");
         ["opponentBattlefield", "opponentStack", "opponentGraveyard", "opponentExile", "opponentRevealed"].forEach(id => { el(id).innerHTML = ""; });
       }
       return;
@@ -357,7 +379,102 @@
       renderSmall(el("opponentGraveyard"), player.graveyard || [], "graveyard", "opponent");
       renderSmall(el("opponentExile"), player.exile || [], "exile", "opponent");
       renderSmall(el("opponentRevealed"), player.revealed || [], "revealed", "opponent");
+      el("opponentSideboardNotice").classList.toggle("hidden", player.sideboarding !== true);
     }
+  }
+
+  function groupedSideboardCards(cards = []) {
+    const groups = new Map();
+    cards.forEach(card => {
+      const key = `${card.name}__${card.scryfallId || card.imageUrl || card.type}`;
+      if (!groups.has(key)) groups.set(key, { card, count: 0, ids: [] });
+      const group = groups.get(key);
+      group.count++;
+      group.ids.push(card.id);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.card.name.localeCompare(b.card.name));
+  }
+
+  function sideboardCardRow(group, fromZone) {
+    const card = group.card;
+    const targetLabel = fromZone === "mainDeck" ? "Mover para side" : "Mover para main";
+    const image = card.imageUrl
+      ? `<img src="${escapeHtml(card.imageUrl)}" alt="${escapeHtml(card.name)}">`
+      : `<div class="sideboard-thumb">Sem img</div>`;
+    return `
+      <article class="sideboard-card" data-card-id="${escapeHtml(group.ids[0])}" data-side-zone="${fromZone}">
+        ${image}
+        <div>
+          <strong>${group.count}x ${escapeHtml(card.name)}</strong>
+          <span>${escapeHtml(card.type || "")}</span>
+        </div>
+        <button type="button" data-sideboard-move="${escapeHtml(group.ids[0])}" data-sideboard-from="${fromZone}">${targetLabel}</button>
+      </article>
+    `;
+  }
+
+  function validateSideboardClient(player) {
+    const mainCount = player?.mainDeckCount || 0;
+    const sideCount = player?.sideboardCount || 0;
+    if (mainCount < 60) return "Main deck precisa ter no minimo 60 cartas.";
+    if (sideCount > 15) return "Sideboard pode ter no maximo 15 cartas.";
+    return "";
+  }
+
+  function renderSideboardModal() {
+    const player = selfPlayer();
+    if (!player) return;
+    const filter = normalizeLookupName(el("sideboardSearchInput").value).toLowerCase();
+    const mainCards = (player.mainDeck || []).filter(card => !filter || normalizeLookupName(card.name).toLowerCase().includes(filter));
+    const sideCards = (player.sideboard || []).filter(card => !filter || normalizeLookupName(card.name).toLowerCase().includes(filter));
+    el("sideboardMainCount").textContent = String(player.mainDeckCount || 0);
+    el("sideboardSideCount").textContent = String(player.sideboardCount || 0);
+    el("sideboardMainList").innerHTML = groupedSideboardCards(mainCards).map(group => sideboardCardRow(group, "mainDeck")).join("") || `<div class="empty-zone">Nenhuma carta encontrada.</div>`;
+    el("sideboardSideList").innerHTML = groupedSideboardCards(sideCards).map(group => sideboardCardRow(group, "sideboard")).join("") || `<div class="empty-zone">Sideboard vazio.</div>`;
+    const warning = validateSideboardClient(player);
+    el("sideboardWarning").textContent = warning;
+    el("sideboardWarning").classList.toggle("hidden", !warning);
+  }
+
+  function updateSideboardTimer() {
+    const player = selfPlayer();
+    if (!player?.sideboarding) return;
+    const startedAt = Number(player.sideboardStartedAt || Date.now());
+    const remaining = Math.max(0, 180 - Math.floor((Date.now() - startedAt) / 1000));
+    const minutes = Math.floor(remaining / 60).toString().padStart(2, "0");
+    const seconds = Math.floor(remaining % 60).toString().padStart(2, "0");
+    el("sideboardTimer").textContent = `${minutes}:${seconds}`;
+    el("sideboardTimer").classList.toggle("warning", remaining <= 30);
+    if (remaining <= 0 && !sideboardAutoApplied) {
+      sideboardAutoApplied = true;
+      if (!validateSideboardClient(player)) sendAction({ type: "applySideboard", reason: "timeout" });
+    }
+  }
+
+  function openSideboardModal() {
+    sideboardAutoApplied = false;
+    el("sideboardModal").classList.remove("hidden");
+    renderSideboardModal();
+    clearInterval(sideboardInterval);
+    updateSideboardTimer();
+    sideboardInterval = setInterval(updateSideboardTimer, 1000);
+  }
+
+  function closeSideboardModal() {
+    clearInterval(sideboardInterval);
+    sideboardInterval = null;
+    el("sideboardModal").classList.add("hidden");
+  }
+
+  function applySideboard() {
+    const warning = validateSideboardClient(selfPlayer());
+    if (warning) {
+      el("sideboardWarning").textContent = warning;
+      el("sideboardWarning").classList.remove("hidden");
+      return;
+    }
+    sendAction({ type: "applySideboard" });
+    closeSideboardModal();
   }
 
   function renderSelectedCard(card) {
@@ -393,6 +510,13 @@
     renderPlayer(self, "self");
     renderPlayer(opponent, "opponent");
     renderLog();
+    el("goSideboardBtn").classList.toggle("hidden", !self?.canSideboard && !self?.sideboarding);
+    if (self?.sideboarding) {
+      if (el("sideboardModal").classList.contains("hidden")) openSideboardModal();
+      else renderSideboardModal();
+    } else if (!el("sideboardModal").classList.contains("hidden")) {
+      closeSideboardModal();
+    }
     if (activeCard?.id) {
       activeCard = getCardById(activeCard.id) || activeCard;
       renderSelectedCard(activeCard);
@@ -409,6 +533,7 @@
     const buttons = [];
     if (zone === "hand") {
       buttons.push(["Jogar para pilha", { type: "playToStack", cardId }]);
+      buttons.push(["Jogar no campo", { type: "moveCard", cardId, toZone: "battlefield" }]);
       buttons.push(["Descartar", { type: "moveCard", cardId, toZone: "graveyard" }]);
       buttons.push(["Exilar", { type: "moveCard", cardId, toZone: "exile" }]);
       buttons.push(["Topo do grimorio", { type: "moveCard", cardId, toZone: "library", position: "top" }]);
@@ -517,6 +642,7 @@
     el("concedeBtn").addEventListener("click", () => {
       if (confirm("Tem certeza que deseja conceder a partida?")) sendAction({ type: "concede" });
     });
+    el("goSideboardBtn").addEventListener("click", () => sendAction({ type: "beginSideboard" }));
     el("newGameBtn").addEventListener("click", () => {
       if (confirm("Iniciar nova partida e limpar zonas atuais?")) sendAction({ type: "newGame" });
     });
@@ -527,8 +653,15 @@
     setCardSize(localStorage.getItem("resenhaon-sim-card-size") || 100);
     const settings = previewSettings();
     el("previewEnabledInput").checked = settings.enabled;
+    el("previewPinnedInput").checked = localStorage.getItem("resenhaon-sim-preview-pinned") === "true";
     el("previewModeSelect").value = settings.mode;
     el("previewSizeSelect").value = settings.size;
+    const commandsOpen = localStorage.getItem("resenhaon-sim-commands-open") === "true";
+    el("commandRow").classList.toggle("collapsed", !commandsOpen);
+    el("toggleCommandsBtn").textContent = commandsOpen ? "Ocultar Comandos" : "Mostrar Comandos";
+    const sideCollapsed = localStorage.getItem("resenhaon-sim-side-collapsed") === "true";
+    document.querySelector(".sim-table-app").classList.toggle("side-collapsed", sideCollapsed);
+    el("toggleSidePanelBtn").textContent = sideCollapsed ? ">" : "<";
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
     el("confirmDeckBtn").addEventListener("click", () => {
       el("deckStatus").textContent = loadedDeck
@@ -552,11 +685,26 @@
     });
     el("cardSizeSlider").addEventListener("input", event => setCardSize(event.target.value));
     el("previewEnabledInput").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-enabled", event.target.checked ? "true" : "false"));
+    el("previewPinnedInput").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-pinned", event.target.checked ? "true" : "false"));
     el("previewModeSelect").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-mode", event.target.value));
     el("previewSizeSelect").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-size", event.target.value));
 
-    document.querySelectorAll("[data-life]").forEach(button => {
-      button.addEventListener("click", () => sendAction({ type: "life", value: Number(button.dataset.life || 0) }));
+    el("selfLife").addEventListener("click", event => {
+      sendAction({ type: "life", value: event.shiftKey ? 5 : 1 });
+    });
+    el("selfLife").addEventListener("contextmenu", event => {
+      event.preventDefault();
+      sendAction({ type: "life", value: event.shiftKey ? -5 : -1 });
+    });
+    el("toggleCommandsBtn").addEventListener("click", () => {
+      const open = el("commandRow").classList.toggle("collapsed") === false;
+      localStorage.setItem("resenhaon-sim-commands-open", open ? "true" : "false");
+      el("toggleCommandsBtn").textContent = open ? "Ocultar Comandos" : "Mostrar Comandos";
+    });
+    el("toggleSidePanelBtn").addEventListener("click", () => {
+      const collapsed = document.querySelector(".sim-table-app").classList.toggle("side-collapsed");
+      localStorage.setItem("resenhaon-sim-side-collapsed", collapsed ? "true" : "false");
+      el("toggleSidePanelBtn").textContent = collapsed ? ">" : "<";
     });
     document.querySelectorAll(".phase-strip button").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
@@ -570,6 +718,18 @@
     el("timerStartBtn").addEventListener("click", startTimer);
     el("timerPauseBtn").addEventListener("click", pauseTimer);
     el("timerResetBtn").addEventListener("click", resetTimer);
+    el("sideboardSearchInput").addEventListener("input", renderSideboardModal);
+    el("resetSideboardBtn").addEventListener("click", () => sendAction({ type: "resetSideboardChanges" }));
+    el("applySideboardBtn").addEventListener("click", applySideboard);
+    el("returnFromSideboardBtn").addEventListener("click", applySideboard);
+    el("sideboardModal").addEventListener("dblclick", event => {
+      const card = event.target.closest(".sideboard-card");
+      if (card) sendAction({ type: "sideboardMove", cardId: card.dataset.cardId, fromZone: card.dataset.sideZone });
+    });
+    el("sideboardModal").addEventListener("click", event => {
+      const button = event.target.closest("[data-sideboard-move]");
+      if (button) sendAction({ type: "sideboardMove", cardId: button.dataset.sideboardMove, fromZone: button.dataset.sideboardFrom });
+    });
     el("zoomModal").addEventListener("click", event => {
       if (event.target.id === "zoomModal") el("zoomModal").classList.add("hidden");
     });
@@ -577,6 +737,9 @@
       if (event.key === "Escape") {
         el("zoomModal").classList.add("hidden");
         el("privateModal").classList.add("hidden");
+        el("previewPinnedInput").checked = false;
+        localStorage.setItem("resenhaon-sim-preview-pinned", "false");
+        hideHoverPreview();
         closeCardMenu();
       }
     });
@@ -660,7 +823,7 @@
       }
     });
     document.body.addEventListener("mouseover", event => {
-      const cardEl = event.target.closest(".sim-card,.mini-card");
+      const cardEl = event.target.closest(".sim-card,.mini-card,.sideboard-card");
       if (!cardEl) return;
       showHoverPreview(getCardById(cardEl.dataset.cardId), event.clientX, event.clientY);
     });
@@ -671,7 +834,54 @@
       }
     });
     document.body.addEventListener("mouseout", event => {
-      if (event.target.closest(".sim-card,.mini-card")) hideHoverPreview();
+      if (localStorage.getItem("resenhaon-sim-preview-pinned") === "true") return;
+      if (event.target.closest(".sim-card,.mini-card,.sideboard-card")) hideHoverPreview();
+    });
+    document.body.addEventListener("pointerdown", event => {
+      const preview = event.target.closest("#hoverPreview");
+      if (preview && localStorage.getItem("resenhaon-sim-preview-pinned") === "true") {
+        previewDrag = { x: event.clientX - preview.offsetLeft, y: event.clientY - preview.offsetTop };
+        return;
+      }
+      const cardEl = event.target.closest(".battlefield .sim-card[data-owner='self']");
+      if (!cardEl) return;
+      const field = cardEl.closest(".battlefield");
+      const rect = field.getBoundingClientRect();
+      const cardRect = cardEl.getBoundingClientRect();
+      battlefieldDrag = {
+        cardId: cardEl.dataset.cardId,
+        field,
+        offsetX: event.clientX - cardRect.left,
+        offsetY: event.clientY - cardRect.top,
+        rect
+      };
+      cardEl.setPointerCapture?.(event.pointerId);
+    });
+    document.body.addEventListener("pointermove", event => {
+      if (previewDrag) {
+        el("hoverPreview").style.left = `${Math.max(8, Math.min(window.innerWidth - 120, event.clientX - previewDrag.x))}px`;
+        el("hoverPreview").style.top = `${Math.max(8, Math.min(window.innerHeight - 120, event.clientY - previewDrag.y))}px`;
+        return;
+      }
+      if (!battlefieldDrag) return;
+      const x = Math.max(0, event.clientX - battlefieldDrag.rect.left + battlefieldDrag.field.scrollLeft - battlefieldDrag.offsetX);
+      const y = Math.max(0, event.clientY - battlefieldDrag.rect.top + battlefieldDrag.field.scrollTop - battlefieldDrag.offsetY);
+      const cardEl = document.querySelector(`.battlefield .sim-card[data-card-id="${CSS.escape(battlefieldDrag.cardId)}"]`);
+      if (cardEl) {
+        cardEl.style.left = `${x}px`;
+        cardEl.style.top = `${y}px`;
+      }
+    });
+    document.body.addEventListener("pointerup", event => {
+      if (previewDrag) {
+        previewDrag = null;
+        return;
+      }
+      if (!battlefieldDrag) return;
+      const x = Math.max(0, event.clientX - battlefieldDrag.rect.left + battlefieldDrag.field.scrollLeft - battlefieldDrag.offsetX);
+      const y = Math.max(0, event.clientY - battlefieldDrag.rect.top + battlefieldDrag.field.scrollTop - battlefieldDrag.offsetY);
+      sendAction({ type: "cardPosition", cardId: battlefieldDrag.cardId, x, y });
+      battlefieldDrag = null;
     });
     document.body.addEventListener("dblclick", event => {
       const cardEl = event.target.closest(".sim-card,.mini-card");

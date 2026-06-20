@@ -699,6 +699,10 @@ function normalizeSimulatorCard(card = {}, playerId = "sim") {
     tapped: card.tapped === true,
     attacking: card.attacking === true,
     blocking: card.blocking === true,
+    position: card.position && typeof card.position === "object" ? {
+      x: Number(card.position.x || 0),
+      y: Number(card.position.y || 0)
+    } : null,
     counters: {
       p1p1: Number(card.counters?.p1p1 || 0),
       generic: Number(card.counters?.generic || 0),
@@ -725,12 +729,14 @@ function publicSimulatorCard(card = {}) {
 
 function createSimulatorPlayer(playerId, name) {
   const starterLibrary = createSimulatorDeck(playerId);
+  const starterMainDeck = starterLibrary.map(card => cloneSimulatorCard(card, playerId, "starter"));
   return {
     id: playerId,
     name: limitText(name, 80) || "Jogador",
     life: 20,
     currentPhase: "untap",
-    mainDeck: starterLibrary.map(card => ({ ...card, counters: { ...(card.counters || {}) } })),
+    originalMainDeck: starterMainDeck.map(card => cloneSimulatorCard(card, playerId, "original")),
+    mainDeck: starterMainDeck,
     library: starterLibrary,
     hand: [],
     battlefield: [],
@@ -739,6 +745,10 @@ function createSimulatorPlayer(playerId, name) {
     exile: [],
     commandZone: [],
     sideboard: [],
+    sideboarding: false,
+    sideboardStartedAt: 0,
+    sideboardSnapshot: null,
+    canSideboard: false,
     revealed: [],
     notes: "",
     counters: {}
@@ -792,10 +802,14 @@ function moveSimulatorCard(player, cardId, toZone, position = "top") {
   if (!found) return null;
 
   const [card] = player[found.zone].splice(found.index, 1);
+  if (card.token && toZone !== "battlefield") {
+    return { card, fromZone: found.zone, toZone: "removed", removed: true };
+  }
   if (toZone !== "battlefield") {
     card.tapped = false;
     card.attacking = false;
     card.blocking = false;
+    delete card.position;
   }
 
   if (toZone === "library" && position === "bottom") {
@@ -849,15 +863,19 @@ function resetSimulatorPlayerForNewGame(player) {
   player.commandZone = [];
   player.revealed = [];
   player.counters = {};
+  player.conceded = false;
+  player.canSideboard = false;
 }
 
 function loadSimulatorDeck(player, deck = {}) {
   const mainDeck = Array.isArray(deck.mainDeck) ? deck.mainDeck : [];
   const sideboard = Array.isArray(deck.sideboard) ? deck.sideboard : [];
   const normalizedMain = mainDeck.map(card => normalizeSimulatorCard(card, player.id));
+  const normalizedSideboard = sideboard.slice(0, 15).map(card => normalizeSimulatorCard(card, player.id));
 
   player.life = 20;
   player.currentPhase = "untap";
+  player.originalMainDeck = normalizedMain.map((card, index) => cloneSimulatorCard(card, player.id, `original-${index}`));
   player.mainDeck = normalizedMain;
   player.library = shuffleSimulatorCards(normalizedMain.map((card, index) => cloneSimulatorCard(card, player.id, `load-${index}`)));
   player.hand = [];
@@ -866,9 +884,58 @@ function loadSimulatorDeck(player, deck = {}) {
   player.graveyard = [];
   player.exile = [];
   player.commandZone = [];
-  player.sideboard = sideboard.slice(0, 15).map(card => normalizeSimulatorCard(card, player.id));
+  player.sideboard = normalizedSideboard;
+  player.sideboarding = false;
+  player.sideboardStartedAt = 0;
+  player.sideboardSnapshot = null;
+  player.canSideboard = false;
   player.revealed = [];
   player.counters = {};
+}
+
+function snapshotSimulatorSideboard(player) {
+  return {
+    mainDeck: (player.mainDeck || []).map((card, index) => cloneSimulatorCard(card, player.id, `side-main-${index}`)),
+    sideboard: (player.sideboard || []).map((card, index) => cloneSimulatorCard(card, player.id, `side-side-${index}`)),
+    total: (player.mainDeck || []).length + (player.sideboard || []).length
+  };
+}
+
+function resetSimulatorPlayerAfterSideboard(player) {
+  player.life = 20;
+  player.currentPhase = "untap";
+  player.library = shuffleSimulatorCards((player.mainDeck || []).map((card, index) => cloneSimulatorCard(card, player.id, `post-side-${index}`)));
+  player.hand = [];
+  player.battlefield = [];
+  player.stack = [];
+  player.graveyard = [];
+  player.exile = [];
+  player.commandZone = [];
+  player.revealed = [];
+  player.counters = {};
+  player.conceded = false;
+  player.canSideboard = false;
+}
+
+function moveSimulatorSideboardCard(player, cardId, fromZone) {
+  const from = fromZone === "sideboard" ? "sideboard" : "mainDeck";
+  const to = from === "sideboard" ? "mainDeck" : "sideboard";
+  if (!Array.isArray(player[from]) || !Array.isArray(player[to])) return false;
+  if (to === "sideboard" && player.sideboard.length >= 15) return false;
+  const index = player[from].findIndex(card => card.id === cardId);
+  if (index < 0) return false;
+  const [card] = player[from].splice(index, 1);
+  player[to].unshift(card);
+  return true;
+}
+
+function validateSimulatorSideboard(player) {
+  const snapshotTotal = player.sideboardSnapshot?.total || ((player.mainDeck || []).length + (player.sideboard || []).length);
+  const currentTotal = (player.mainDeck || []).length + (player.sideboard || []).length;
+  if ((player.mainDeck || []).length < 60) return "Main deck precisa ter no minimo 60 cartas.";
+  if ((player.sideboard || []).length > 15) return "Sideboard pode ter no maximo 15 cartas.";
+  if (currentTotal !== snapshotTotal) return "Main deck + sideboard precisa manter o total carregado.";
+  return "";
 }
 
 function applySimulatorAction(roomId, playerId, action = {}) {
@@ -905,12 +972,50 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     addSimulatorLog(simulator, `${playerName} fez mulligan e comprou ${drawn.length} cartas`);
   } else if (type === "newGame") {
     resetSimulatorPlayerForNewGame(player);
+    player.sideboarding = false;
+    player.sideboardStartedAt = 0;
+    player.sideboardSnapshot = null;
     simulator.currentPhase = "untap";
     simulator.activePlayerId = playerId;
+    simulator.gameEnded = false;
     addSimulatorLog(simulator, `${playerName} iniciou uma nova partida`);
   } else if (type === "concede") {
     player.conceded = true;
+    Object.values(simulator.players || {}).forEach(simPlayer => {
+      simPlayer.canSideboard = true;
+    });
+    simulator.gameEnded = true;
     addSimulatorLog(simulator, `${playerName} concedeu a partida`);
+  } else if (type === "beginSideboard") {
+    player.sideboarding = true;
+    player.canSideboard = false;
+    player.sideboardStartedAt = Date.now();
+    player.sideboardSnapshot = snapshotSimulatorSideboard(player);
+    addSimulatorLog(simulator, `${playerName} foi para o sideboard`);
+  } else if (type === "sideboardMove") {
+    if (!player.sideboarding) return;
+    if (moveSimulatorSideboardCard(player, cardId, action.fromZone)) {
+      addSimulatorLog(simulator, `${playerName} ajustou o sideboard`);
+    }
+  } else if (type === "resetSideboardChanges") {
+    if (!player.sideboarding || !player.sideboardSnapshot) return;
+    player.mainDeck = player.sideboardSnapshot.mainDeck.map((card, index) => cloneSimulatorCard(card, player.id, `reset-main-${index}`));
+    player.sideboard = player.sideboardSnapshot.sideboard.map((card, index) => cloneSimulatorCard(card, player.id, `reset-side-${index}`));
+    addSimulatorLog(simulator, `${playerName} resetou as alteracoes de sideboard`);
+  } else if (type === "applySideboard") {
+    if (!player.sideboarding) return;
+    const error = validateSimulatorSideboard(player);
+    if (error) {
+      addSimulatorLog(simulator, `${playerName}: ${error}`);
+      return;
+    }
+    resetSimulatorPlayerAfterSideboard(player);
+    player.sideboarding = false;
+    player.sideboardStartedAt = 0;
+    player.sideboardSnapshot = null;
+    simulator.currentPhase = "untap";
+    simulator.activePlayerId = playerId;
+    addSimulatorLog(simulator, action.reason === "timeout" ? "Tempo de sideboard encerrado." : `${playerName} finalizou sideboard e voltou para a partida.`);
   } else if (type === "draw") {
     const drawn = drawSimulatorCards(player, value || 1);
     addSimulatorLog(simulator, `${playerName} comprou ${drawn.length} carta${drawn.length === 1 ? "" : "s"}`);
@@ -937,10 +1042,13 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     addSimulatorLog(simulator, `${playerName} fez Scry ${amount}`);
   } else if (type === "moveCard") {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
-    if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
+    if (result?.removed) addSimulatorLog(simulator, "Token removido do jogo.");
+    else if (result) addSimulatorLog(simulator, `${playerName} moveu ${result.card.name} para ${result.toZone}`);
   } else if (type === "privateMoveCard") {
     const result = moveSimulatorCard(player, cardId, String(action.toZone || ""), action.position || "top");
-    if (result) {
+    if (result?.removed) {
+      addSimulatorLog(simulator, "Token removido do jogo.");
+    } else if (result) {
       const publicZones = new Set(["battlefield", "graveyard", "exile", "stack"]);
       const cardLabel = publicZones.has(result.toZone) ? ` ${result.card.name}` : " uma carta";
       addSimulatorLog(simulator, `${playerName} moveu${cardLabel} para ${result.toZone}`);
@@ -953,12 +1061,14 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     }
   } else if (type === "playToStack") {
     const result = moveSimulatorCard(player, cardId, "stack");
-    if (result) addSimulatorLog(simulator, `${playerName} colocou ${result.card.name} na pilha`);
+    if (result?.removed) addSimulatorLog(simulator, "Token removido do jogo.");
+    else if (result) addSimulatorLog(simulator, `${playerName} colocou ${result.card.name} na pilha`);
   } else if (type === "resolveStack") {
     const destination = String(action.toZone || "");
     if (!["battlefield", "graveyard", "exile", "hand"].includes(destination)) return;
     const result = moveSimulatorCard(player, cardId, destination);
-    if (result) addSimulatorLog(simulator, `${playerName} resolveu ${result.card.name} para ${destination}`);
+    if (result?.removed) addSimulatorLog(simulator, "Token removido do jogo.");
+    else if (result) addSimulatorLog(simulator, `${playerName} resolveu ${result.card.name} para ${destination}`);
   } else if (type === "toggleTap") {
     const found = findSimulatorCard(player, cardId);
     if (found?.card) {
@@ -1002,6 +1112,14 @@ function applySimulatorAction(roomId, playerId, action = {}) {
       const flag = action.flag === "blocking" ? "blocking" : "attacking";
       found.card[flag] = action.enabled === true;
       addSimulatorLog(simulator, `${playerName} ${found.card[flag] ? "marcou" : "removeu"} ${found.card.name} como ${flag === "attacking" ? "atacante" : "bloqueador"}`);
+    }
+  } else if (type === "cardPosition") {
+    const found = findSimulatorCard(player, cardId);
+    if (found?.card && found.zone === "battlefield") {
+      found.card.position = {
+        x: Math.max(0, Math.min(2000, Number(action.x) || 0)),
+        y: Math.max(0, Math.min(1200, Number(action.y) || 0))
+      };
     }
   } else if (type === "token") {
     const customToken = action.card ? normalizeSimulatorCard({ ...action.card, token: true }, playerId) : null;
@@ -1087,9 +1205,13 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
         libraryCount: player.library.length,
         handCount: player.hand.length,
         currentPhase: player.currentPhase || "untap",
+        sideboarding: player.sideboarding === true,
+        sideboardStartedAt: player.sideboardStartedAt || 0,
+        canSideboard: isSelf && player.canSideboard === true,
         hand: isSelf ? player.hand.map(publicSimulatorCard) : [],
         library: isSelf ? player.library.map(publicSimulatorCard) : [],
         mainDeckCount: player.mainDeck?.length || 0,
+        mainDeck: isSelf ? (player.mainDeck || []).map(publicSimulatorCard) : [],
         battlefield: player.battlefield.map(publicSimulatorCard),
         stack: player.stack.map(publicSimulatorCard),
         graveyard: player.graveyard.map(publicSimulatorCard),

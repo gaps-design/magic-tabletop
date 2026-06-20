@@ -18,8 +18,10 @@
       <div class="sim-header-actions">
         <button id="openGameModalBtn" type="button">Criar jogo</button>
         <button id="toggleToolsBtn" type="button">Dados/Marcadores</button>
+        <button id="goSideboardBtn" type="button" class="hidden">Ir para Sideboard</button>
         <button id="newGameBtn" type="button">Nova partida</button>
         <button id="concedeBtn" type="button">Conceder</button>
+        <button id="toggleSidePanelBtn" type="button" title="Recolher painel lateral">&lt;</button>
         <label class="card-size-control">Cartas <input id="cardSizeSlider" type="range" min="60" max="160" value="100"></label>
         <select id="layoutSizeSelect" aria-label="Tamanho da mesa">
           <option value="compact">Compacto</option>
@@ -59,6 +61,7 @@
           </div>
           <div class="revealed-header"><span>Reveladas do oponente</span><button data-command="clearRevealed" type="button">Fechar</button></div>
           <div id="opponentRevealed" class="revealed-row"></div>
+          <div id="opponentSideboardNotice" class="sideboard-notice hidden">Oponente esta fazendo sideboard.</div>
         </div>
 
         <div class="phase-strip" aria-label="Fases do jogador">
@@ -82,13 +85,7 @@
               <button id="libraryButton" class="deck-pile card-back" type="button"><span id="libraryCount">0</span></button>
               <div class="zone-life self-life">
                 <span>Vida</span>
-                <div class="life-control">
-                  <button data-life="-5">-5</button>
-                  <button data-life="-1">-1</button>
-                  <strong id="selfLife">20</strong>
-                  <button data-life="1">+1</button>
-                  <button data-life="5">+5</button>
-                </div>
+                <strong id="selfLife" class="life-click-target" title="Esquerdo = +1 | Direito = -1 | Shift = +/-5">20</strong>
               </div>
               <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="graveyard" type="button">Ver</button><div id="graveyardZone" class="small-zone"></div></div>
               <div class="zone-pile"><span>Exilio</span><button data-view-zone="exile" type="button">Ver</button><div id="exileZone" class="small-zone"></div></div>
@@ -117,9 +114,10 @@
           <div class="hand-title">
             <span>Sua mao</span>
             <strong id="handCount">0 cartas</strong>
+            <button id="toggleCommandsBtn" type="button">Mostrar Comandos</button>
           </div>
           <div id="handZone" class="hand-zone"></div>
-          <div class="command-row" id="commandRow">
+          <div class="command-row collapsed" id="commandRow">
             <button data-command="draw">Comprar 1</button>
             <button data-command="drawX">Comprar X</button>
             <button data-command="openingHand">Mao inicial</button>
@@ -161,6 +159,7 @@
           <button id="openTokenModalBtn" type="button">Banco de tokens</button>
           <div class="preview-settings">
             <label><input id="previewEnabledInput" type="checkbox" checked> Preview expandido</label>
+            <label><input id="previewPinnedInput" type="checkbox"> Manter preview aberto</label>
             <select id="previewModeSelect">
               <option value="both">Imagem + texto</option>
               <option value="image">Somente imagem</option>
@@ -233,6 +232,34 @@
       <h2>Banco de tokens</h2>
       <p>Crie tokens comuns direto no campo.</p>
       <div id="tokenBank" class="token-bank"></div>
+    </div>
+  </div>
+  <div id="sideboardModal" class="modal-backdrop hidden">
+    <div class="sideboard-modal">
+      <header>
+        <div>
+          <h2>Sideboard</h2>
+          <p>Ajuste seu main deck e sideboard antes da proxima partida.</p>
+        </div>
+        <div id="sideboardTimer" class="sideboard-timer">03:00</div>
+      </header>
+      <div id="sideboardWarning" class="sideboard-warning hidden"></div>
+      <label class="sideboard-filter">Buscar carta <input id="sideboardSearchInput" type="search" placeholder="Nome da carta"></label>
+      <div class="sideboard-grid">
+        <section>
+          <h3>Main deck <span id="sideboardMainCount">0</span></h3>
+          <div id="sideboardMainList" class="sideboard-list"></div>
+        </section>
+        <section>
+          <h3>Sideboard <span id="sideboardSideCount">0</span></h3>
+          <div id="sideboardSideList" class="sideboard-list"></div>
+        </section>
+      </div>
+      <footer>
+        <button id="resetSideboardBtn" type="button">Resetar alteracoes</button>
+        <button id="applySideboardBtn" type="button">Aplicar sideboard</button>
+        <button id="returnFromSideboardBtn" type="button">Voltar a partida</button>
+      </footer>
     </div>
   </div>
 
