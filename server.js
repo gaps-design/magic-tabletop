@@ -668,6 +668,7 @@ function createDefaultSimulator() {
     enabled: true,
     currentPhase: "main1",
     activePlayerId: null,
+    priorityPlayerId: null,
     players: {},
     log: []
   };
@@ -693,8 +694,11 @@ function normalizeSimulatorCard(card = {}, playerId = "sim") {
     cost: card.cost || "",
     imageUrl: limitText(card.imageUrl, 500),
     oracleText: limitText(card.oracleText, 650),
+    power: limitText(card.power || "", 20),
+    toughness: limitText(card.toughness || "", 20),
     colors: Array.isArray(card.colors) ? card.colors.slice(0, 5).map(color => limitText(color, 4)) : [],
     scryfallId: limitText(card.scryfallId || card.oracleId || "", 120),
+    missing: card.missing === true,
     token: card.token === true,
     tapped: card.tapped === true,
     attacking: card.attacking === true,
@@ -770,6 +774,9 @@ function ensureSimulatorPlayer(roomId, playerId, name) {
   if (!simulator.activePlayerId) {
     simulator.activePlayerId = safePlayerId;
   }
+  if (!simulator.priorityPlayerId) {
+    simulator.priorityPlayerId = simulator.activePlayerId;
+  }
 
   return simulator.players[safePlayerId];
 }
@@ -833,6 +840,30 @@ function drawSimulatorCards(player, amount = 1) {
   }
 
   return drawn;
+}
+
+function moveTopSimulatorCards(player, toZone, amount = 1) {
+  const moved = [];
+  const count = Math.max(1, Math.min(60, Number(amount) || 1));
+  if (!["battlefield", "stack", "graveyard", "exile", "revealed", "library"].includes(toZone)) return moved;
+
+  for (let i = 0; i < count; i++) {
+    const card = player.library.shift();
+    if (!card) break;
+    if (toZone === "library") player.library.push(card);
+    else player[toZone].unshift(card);
+    moved.push(card);
+  }
+
+  return moved;
+}
+
+function moveRevealedToBottomRandom(player) {
+  const revealed = Array.isArray(player.revealed) ? player.revealed : [];
+  if (!revealed.length) return 0;
+  player.library.push(...shuffleSimulatorCards(revealed));
+  player.revealed = [];
+  return revealed.length;
 }
 
 function cloneSimulatorCard(card = {}, playerId = "sim", suffix = "") {
@@ -977,6 +1008,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     player.sideboardSnapshot = null;
     simulator.currentPhase = "untap";
     simulator.activePlayerId = playerId;
+    simulator.priorityPlayerId = playerId;
     simulator.gameEnded = false;
     addSimulatorLog(simulator, `${playerName} iniciou uma nova partida`);
   } else if (type === "concede") {
@@ -1015,6 +1047,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     player.sideboardSnapshot = null;
     simulator.currentPhase = "untap";
     simulator.activePlayerId = playerId;
+    simulator.priorityPlayerId = playerId;
     addSimulatorLog(simulator, action.reason === "timeout" ? "Tempo de sideboard encerrado." : `${playerName} finalizou sideboard e voltou para a partida.`);
   } else if (type === "draw") {
     const drawn = drawSimulatorCards(player, value || 1);
@@ -1023,20 +1056,34 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     player.library = shuffleSimulatorCards(player.library);
     addSimulatorLog(simulator, `${playerName} embaralhou o grimorio`);
   } else if (type === "revealTop") {
-    const top = player.library[0];
+    const [top] = moveTopSimulatorCards(player, "revealed", 1);
     addSimulatorLog(simulator, top ? `${playerName} revelou o topo: ${top.name}` : `${playerName} tentou revelar o topo, mas o grimorio esta vazio`);
+  } else if (type === "revealX") {
+    const amount = Math.max(1, Math.min(20, Number(value) || 1));
+    const moved = moveTopSimulatorCards(player, "revealed", amount);
+    addSimulatorLog(simulator, `${playerName} revelou ${moved.length} carta${moved.length === 1 ? "" : "s"} do topo`);
   } else if (type === "topToGraveyard") {
-    const card = player.library.shift();
-    if (card) player.graveyard.unshift(card);
+    const [card] = moveTopSimulatorCards(player, "graveyard", 1);
     addSimulatorLog(simulator, card ? `${playerName} colocou ${card.name} no cemiterio` : `${playerName} tentou mover o topo para o cemiterio`);
   } else if (type === "topToExile") {
-    const card = player.library.shift();
-    if (card) player.exile.unshift(card);
+    const [card] = moveTopSimulatorCards(player, "exile", 1);
     addSimulatorLog(simulator, card ? `${playerName} exilou ${card.name} do topo` : `${playerName} tentou exilar o topo`);
+  } else if (type === "topXToExile") {
+    const amount = Math.max(1, Math.min(60, Number(value) || 1));
+    const moved = moveTopSimulatorCards(player, "exile", amount);
+    addSimulatorLog(simulator, `${playerName} exilou ${moved.length} carta${moved.length === 1 ? "" : "s"} do topo`);
+  } else if (type === "topToBattlefield") {
+    const [card] = moveTopSimulatorCards(player, "battlefield", 1);
+    addSimulatorLog(simulator, card ? `${playerName} colocou ${card.name} do topo no campo` : `${playerName} tentou mover o topo para o campo`);
+  } else if (type === "topToStack") {
+    const [card] = moveTopSimulatorCards(player, "stack", 1);
+    addSimulatorLog(simulator, card ? `${playerName} colocou ${card.name} do topo na pilha` : `${playerName} tentou mover o topo para a pilha`);
   } else if (type === "topToBottom") {
-    const card = player.library.shift();
-    if (card) player.library.push(card);
+    const [card] = moveTopSimulatorCards(player, "library", 1);
     addSimulatorLog(simulator, card ? `${playerName} colocou o topo no fundo` : `${playerName} tentou colocar o topo no fundo`);
+  } else if (type === "revealedToBottomRandom") {
+    const moved = moveRevealedToBottomRandom(player);
+    addSimulatorLog(simulator, `${playerName} colocou ${moved} carta${moved === 1 ? "" : "s"} revelada${moved === 1 ? "" : "s"} no fundo aleatorio`);
   } else if (type === "scry") {
     const amount = Math.max(1, Math.min(10, Number(value) || 1));
     addSimulatorLog(simulator, `${playerName} fez Scry ${amount}`);
@@ -1142,6 +1189,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     if (!SIMULATOR_PHASES.has(phase)) return;
     simulator.currentPhase = phase;
     simulator.activePlayerId = playerId;
+    simulator.priorityPlayerId = playerId;
     player.currentPhase = phase;
     if (phase === "untap") {
       player.battlefield.forEach(card => {
@@ -1156,7 +1204,16 @@ function applySimulatorAction(roomId, playerId, action = {}) {
         card.attacking = false;
         card.blocking = false;
       });
-      addSimulatorLog(simulator, `${playerName} foi para Cleanup`);
+      const nextPlayer = Object.values(simulator.players || {}).find(simPlayer => simPlayer.id !== playerId);
+      if (nextPlayer) {
+        nextPlayer.currentPhase = "untap";
+        simulator.currentPhase = "untap";
+        simulator.activePlayerId = nextPlayer.id;
+        simulator.priorityPlayerId = nextPlayer.id;
+        addSimulatorLog(simulator, `${playerName} foi para Cleanup. ${nextPlayer.name} inicia o turno em Untap`);
+      } else {
+        addSimulatorLog(simulator, `${playerName} foi para Cleanup`);
+      }
     } else {
       addSimulatorLog(simulator, `${playerName} foi para ${phase}`);
     }
@@ -1195,6 +1252,7 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
     enabled: simulator.enabled === true,
     currentPhase: simulator.currentPhase || "main1",
     activePlayerId: simulator.activePlayerId || null,
+    priorityPlayerId: simulator.priorityPlayerId || simulator.activePlayerId || null,
     log: simulator.log || [],
     players: Object.fromEntries(Object.entries(simulator.players || {}).map(([playerId, player]) => {
       const isSelf = playerId === viewerPlayerId;
