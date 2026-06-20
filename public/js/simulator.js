@@ -326,6 +326,24 @@
     render();
   }
 
+  function syncLocalViewWithActivePlayer() {
+    if (!localTwoPlayerMode) return;
+    const activeId = state?.activePlayerId;
+    if (!activeId || activeId === playerId) return;
+    if (activeId === localPlayerIds.p1 || activeId === localPlayerIds.p2) {
+      setLocalView(activeId);
+    }
+  }
+
+  function keyboardShortcutsBlocked(event) {
+    const target = event.target;
+    const tag = String(target?.tagName || "").toLowerCase();
+    if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return true;
+    if (document.querySelector(".modal-backdrop:not(.hidden):not(#gameModal)")) return true;
+    if (!el("gameModal").classList.contains("hidden") && el("gameModal").classList.contains("active")) return true;
+    return false;
+  }
+
   function setSimulatorAudioStatus(message, kind = "") {
     const status = el("simAudioStatus");
     if (!status) return;
@@ -1278,6 +1296,20 @@
         localStorage.setItem("resenhaon-sim-preview-pinned", "false");
         hideHoverPreview();
         closeCardMenu();
+        return;
+      }
+      if (keyboardShortcutsBlocked(event)) return;
+      const opponent = opponentPlayer();
+      const lifeShortcutMap = {
+        ArrowUp: () => sendAction({ type: "life", value: 1 }),
+        ArrowDown: () => sendAction({ type: "life", value: -1 }),
+        ArrowRight: () => opponent && sendActionFor(opponent.id, { type: "life", value: 1 }),
+        ArrowLeft: () => opponent && sendActionFor(opponent.id, { type: "life", value: -1 })
+      };
+      const action = lifeShortcutMap[event.key];
+      if (action) {
+        event.preventDefault();
+        action();
       }
     });
 
@@ -1559,6 +1591,7 @@
   socket.on("connect", () => {});
   socket.on("simulator-state", payload => {
     state = payload;
+    syncLocalViewWithActivePlayer();
     render();
   });
   socket.on("simulator-audio-peers", async ({ peers = [] } = {}) => {
