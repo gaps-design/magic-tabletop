@@ -37,10 +37,11 @@
   let touchTimer = null;
   let timerRemaining = Number(localStorage.getItem("resenhaon-sim-timer-remaining") || 3000);
   let timerInterval = null;
-  let sideboardInterval = null;
-  let sideboardAutoApplied = false;
   let battlefieldDrag = null;
   let previewDrag = null;
+  let arrowDraft = null;
+  let arrowCounter = 0;
+  let handResize = null;
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -359,9 +360,10 @@
     if (isSelf) {
       el("selfName").textContent = player.name;
       el("selfLife").textContent = String(player.life ?? 20);
-      el("libraryCount").textContent = String(player.libraryCount || 0);
+      el("libraryCount").textContent = `${player.libraryCount || 0} cartas`;
       el("handCount").textContent = `${player.handCount || 0} cartas`;
-      el("selfPhaseLabel").textContent = phases[player.currentPhase] || player.currentPhase || "Untap";
+      el("graveyardCount").textContent = String(player.graveyard?.length || 0);
+      el("exileCount").textContent = String(player.exile?.length || 0);
       renderCards(el("battlefieldZone"), player.battlefield || [], "battlefield", "self");
       renderCards(el("selfStack"), player.stack || [], "stack", "self");
       renderCards(el("handZone"), player.hand || [], "hand", "self");
@@ -371,8 +373,10 @@
     } else {
       el("opponentName").textContent = player.name;
       el("opponentLife").textContent = String(player.life ?? 20);
-      el("opponentLibraryCount").textContent = String(player.libraryCount || 0);
+      el("opponentLibraryCount").textContent = `${player.libraryCount || 0} cartas`;
       el("opponentHandLabel").textContent = `${player.handCount || 0} cartas na mao`;
+      el("opponentGraveyardCount").textContent = String(player.graveyard?.length || 0);
+      el("opponentExileCount").textContent = String(player.exile?.length || 0);
       renderHandBack(el("opponentHand"), player.handCount || 0);
       renderCards(el("opponentBattlefield"), player.battlefield || [], "battlefield", "opponent");
       renderCards(el("opponentStack"), player.stack || [], "stack", "opponent");
@@ -436,33 +440,12 @@
     el("sideboardWarning").classList.toggle("hidden", !warning);
   }
 
-  function updateSideboardTimer() {
-    const player = selfPlayer();
-    if (!player?.sideboarding) return;
-    const startedAt = Number(player.sideboardStartedAt || Date.now());
-    const remaining = Math.max(0, 180 - Math.floor((Date.now() - startedAt) / 1000));
-    const minutes = Math.floor(remaining / 60).toString().padStart(2, "0");
-    const seconds = Math.floor(remaining % 60).toString().padStart(2, "0");
-    el("sideboardTimer").textContent = `${minutes}:${seconds}`;
-    el("sideboardTimer").classList.toggle("warning", remaining <= 30);
-    if (remaining <= 0 && !sideboardAutoApplied) {
-      sideboardAutoApplied = true;
-      if (!validateSideboardClient(player)) sendAction({ type: "applySideboard", reason: "timeout" });
-    }
-  }
-
   function openSideboardModal() {
-    sideboardAutoApplied = false;
     el("sideboardModal").classList.remove("hidden");
     renderSideboardModal();
-    clearInterval(sideboardInterval);
-    updateSideboardTimer();
-    sideboardInterval = setInterval(updateSideboardTimer, 1000);
   }
 
   function closeSideboardModal() {
-    clearInterval(sideboardInterval);
-    sideboardInterval = null;
     el("sideboardModal").classList.add("hidden");
   }
 
@@ -475,6 +458,48 @@
     }
     sendAction({ type: "applySideboard" });
     closeSideboardModal();
+  }
+
+  function tablePoint(clientX, clientY) {
+    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function beginArrowFromActiveCard() {
+    if (!activeCard?.id) {
+      alert("Selecione uma carta antes de criar a seta.");
+      return;
+    }
+    const cardEl = document.querySelector(`.sim-card[data-card-id="${CSS.escape(activeCard.id)}"]`);
+    if (!cardEl) return;
+    const cardRect = cardEl.getBoundingClientRect();
+    const start = tablePoint(cardRect.left + cardRect.width / 2, cardRect.top + cardRect.height / 2);
+    const id = `sim-arrow-${++arrowCounter}`;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("id", id);
+    line.setAttribute("x1", String(start.x));
+    line.setAttribute("y1", String(start.y));
+    line.setAttribute("x2", String(start.x + 40));
+    line.setAttribute("y2", String(start.y));
+    el("arrowLayer").appendChild(line);
+    arrowDraft = { id };
+  }
+
+  function updateArrowDraft(clientX, clientY) {
+    const line = document.getElementById(arrowDraft.id);
+    if (!line) return;
+    const point = tablePoint(clientX, clientY);
+    line.setAttribute("x2", String(point.x));
+    line.setAttribute("y2", String(point.y));
+  }
+
+  function finishArrowDraft(clientX, clientY) {
+    updateArrowDraft(clientX, clientY);
+    arrowDraft = null;
+  }
+
+  function clearArrows() {
+    el("arrowLayer").querySelectorAll("line").forEach(line => line.remove());
   }
 
   function renderSelectedCard(card) {
@@ -662,6 +687,11 @@
     const sideCollapsed = localStorage.getItem("resenhaon-sim-side-collapsed") === "true";
     document.querySelector(".sim-table-app").classList.toggle("side-collapsed", sideCollapsed);
     el("toggleSidePanelBtn").textContent = sideCollapsed ? ">" : "<";
+    const handExpanded = localStorage.getItem("resenhaon-sim-hand-expanded") === "true";
+    document.querySelector(".hand-dock").classList.toggle("hand-expanded", handExpanded);
+    el("expandHandBtn").textContent = handExpanded ? "Recolher Mao" : "Expandir Mao";
+    const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height");
+    if (savedHandHeight) document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(130, Math.min(340, Number(savedHandHeight) || 168))}px`);
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
     el("confirmDeckBtn").addEventListener("click", () => {
       el("deckStatus").textContent = loadedDeck
@@ -706,6 +736,13 @@
       localStorage.setItem("resenhaon-sim-side-collapsed", collapsed ? "true" : "false");
       el("toggleSidePanelBtn").textContent = collapsed ? ">" : "<";
     });
+    el("expandHandBtn").addEventListener("click", () => {
+      const expanded = document.querySelector(".hand-dock").classList.toggle("hand-expanded");
+      localStorage.setItem("resenhaon-sim-hand-expanded", expanded ? "true" : "false");
+      el("expandHandBtn").textContent = expanded ? "Recolher Mao" : "Expandir Mao";
+    });
+    el("createArrowBtn").addEventListener("click", beginArrowFromActiveCard);
+    el("clearArrowsBtn").addEventListener("click", clearArrows);
     document.querySelectorAll(".phase-strip button").forEach(button => {
       button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
     });
@@ -838,6 +875,7 @@
       if (event.target.closest(".sim-card,.mini-card,.sideboard-card")) hideHoverPreview();
     });
     document.body.addEventListener("pointerdown", event => {
+      if (arrowDraft) return;
       const preview = event.target.closest("#hoverPreview");
       if (preview && localStorage.getItem("resenhaon-sim-preview-pinned") === "true") {
         previewDrag = { x: event.clientX - preview.offsetLeft, y: event.clientY - preview.offsetTop };
@@ -858,6 +896,15 @@
       cardEl.setPointerCapture?.(event.pointerId);
     });
     document.body.addEventListener("pointermove", event => {
+      if (arrowDraft) {
+        updateArrowDraft(event.clientX, event.clientY);
+        return;
+      }
+      if (handResize) {
+        const nextHeight = Math.max(130, Math.min(340, handResize.startHeight - (event.clientY - handResize.startY)));
+        document.documentElement.style.setProperty("--sim-hand-height", `${nextHeight}px`);
+        return;
+      }
       if (previewDrag) {
         el("hoverPreview").style.left = `${Math.max(8, Math.min(window.innerWidth - 120, event.clientX - previewDrag.x))}px`;
         el("hoverPreview").style.top = `${Math.max(8, Math.min(window.innerHeight - 120, event.clientY - previewDrag.y))}px`;
@@ -873,6 +920,16 @@
       }
     });
     document.body.addEventListener("pointerup", event => {
+      if (arrowDraft) {
+        finishArrowDraft(event.clientX, event.clientY);
+        return;
+      }
+      if (handResize) {
+        const value = getComputedStyle(document.documentElement).getPropertyValue("--sim-hand-height").replace("px", "").trim();
+        localStorage.setItem("resenhaon-sim-hand-height", value || "168");
+        handResize = null;
+        return;
+      }
       if (previewDrag) {
         previewDrag = null;
         return;
@@ -883,9 +940,21 @@
       sendAction({ type: "cardPosition", cardId: battlefieldDrag.cardId, x, y });
       battlefieldDrag = null;
     });
+    el("handResizeHandle").addEventListener("pointerdown", event => {
+      handResize = {
+        startY: event.clientY,
+        startHeight: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sim-hand-height")) || 168
+      };
+    });
     document.body.addEventListener("dblclick", event => {
       const cardEl = event.target.closest(".sim-card,.mini-card");
-      if (cardEl) openZoom(getCardById(cardEl.dataset.cardId));
+      if (!cardEl) return;
+      if (cardEl.dataset.owner === "self" && ["battlefield", "hand", "stack"].includes(cardEl.dataset.zone)) {
+        sendAction({ type: "toggleTap", cardId: cardEl.dataset.cardId });
+        closeCardMenu();
+      } else {
+        openZoom(getCardById(cardEl.dataset.cardId));
+      }
     });
     document.body.addEventListener("touchstart", event => {
       const cardEl = event.target.closest(".sim-card,.mini-card");

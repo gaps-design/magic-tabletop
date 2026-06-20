@@ -19,6 +19,8 @@
         <button id="openGameModalBtn" type="button">Criar jogo</button>
         <button id="toggleToolsBtn" type="button">Dados/Marcadores</button>
         <button id="goSideboardBtn" type="button" class="hidden">Ir para Sideboard</button>
+        <button id="createArrowBtn" type="button">Criar seta</button>
+        <button id="clearArrowsBtn" type="button">Limpar setas</button>
         <button id="newGameBtn" type="button">Nova partida</button>
         <button id="concedeBtn" type="button">Conceder</button>
         <button id="toggleSidePanelBtn" type="button" title="Recolher painel lateral">&lt;</button>
@@ -34,12 +36,15 @@
 
     <main class="cockatrice-shell">
       <section class="virtual-table">
+        <svg id="arrowLayer" class="arrow-layer" aria-hidden="true">
+          <defs>
+            <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+              <path d="M2,2 L10,6 L2,10 Z"></path>
+            </marker>
+          </defs>
+        </svg>
         <div class="player-lane opponent-lane" id="opponentLane">
           <div class="lane-meta">
-            <div>
-              <span>Oponente</span>
-              <strong id="opponentName">Aguardando oponente</strong>
-            </div>
             <div class="opponent-hand-summary">
               <span>Mao do oponente</span>
               <strong id="opponentHandLabel">0 cartas na mao</strong>
@@ -48,10 +53,15 @@
           </div>
           <div class="lane-board">
             <div class="zone-column">
-              <button class="deck-pile card-back" data-zone-click="opponent-library"><span id="opponentLibraryCount">0</span></button>
+              <strong id="opponentName" class="zone-player-name">Aguardando oponente</strong>
+              <div class="deck-wrap">
+                <span>Deck</span>
+                <button class="deck-pile card-back" data-zone-click="opponent-library"></button>
+                <strong id="opponentLibraryCount">0 cartas</strong>
+              </div>
               <div class="zone-life opponent-life"><span>Vida</span><strong id="opponentLife">20</strong></div>
-              <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="opponent-graveyard" type="button">Ver</button><div id="opponentGraveyard" class="small-zone"></div></div>
-              <div class="zone-pile"><span>Exilio</span><button data-view-zone="opponent-exile" type="button">Ver</button><div id="opponentExile" class="small-zone"></div></div>
+              <div class="zone-pile"><div class="zone-pile-head"><span>Cemiterio (<b id="opponentGraveyardCount">0</b>)</span><button data-view-zone="opponent-graveyard" type="button">Ver</button></div><div id="opponentGraveyard" class="small-zone"></div></div>
+              <div class="zone-pile"><div class="zone-pile-head"><span>Exilio (<b id="opponentExileCount">0</b>)</span><button data-view-zone="opponent-exile" type="button">Ver</button></div><div id="opponentExile" class="small-zone"></div></div>
             </div>
             <div class="stack-zone">
               <span>PILHA</span>
@@ -82,13 +92,18 @@
         <div class="player-lane self-lane" id="selfLane">
           <div class="lane-board">
             <div class="zone-column">
-              <button id="libraryButton" class="deck-pile card-back" type="button"><span id="libraryCount">0</span></button>
+              <strong id="selfName" class="zone-player-name">Jogador</strong>
+              <div class="deck-wrap">
+                <span>Deck</span>
+                <button id="libraryButton" class="deck-pile card-back" type="button"></button>
+                <strong id="libraryCount">0 cartas</strong>
+              </div>
               <div class="zone-life self-life">
                 <span>Vida</span>
                 <strong id="selfLife" class="life-click-target" title="Esquerdo = +1 | Direito = -1 | Shift = +/-5">20</strong>
               </div>
-              <div class="zone-pile"><span>Cemiterio</span><button data-view-zone="graveyard" type="button">Ver</button><div id="graveyardZone" class="small-zone"></div></div>
-              <div class="zone-pile"><span>Exilio</span><button data-view-zone="exile" type="button">Ver</button><div id="exileZone" class="small-zone"></div></div>
+              <div class="zone-pile"><div class="zone-pile-head"><span>Cemiterio (<b id="graveyardCount">0</b>)</span><button data-view-zone="graveyard" type="button">Ver</button></div><div id="graveyardZone" class="small-zone"></div></div>
+              <div class="zone-pile"><div class="zone-pile-head"><span>Exilio (<b id="exileCount">0</b>)</span><button data-view-zone="exile" type="button">Ver</button></div><div id="exileZone" class="small-zone"></div></div>
             </div>
             <div class="stack-zone">
               <span>PILHA</span>
@@ -96,24 +111,16 @@
             </div>
             <div id="battlefieldZone" class="battlefield"></div>
           </div>
-          <div class="lane-meta">
-            <div>
-              <span>Jogador</span>
-              <strong id="selfName">Jogador</strong>
-            </div>
-            <div class="phase-status">
-              <span>Sua fase</span>
-              <strong id="selfPhaseLabel">Untap</strong>
-            </div>
-          </div>
           <div class="revealed-header"><span>Suas reveladas</span><button data-command="clearRevealed" type="button">Fechar</button></div>
           <div id="selfRevealed" class="revealed-row"></div>
         </div>
 
+        <div id="handResizeHandle" class="hand-resize-handle" title="Arraste para ajustar a mao"></div>
         <section class="hand-dock">
           <div class="hand-title">
             <span>Sua mao</span>
             <strong id="handCount">0 cartas</strong>
+            <button id="expandHandBtn" type="button">Expandir Mao</button>
             <button id="toggleCommandsBtn" type="button">Mostrar Comandos</button>
           </div>
           <div id="handZone" class="hand-zone"></div>
@@ -239,9 +246,8 @@
       <header>
         <div>
           <h2>Sideboard</h2>
-          <p>Ajuste seu main deck e sideboard antes da proxima partida.</p>
+          <p>Ajuste seu main deck e sideboard. Sem cronometro: voce decide quando voltar.</p>
         </div>
-        <div id="sideboardTimer" class="sideboard-timer">03:00</div>
       </header>
       <div id="sideboardWarning" class="sideboard-warning hidden"></div>
       <label class="sideboard-filter">Buscar carta <input id="sideboardSearchInput" type="search" placeholder="Nome da carta"></label>
@@ -258,7 +264,7 @@
       <footer>
         <button id="resetSideboardBtn" type="button">Resetar alteracoes</button>
         <button id="applySideboardBtn" type="button">Aplicar sideboard</button>
-        <button id="returnFromSideboardBtn" type="button">Voltar a partida</button>
+        <button id="returnFromSideboardBtn" type="button">Iniciar Proximo Game</button>
       </footer>
     </div>
   </div>
