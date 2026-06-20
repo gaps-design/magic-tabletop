@@ -93,6 +93,28 @@
     end: "End",
     cleanup: "Cleanup"
   };
+  const phaseMeta = {
+    untap: ["⟳", "Untap"],
+    upkeep: ["⏱", "Upkeep"],
+    draw: ["▣", "Draw"],
+    main1: ["M1", "Main 1"],
+    beginCombat: ["⚔", "Combat"],
+    attackers: ["➹", "Attack"],
+    blockers: ["⬟", "Block"],
+    damage: ["✹", "Damage"],
+    endCombat: ["⚑", "End C."],
+    main2: ["M2", "Main 2"],
+    end: ["☾", "End"],
+    cleanup: ["⌁", "Cleanup"]
+  };
+  const manaColors = [
+    ["white", "⚪", "Branco"],
+    ["blue", "🔵", "Azul"],
+    ["black", "⚫", "Preto"],
+    ["red", "🔴", "Vermelho"],
+    ["green", "🟢", "Verde"],
+    ["colorless", "◇", "Incolor"]
+  ];
 
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, char => ({
@@ -583,6 +605,10 @@
     return badges.join("");
   }
 
+  function isLandCard(card = {}) {
+    return /\b(land|terreno)\b/i.test(`${card.type || ""} ${card.name || ""}`);
+  }
+
   function powerToughnessLabel(card = {}) {
     if (card.power || card.toughness) return `${card.power || "0"}/${card.toughness || "0"}`;
     const match = String(card.type || "").match(/(?:^|\s)(\d+|\*)\/(\d+|\*)(?:\s|$)/);
@@ -608,11 +634,13 @@
     const modifiedPt = modifiedPowerToughnessLabel(card);
     const isSelected = selectedCardIds.has(card.id);
     const showCardOverlays = zone !== "hand";
+    const land = zone === "battlefield" && isLandCard(card);
+    const defaultY = land ? 210 + (Math.floor(index / 9) * 112) : (Math.floor(index / 9) * 112);
     const position = zone === "battlefield"
-      ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? (Math.floor(index / 9) * 112))}px"`
+      ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? defaultY)}px"`
       : image;
     return `
-      <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${card.missing ? "missing-card" : ""} ${isSelected ? "multi-selected" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
+      <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${land ? "land-card" : ""} ${card.missing ? "missing-card" : ""} ${isSelected ? "multi-selected" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
         ${position} data-card-id="${escapeHtml(card.id)}" data-zone="${zone}" data-owner="${owner}">
         ${showCardOverlays ? `<div class="card-text">
           ${card.token ? `<span class="token-tag">TOKEN</span>` : ""}
@@ -640,6 +668,13 @@
     container.innerHTML = cards?.length
       ? cards.map(card => miniCardHtml(card, zone, owner)).join("")
       : "";
+  }
+
+  function renderManaPool(container, pool = {}, owner = "self") {
+    container.innerHTML = manaColors.map(([color, symbol]) => {
+      const count = Number(pool?.[color] || 0);
+      return `<button type="button" class="mana-symbol ${count ? "has-mana" : ""}" data-mana-color="${color}" data-owner="${owner}" ${count ? "" : "disabled"}>${symbol}<b>${count}</b></button>`;
+    }).join("");
   }
 
   function renderHandBack(container, count) {
@@ -706,6 +741,7 @@
     if (isSelf) {
       el("selfName").textContent = player.name;
       el("selfLife").textContent = String(player.life ?? 20);
+      renderManaPool(el("selfManaPool"), player.manaPool || {}, "self");
       el("libraryCount").textContent = `${player.libraryCount || 0} cartas`;
       el("handCount").textContent = `${player.handCount || 0} cartas`;
       el("graveyardCount").textContent = String(player.graveyard?.length || 0);
@@ -719,6 +755,7 @@
     } else {
       el("opponentName").textContent = player.name;
       el("opponentLife").textContent = String(player.life ?? 20);
+      renderManaPool(el("opponentManaPool"), player.manaPool || {}, "opponent");
       el("opponentLibraryCount").textContent = `${player.libraryCount || 0} cartas`;
       el("opponentHandLabel").textContent = `${player.handCount || 0} cartas na mao`;
       el("opponentGraveyardCount").textContent = String(player.graveyard?.length || 0);
@@ -1010,13 +1047,44 @@
     return targets;
   }
 
-  function markerMenu(cardId, delta) {
-    return [
-      { label: "+1/+1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: delta }) },
-      { label: "+X/+X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "plus", value: delta }) },
-      { label: "-X/-X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "minus", value: delta }) },
-      ...COLORED_MARKERS.map(([color, label]) => ({ label, action: () => sendAction({ type: "marker", cardId, markerKind: "colored", color, value: delta }) }))
+  function actionForCards(cardIds, singleType, extra = {}) {
+    const ids = Array.isArray(cardIds) ? cardIds.filter(Boolean) : [cardIds].filter(Boolean);
+    if (ids.length > 1) return () => sendAction({ type: "bulkCards", cardIds: ids, operation: singleType, ...extra });
+    return () => sendAction({ type: singleType, cardId: ids[0], ...extra });
+  }
+
+  function moveTargetsForCards(cardIds, options = {}) {
+    const ids = Array.isArray(cardIds) ? cardIds.filter(Boolean) : [cardIds].filter(Boolean);
+    const action = (toZone, position = "top") => ids.length > 1
+      ? sendAction({ type: "moveCards", cardIds: ids, toZone, position })
+      : sendAction({ type: "moveCard", cardId: ids[0], toZone, position });
+    const targets = [
+      { label: "Cemiterio", action: () => action("graveyard") },
+      { label: "Exilio", action: () => action("exile") },
+      { label: "Mao", action: () => action("hand") },
+      { label: "Topo do grimorio", action: () => action("library", "top") },
+      { label: "Fundo do grimorio", action: () => action("library", "bottom") }
     ];
+    if (options.includeOpponent && ids.length === 1) {
+      targets.push({ label: "Campo do oponente", action: () => sendAction({ type: "giveControl", cardId: ids[0] }) });
+    }
+    return targets;
+  }
+
+  function markerMenu(cardIds, delta) {
+    return [
+      { label: "+1/+1", action: actionForCards(cardIds, "counter", { counterType: "p1p1", value: delta }) },
+      { label: "+X/+X", action: actionForCards(cardIds, "marker", { markerKind: "power", powerKind: "plus", value: delta }) },
+      { label: "-X/-X", action: actionForCards(cardIds, "marker", { markerKind: "power", powerKind: "minus", value: delta }) },
+      ...COLORED_MARKERS.map(([color, label]) => ({ label, action: actionForCards(cardIds, "marker", { markerKind: "colored", color, value: delta }) }))
+    ];
+  }
+
+  function manaMenuItems(cardId, includeTap = false) {
+    return manaColors.map(([color, , label]) => ({
+      label,
+      action: () => sendAction({ type: includeTap ? "tapForMana" : "addMana", cardId, color })
+    }));
   }
 
   function openCardMenu(cardEl, x, y) {
@@ -1024,6 +1092,8 @@
     const owner = cardEl.dataset.owner;
     const cardId = cardEl.dataset.cardId;
     if (owner !== "self") return;
+    const cardIds = selectedCardIds.has(cardId) ? Array.from(selectedCardIds) : [cardId];
+    const primaryCard = getCardById(cardId);
 
     const items = [];
     if (zone === "revealed") {
@@ -1039,18 +1109,22 @@
       items.push({ label: "Resolver para exilio", action: () => sendAction({ type: "resolveStack", cardId, toZone: "exile" }) });
       items.push({ label: "Voltar para mao", action: () => sendAction({ type: "resolveStack", cardId, toZone: "hand" }) });
     } else {
-      items.push({ label: "Virar / Desvirar", action: () => sendAction({ type: "toggleTap", cardId }) });
-      items.push({ label: "Enviar para", children: [{ label: "Pilha", action: () => sendAction({ type: "moveCard", cardId, toZone: "stack" }) }, ...moveTargets(cardId, { includeOpponent: true })] });
+      items.push({ label: "Virar / Desvirar", action: actionForCards(cardIds, "toggleTap") });
+      if (isLandCard(primaryCard)) {
+        items.push({ label: "Adicionar mana", children: manaMenuItems(cardId, false) });
+        items.push({ label: "Virar e adicionar mana", children: manaMenuItems(cardId, true) });
+      }
+      items.push({ label: "Enviar para", children: [{ label: "Pilha", action: () => cardIds.length > 1 ? sendAction({ type: "moveCards", cardIds, toZone: "stack" }) : sendAction({ type: "moveCard", cardId, toZone: "stack" }) }, ...moveTargetsForCards(cardIds, { includeOpponent: true })] });
       items.push({ label: "Marcadores", children: [
-        { label: "Adicionar marcador", children: markerMenu(cardId, 1) },
-        { label: "Remover marcador", children: markerMenu(cardId, -1) },
-        ...ABILITY_MARKERS.map(ability => ({ label: `Alternar ${ability}`, action: () => sendAction({ type: "marker", cardId, markerKind: "ability", ability }) }))
+        { label: "Adicionar marcador", children: markerMenu(cardIds, 1) },
+        { label: "Remover marcador", children: markerMenu(cardIds, -1) },
+        ...ABILITY_MARKERS.map(ability => ({ label: `Alternar ${ability}`, action: actionForCards(cardIds, "marker", { markerKind: "ability", ability }) }))
       ] });
       items.push({ label: "Poder / resistencia", children: [
-        { label: "+1/+1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: 1 }) },
-        { label: "-1/-1", action: () => sendAction({ type: "counter", cardId, counterType: "p1p1", value: -1 }) },
-        { label: "+X/+X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "plus", value: 1 }) },
-        { label: "-X/-X", action: () => sendAction({ type: "marker", cardId, markerKind: "power", powerKind: "minus", value: 1 }) }
+        { label: "+1/+1", action: actionForCards(cardIds, "counter", { counterType: "p1p1", value: 1 }) },
+        { label: "-1/-1", action: actionForCards(cardIds, "counter", { counterType: "p1p1", value: -1 }) },
+        { label: "+X/+X", action: actionForCards(cardIds, "marker", { markerKind: "power", powerKind: "plus", value: 1 }) },
+        { label: "-X/-X", action: actionForCards(cardIds, "marker", { markerKind: "power", powerKind: "minus", value: 1 }) }
       ] });
       items.push({ label: "Criar seta", action: beginArrowFromActiveCard });
       items.push({ label: "Desfazer ultima acao da carta", action: () => sendAction({ type: "undo" }) });
@@ -1295,6 +1369,8 @@
     el("clearArrowsBtn").addEventListener("click", () => sendAction({ type: "clearArrows" }));
     el("undoActionBtn").addEventListener("click", () => sendAction({ type: "undo" }));
     document.querySelectorAll(".phase-strip button").forEach(button => {
+      const [icon, label] = phaseMeta[button.dataset.phase] || ["•", button.textContent];
+      button.innerHTML = `<span class="phase-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span>`;
       button.addEventListener("click", () => sendAction({ type: "phase", value: button.dataset.phase }));
     });
     el("openTokenModalBtn").addEventListener("click", () => el("tokenModal").classList.remove("hidden"));
@@ -1404,6 +1480,13 @@
     el("libraryButton").addEventListener("contextmenu", event => {
       event.preventDefault();
       openLibraryMenu(event.clientX, event.clientY);
+    });
+
+    document.body.addEventListener("click", event => {
+      const mana = event.target.closest(".mana-symbol[data-owner='self']");
+      if (!mana || mana.disabled) return;
+      event.preventDefault();
+      sendAction({ type: "spendMana", color: mana.dataset.manaColor });
     });
 
     el("privateModalContent").addEventListener("click", event => {

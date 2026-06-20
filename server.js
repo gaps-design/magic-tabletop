@@ -757,6 +757,7 @@ function createSimulatorPlayer(playerId, name) {
     canSideboard: false,
     revealed: [],
     notes: "",
+    manaPool: { white: 0, blue: 0, black: 0, red: 0, green: 0, colorless: 0 },
     counters: {}
   };
 }
@@ -923,6 +924,74 @@ function moveSimulatorCards(player, cardIds = [], toZone, position = "top") {
   return moved;
 }
 
+function ensureSimulatorManaPool(player) {
+  player.manaPool = player.manaPool || {};
+  ["white", "blue", "black", "red", "green", "colorless"].forEach(color => {
+    player.manaPool[color] = Math.max(0, Number(player.manaPool[color] || 0));
+  });
+  return player.manaPool;
+}
+
+function clearSimulatorManaPool(player) {
+  const pool = ensureSimulatorManaPool(player);
+  const total = Object.values(pool).reduce((sum, count) => sum + Number(count || 0), 0);
+  Object.keys(pool).forEach(color => { pool[color] = 0; });
+  return total;
+}
+
+function adjustSimulatorCardMarker(player, cardId, action = {}) {
+  const found = findSimulatorCard(player, cardId);
+  if (!found?.card) return null;
+  found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
+  const markerKind = String(action.markerKind || "");
+  const delta = Number(action.value) || 0;
+  if (markerKind === "colored") {
+    const color = ["blue", "green", "red", "white", "black", "colorless"].includes(action.color) ? action.color : "colorless";
+    found.card.counters.colored[color] = Math.max(0, Number(found.card.counters.colored[color] || 0) + delta);
+  } else if (markerKind === "power") {
+    const powerKind = action.powerKind === "minus" ? "minus" : "plus";
+    found.card.counters.power[powerKind] = Math.max(0, Number(found.card.counters.power[powerKind] || 0) + delta);
+  } else if (markerKind === "ability") {
+    const ability = limitText(action.ability, 40);
+    if (ability) {
+      const current = new Set(found.card.counters.abilities || []);
+      if (current.has(ability)) current.delete(ability);
+      else current.add(ability);
+      found.card.counters.abilities = Array.from(current).slice(0, 12);
+    }
+  }
+  return found.card;
+}
+
+function adjustSimulatorCardCounter(player, cardId, action = {}) {
+  const found = findSimulatorCard(player, cardId);
+  const counterType = action.counterType === "generic" ? "generic" : "p1p1";
+  if (!found?.card) return null;
+  found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
+  found.card.counters[counterType] = Math.max(0, Number(found.card.counters[counterType] || 0) + (Number(action.value) || 0));
+  return found.card;
+}
+
+function applySimulatorBulkCards(player, action = {}) {
+  const cardIds = Array.isArray(action.cardIds) ? action.cardIds.map(id => String(id || "")).filter(Boolean).slice(0, 80) : [];
+  const operation = String(action.operation || "");
+  let changed = 0;
+  cardIds.forEach(cardId => {
+    if (operation === "toggleTap") {
+      const found = findSimulatorCard(player, cardId);
+      if (found?.card) {
+        found.card.tapped = !found.card.tapped;
+        changed++;
+      }
+    } else if (operation === "counter") {
+      if (adjustSimulatorCardCounter(player, cardId, action)) changed++;
+    } else if (operation === "marker") {
+      if (adjustSimulatorCardMarker(player, cardId, action)) changed++;
+    }
+  });
+  return changed;
+}
+
 function cloneSimulatorCard(card = {}, playerId = "sim", suffix = "") {
   const normalized = normalizeSimulatorCard(card, playerId);
   return {
@@ -950,6 +1019,7 @@ function resetSimulatorPlayerForNewGame(player) {
   player.exile = [];
   player.commandZone = [];
   player.revealed = [];
+  player.manaPool = { white: 0, blue: 0, black: 0, red: 0, green: 0, colorless: 0 };
   player.counters = {};
   player.conceded = false;
   player.canSideboard = false;
@@ -978,6 +1048,7 @@ function loadSimulatorDeck(player, deck = {}) {
   player.sideboardSnapshot = null;
   player.canSideboard = false;
   player.revealed = [];
+  player.manaPool = { white: 0, blue: 0, black: 0, red: 0, green: 0, colorless: 0 };
   player.counters = {};
 }
 
@@ -1000,6 +1071,7 @@ function resetSimulatorPlayerAfterSideboard(player) {
   player.exile = [];
   player.commandZone = [];
   player.revealed = [];
+  player.manaPool = { white: 0, blue: 0, black: 0, red: 0, green: 0, colorless: 0 };
   player.counters = {};
   player.conceded = false;
   player.canSideboard = false;
@@ -1215,36 +1287,30 @@ function applySimulatorAction(roomId, playerId, action = {}) {
       found.card.tapped = !found.card.tapped;
       addSimulatorLog(simulator, `${playerName} ${found.card.tapped ? "virou" : "desvirou"} ${found.card.name}`);
     }
+  } else if (type === "bulkCards") {
+    const changed = applySimulatorBulkCards(player, action);
+    if (changed) addSimulatorLog(simulator, `${playerName} aplicou acao em ${changed} carta${changed === 1 ? "" : "s"}`);
   } else if (type === "counter") {
-    const found = findSimulatorCard(player, cardId);
-    const counterType = action.counterType === "generic" ? "generic" : "p1p1";
-    if (found?.card) {
-      found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
-      found.card.counters[counterType] = Math.max(0, Number(found.card.counters[counterType] || 0) + (Number(value) || 0));
-      addSimulatorLog(simulator, `${playerName} ajustou marcador em ${found.card.name}`);
-    }
+    const card = adjustSimulatorCardCounter(player, cardId, action);
+    if (card) addSimulatorLog(simulator, `${playerName} ajustou marcador em ${card.name}`);
   } else if (type === "marker") {
-    const found = findSimulatorCard(player, cardId);
-    if (found?.card) {
-      found.card.counters = normalizeSimulatorCard(found.card, player.id).counters;
-      const markerKind = String(action.markerKind || "");
-      const delta = Number(value) || 0;
-      if (markerKind === "colored") {
-        const color = ["blue", "green", "red", "white", "black", "colorless"].includes(action.color) ? action.color : "colorless";
-        found.card.counters.colored[color] = Math.max(0, Number(found.card.counters.colored[color] || 0) + delta);
-      } else if (markerKind === "power") {
-        const powerKind = action.powerKind === "minus" ? "minus" : "plus";
-        found.card.counters.power[powerKind] = Math.max(0, Number(found.card.counters.power[powerKind] || 0) + delta);
-      } else if (markerKind === "ability") {
-        const ability = limitText(action.ability, 40);
-        if (ability) {
-          const current = new Set(found.card.counters.abilities || []);
-          if (current.has(ability)) current.delete(ability);
-          else current.add(ability);
-          found.card.counters.abilities = Array.from(current).slice(0, 12);
-        }
-      }
-      addSimulatorLog(simulator, `${playerName} ajustou marcador em ${found.card.name}`);
+    const card = adjustSimulatorCardMarker(player, cardId, action);
+    if (card) addSimulatorLog(simulator, `${playerName} ajustou marcador em ${card.name}`);
+  } else if (type === "addMana" || type === "tapForMana") {
+    const color = ["white", "blue", "black", "red", "green", "colorless"].includes(action.color) ? action.color : "colorless";
+    const pool = ensureSimulatorManaPool(player);
+    if (type === "tapForMana") {
+      const found = findSimulatorCard(player, cardId);
+      if (found?.card) found.card.tapped = true;
+    }
+    pool[color] = Math.min(99, Number(pool[color] || 0) + 1);
+    addSimulatorLog(simulator, `${playerName} adicionou mana ${color}`);
+  } else if (type === "spendMana") {
+    const color = ["white", "blue", "black", "red", "green", "colorless"].includes(action.color) ? action.color : "colorless";
+    const pool = ensureSimulatorManaPool(player);
+    if (Number(pool[color] || 0) > 0) {
+      pool[color] = Math.max(0, Number(pool[color] || 0) - 1);
+      addSimulatorLog(simulator, `${playerName} usou mana ${color}`);
     }
   } else if (type === "combatFlag") {
     const found = findSimulatorCard(player, cardId);
@@ -1300,6 +1366,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   } else if (type === "phase") {
     const phase = String(value || "");
     if (!SIMULATOR_PHASES.has(phase)) return;
+    const clearedMana = clearSimulatorManaPool(player);
     simulator.currentPhase = phase;
     simulator.activePlayerId = playerId;
     simulator.priorityPlayerId = playerId;
@@ -1330,6 +1397,7 @@ function applySimulatorAction(roomId, playerId, action = {}) {
     } else {
       addSimulatorLog(simulator, `${playerName} foi para ${phase}`);
     }
+    if (clearedMana) addSimulatorLog(simulator, `${playerName} limpou a mana pool`);
   } else if (type === "reset") {
     simulator.players[playerId] = createSimulatorPlayer(playerId, player.name);
     addSimulatorLog(simulator, `${playerName} reiniciou o estado do Simulator MVP`);
@@ -1393,6 +1461,7 @@ function publicSimulatorStateFor(simulator, viewerPlayerId, viewerPlayerIds = []
         sideboardCount: player.sideboard?.length || 0,
         sideboard: isSelf ? (player.sideboard || []).map(publicSimulatorCard) : [],
         revealed: (player.revealed || []).map(publicSimulatorCard),
+        manaPool: ensureSimulatorManaPool(player),
         counters: player.counters || {}
       }];
     }))
