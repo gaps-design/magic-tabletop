@@ -1,6 +1,7 @@
 (function () {
   const params = new URLSearchParams(window.location.search);
   const roomId = params.get("room") || localStorage.getItem("resenhaon-last-simulator-room") || "mtg-1002";
+  let activeRoomId = roomId;
   const savedPlayerId = localStorage.getItem("resenhaon-simulator-player-id") || `sim-${Math.random().toString(36).slice(2)}-${Date.now()}`;
   const savedName = localStorage.getItem("resenhaon-simulator-name") || "";
   const socket = io();
@@ -30,6 +31,13 @@
   let playerId = savedPlayerId;
   let state = null;
   let loadedDeck = null;
+  const localDecks = { p1: null, p2: null };
+  const localParsedDecks = { p1: null, p2: null };
+  const localPlayerIds = {
+    p1: `${savedPlayerId}-p1`,
+    p2: `${savedPlayerId}-p2`
+  };
+  let localTwoPlayerMode = false;
   let lastParsedDeck = null;
   let lastMissingNames = [];
   let lastMissingMain = [];
@@ -209,11 +217,12 @@
       ${side.length ? `<p>Sideboard</p><ul>${list(side)}</ul>` : ""}
     </div>`;
   }
-  async function hydrateDeck(parsed) {
+  async function hydrateDeck(parsed, options = {}) {
+    const statusEl = el(options.statusId || "deckStatus");
     const total = parsed.main.length + parsed.side.length;
     let loaded = 0;
     const setStatus = () => {
-      el("deckStatus").textContent = `Carregando cartas... ${loaded}/${total}`;
+      statusEl.textContent = `Carregando cartas... ${loaded}/${total}`;
     };
     setStatus();
     const mainDeck = [];
@@ -240,12 +249,15 @@
       setStatus();
     }
     const unique = new Set([...parsed.main, ...parsed.side].map(name => name.toLowerCase())).size;
-    loadedDeck = { mainDeck, sideboard };
+    const hydratedDeck = { mainDeck, sideboard };
+    if (options.assignGlobal !== false) loadedDeck = hydratedDeck;
     const warning = parsed.main.length !== 60 || parsed.side.length > 15
       ? " Aviso: lista fora do padrao 60/15, carregada em modo teste."
       : "";
-    el("deckStatus").innerHTML = `Main deck: ${parsed.main.length} cartas | Sideboard: ${parsed.side.length} cartas | Cartas unicas: ${unique} | Encontradas: ${total - lastMissingNames.length} | Nao encontradas: ${lastMissingNames.length}.${warning}${missingReportHtml(lastMissingMain, lastMissingSide)}`;
-    el("retryMissingBtn").classList.toggle("hidden", !lastMissingNames.length);
+    statusEl.innerHTML = `Main deck: ${parsed.main.length} cartas | Sideboard: ${parsed.side.length} cartas | Cartas unicas: ${unique} | Encontradas: ${total - lastMissingNames.length} | Nao encontradas: ${lastMissingNames.length}.${warning}${missingReportHtml(lastMissingMain, lastMissingSide)}`;
+    if (options.retryButtonId) el(options.retryButtonId)?.classList.toggle("hidden", !lastMissingNames.length);
+    else el("retryMissingBtn").classList.toggle("hidden", !lastMissingNames.length);
+    return hydratedDeck;
   }
 
   function mockDeck() {
@@ -274,7 +286,28 @@
   }
 
   function sendAction(action) {
-    socket.emit("simulator-action", { roomId, playerId, action });
+    sendActionFor(playerId, action);
+  }
+
+  function sendActionFor(targetPlayerId, action) {
+    socket.emit("simulator-action", { roomId: activeRoomId, playerId: targetPlayerId, action });
+  }
+
+  function deckIsValidForLocal(deck) {
+    return deck && deck.mainDeck?.length === 60 && (deck.sideboard?.length || 0) <= 15;
+  }
+
+  function setLocalView(targetPlayerId) {
+    playerId = targetPlayerId;
+    activeCard = null;
+    selectedCardIds.clear();
+    selectedSideboardIds.clear();
+    el("switchLocalPlayerBtn").classList.toggle("hidden", !localTwoPlayerMode);
+    if (localTwoPlayerMode) {
+      const label = playerId === localPlayerIds.p1 ? "Ver Jogador 2" : "Ver Jogador 1";
+      el("switchLocalPlayerBtn").textContent = `Alternar visão jogador (${label})`;
+    }
+    render();
   }
 
   function allVisibleCards() {
@@ -292,12 +325,66 @@
   }
 
   function createGame() {
+    const mode = document.querySelector("input[name='localTestMode']:checked")?.value || "single";
+    if (mode === "two") {
+      if (!deckIsValidForLocal(localDecks.p1) || !deckIsValidForLocal(localDecks.p2)) {
+        alert("Carregue dois decks validos: main deck com 60 cartas e sideboard ate 15.");
+        return;
+      }
+      const p1Name = el("playerOneNameInput").value.trim() || "Jogador 1";
+      const p2Name = el("playerTwoNameInput").value.trim() || "Jogador 2";
+      activeRoomId = `${roomId}-local-${Date.now()}`;
+      localTwoPlayerMode = true;
+      socket.emit("simulator-join", { roomId: activeRoomId, playerId: localPlayerIds.p1, name: p1Name });
+      socket.emit("simulator-join", { roomId: activeRoomId, playerId: localPlayerIds.p2, name: p2Name });
+      sendActionFor(localPlayerIds.p1, { type: "loadDeck", deck: localDecks.p1 });
+      sendActionFor(localPlayerIds.p2, { type: "loadDeck", deck: localDecks.p2 });
+      sendActionFor(localPlayerIds.p1, { type: "phase", value: "untap" });
+      setLocalView(localPlayerIds.p1);
+      el("gameModal").classList.remove("active");
+      el("gameModal").classList.add("hidden");
+      return;
+    }
+    activeRoomId = roomId;
+    localTwoPlayerMode = false;
+    playerId = savedPlayerId;
     const name = el("playerNameInput").value.trim() || savedName || "Jogador";
     localStorage.setItem("resenhaon-simulator-name", name);
-    socket.emit("simulator-join", { roomId, playerId, name });
+    socket.emit("simulator-join", { roomId: activeRoomId, playerId, name });
     sendAction({ type: "loadDeck", deck: loadedDeck || mockDeck() });
+    el("switchLocalPlayerBtn").classList.add("hidden");
     el("gameModal").classList.remove("active");
     el("gameModal").classList.add("hidden");
+  }
+
+  async function loadLocalDeck(slot) {
+    const inputId = slot === "p1" ? "deckFileInputP1" : "deckFileInputP2";
+    const statusId = slot === "p1" ? "deckStatusP1" : "deckStatusP2";
+    const file = el(inputId).files?.[0];
+    if (!file) {
+      el(statusId).textContent = `Selecione o arquivo do deck ${slot === "p1" ? "1" : "2"}.`;
+      return;
+    }
+    try {
+      const extensionOk = /\.(txt|cod|dec)$/i.test(file.name);
+      if (!extensionOk) throw new Error("Formato invalido. Use .txt, .cod ou .dec.");
+      const parsed = parseDecklist(await readDeckFile(file));
+      localParsedDecks[slot] = parsed;
+      localDecks[slot] = await hydrateDeck(parsed, { statusId, assignGlobal: false });
+      if (!deckIsValidForLocal(localDecks[slot])) {
+        el(statusId).innerHTML += `<p><strong>Ajuste necessario:</strong> main deck precisa ter 60 cartas e sideboard ate 15.</p>`;
+      }
+    } catch (error) {
+      el(statusId).textContent = error.message || "Erro ao carregar deck.";
+    }
+  }
+
+  function updateLocalModeUi() {
+    const mode = document.querySelector("input[name='localTestMode']:checked")?.value || "single";
+    el("singlePlayerSetup").classList.toggle("hidden", mode !== "single");
+    el("singleDeckSetup").classList.toggle("hidden", mode !== "single");
+    el("deckStatus").classList.toggle("hidden", mode !== "single");
+    el("twoPlayerSetup").classList.toggle("hidden", mode !== "two");
   }
 
   function cardDetailsHtml(card, includeImage = true) {
@@ -668,7 +755,7 @@
     const opponent = opponentPlayer();
     const players = Object.values(state?.players || {});
     const currentPhase = state?.currentPhase || "untap";
-    el("roomTitle").textContent = `Sala ${roomId}`;
+    el("roomTitle").textContent = localTwoPlayerMode ? "Teste local - 2 jogadores" : `Sala ${activeRoomId}`;
     el("playerCount").textContent = String(players.length);
     el("currentPhaseLabel").textContent = phases[currentPhase] || currentPhase;
     document.querySelectorAll(".phase-strip button").forEach(button => button.classList.toggle("active", button.dataset.phase === currentPhase));
@@ -888,9 +975,19 @@
 
   function bindEvents() {
     el("playerNameInput").value = savedName;
+    el("playerOneNameInput").value = savedName || "Jogador 1";
+    el("playerTwoNameInput").value = "Jogador 2";
+    document.querySelectorAll("input[name='localTestMode']").forEach(input => {
+      input.addEventListener("change", updateLocalModeUi);
+    });
+    updateLocalModeUi();
     el("openGameModalBtn").addEventListener("click", () => el("gameModal").classList.remove("hidden"));
     el("cancelGameBtn").addEventListener("click", () => el("gameModal").classList.add("hidden"));
     el("createGameBtn").addEventListener("click", createGame);
+    el("switchLocalPlayerBtn").addEventListener("click", () => {
+      if (!localTwoPlayerMode) return;
+      setLocalView(playerId === localPlayerIds.p1 ? localPlayerIds.p2 : localPlayerIds.p1);
+    });
     el("concedeBtn").addEventListener("click", () => {
       if (confirm("Tem certeza que deseja conceder a partida?")) sendAction({ type: "concede" });
     });
@@ -921,6 +1018,10 @@
     if (savedStackWidth) document.documentElement.style.setProperty("--sim-stack-width", `${Math.max(88, Math.min(260, Number(savedStackWidth) || 104))}px`);
     setHandExpanded(handExpanded);
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
+    el("loadDeckBtnP1").addEventListener("click", () => el("deckFileInputP1").click());
+    el("loadDeckBtnP2").addEventListener("click", () => el("deckFileInputP2").click());
+    el("confirmDeckBtnP1").addEventListener("click", () => loadLocalDeck("p1"));
+    el("confirmDeckBtnP2").addEventListener("click", () => loadLocalDeck("p2"));
     el("confirmDeckBtn").addEventListener("click", () => {
       el("deckStatus").textContent = loadedDeck
         ? `${el("deckStatus").textContent} Deck confirmado.`
@@ -941,6 +1042,8 @@
     el("retryMissingBtn").addEventListener("click", async () => {
       if (lastParsedDeck) await hydrateDeck(lastParsedDeck);
     });
+    el("deckFileInputP1").addEventListener("change", () => loadLocalDeck("p1"));
+    el("deckFileInputP2").addEventListener("change", () => loadLocalDeck("p2"));
     el("cardSizeSlider").addEventListener("input", event => setCardSize(event.target.value));
     el("previewEnabledInput").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-enabled", event.target.checked ? "true" : "false"));
     el("previewPinnedInput").addEventListener("change", event => localStorage.setItem("resenhaon-sim-preview-pinned", event.target.checked ? "true" : "false"));

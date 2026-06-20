@@ -1360,7 +1360,8 @@ function applySimulatorAction(roomId, playerId, action = {}) {
   }
 }
 
-function publicSimulatorStateFor(simulator, viewerPlayerId) {
+function publicSimulatorStateFor(simulator, viewerPlayerId, viewerPlayerIds = []) {
+  const privateViewers = new Set([viewerPlayerId, ...viewerPlayerIds].filter(Boolean));
   return {
     enabled: simulator.enabled === true,
     currentPhase: simulator.currentPhase || "main1",
@@ -1369,7 +1370,7 @@ function publicSimulatorStateFor(simulator, viewerPlayerId) {
     arrows: simulator.arrows || [],
     log: simulator.log || [],
     players: Object.fromEntries(Object.entries(simulator.players || {}).map(([playerId, player]) => {
-      const isSelf = playerId === viewerPlayerId;
+      const isSelf = privateViewers.has(playerId);
       return [playerId, {
         id: player.id,
         name: player.name,
@@ -1410,7 +1411,8 @@ function broadcastSimulatorState(roomId) {
     const target = io.sockets.sockets.get(socketId);
     if (!target) return;
     const viewerPlayerId = target.data?.simulator?.playerId || "";
-    target.emit("simulator-state", publicSimulatorStateFor(simulator, viewerPlayerId));
+    const viewerPlayerIds = Array.isArray(target.data?.simulator?.playerIds) ? target.data.simulator.playerIds : [];
+    target.emit("simulator-state", publicSimulatorStateFor(simulator, viewerPlayerId, viewerPlayerIds));
   });
 }
 
@@ -4200,9 +4202,13 @@ io.on("connection", (socket) => {
     ensureSimulator(room);
 
     socket.join(simulatorRoomId(safeRoomId));
+    const currentSession = socket.data.simulator?.roomId === safeRoomId ? socket.data.simulator : {};
+    const controlledPlayers = new Set(Array.isArray(currentSession.playerIds) ? currentSession.playerIds : []);
+    controlledPlayers.add(safePlayerId);
     socket.data.simulator = {
       roomId: safeRoomId,
-      playerId: safePlayerId
+      playerId: currentSession.playerId || safePlayerId,
+      playerIds: Array.from(controlledPlayers).slice(0, 2)
     };
 
     ensureSimulatorPlayer(safeRoomId, safePlayerId, safeName);
@@ -4217,7 +4223,8 @@ io.on("connection", (socket) => {
     const safePlayerId = limitText(playerId, 80) || session.playerId || socket.id;
 
     if (session.roomId && session.roomId !== safeRoomId) return;
-    if (session.playerId && session.playerId !== safePlayerId) return;
+    const controlledPlayers = Array.isArray(session.playerIds) && session.playerIds.length ? session.playerIds : [session.playerId].filter(Boolean);
+    if (controlledPlayers.length && !controlledPlayers.includes(safePlayerId)) return;
 
     applySimulatorAction(safeRoomId, safePlayerId, action);
     broadcastSimulatorState(safeRoomId);

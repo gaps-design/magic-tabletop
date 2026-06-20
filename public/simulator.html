@@ -22,6 +22,7 @@
         <button id="createArrowBtn" type="button">Criar seta</button>
         <button id="clearArrowsBtn" type="button">Limpar setas</button>
         <button id="undoActionBtn" type="button">Desfazer</button>
+        <button id="switchLocalPlayerBtn" type="button" class="hidden">Alternar visão jogador</button>
         <button id="newGameBtn" type="button">Nova partida</button>
         <button id="concedeBtn" type="button">Conceder</button>
         <button id="toggleSidePanelBtn" type="button" title="Recolher painel lateral">&lt;</button>
@@ -203,15 +204,44 @@
     <div class="game-modal">
       <h2>Criar jogo - ResenhaON Simulator MVP</h2>
       <p>Modo inicial: PvP 60 cartas com sideboard ate 15 cartas.</p>
-      <label>Nome do jogador <input id="playerNameInput" type="text" maxlength="60" placeholder="Nome do jogador"></label>
+      <fieldset class="test-mode-field">
+        <legend>Modo de teste</legend>
+        <label><input type="radio" name="localTestMode" value="single" checked> 1 jogador local</label>
+        <label><input type="radio" name="localTestMode" value="two"> 2 jogadores locais</label>
+      </fieldset>
+      <div id="singlePlayerSetup">
+        <label>Nome do jogador <input id="playerNameInput" type="text" maxlength="60" placeholder="Nome do jogador"></label>
+      </div>
       <label>Formato <select id="formatSelect"><option value="pvp60">PvP 60 cartas</option></select></label>
-      <div class="deck-loader">
+      <div id="singleDeckSetup" class="deck-loader">
         <input id="deckFileInput" type="file" accept=".txt,.cod,.dec,text/plain">
         <button id="loadDeckBtn" type="button">Carregar deck</button>
         <button id="confirmDeckBtn" type="button">Confirmar deck</button>
         <button id="retryMissingBtn" type="button" class="hidden">Tentar faltantes</button>
       </div>
       <div id="deckStatus" class="deck-status">Nenhum deck carregado. O MVP usa um deck de teste se voce criar sem arquivo.</div>
+      <div id="twoPlayerSetup" class="two-player-setup hidden">
+        <section>
+          <h3>Jogador 1</h3>
+          <label>Nome do jogador 1 <input id="playerOneNameInput" type="text" maxlength="60" placeholder="Jogador 1"></label>
+          <div class="deck-loader">
+            <input id="deckFileInputP1" type="file" accept=".txt,.cod,.dec,text/plain">
+            <button id="loadDeckBtnP1" type="button">Carregar deck 1</button>
+            <button id="confirmDeckBtnP1" type="button">Confirmar deck 1</button>
+          </div>
+          <div id="deckStatusP1" class="deck-status">Deck 1 não carregado.</div>
+        </section>
+        <section>
+          <h3>Jogador 2</h3>
+          <label>Nome do jogador 2 <input id="playerTwoNameInput" type="text" maxlength="60" placeholder="Jogador 2"></label>
+          <div class="deck-loader">
+            <input id="deckFileInputP2" type="file" accept=".txt,.cod,.dec,text/plain">
+            <button id="loadDeckBtnP2" type="button">Carregar deck 2</button>
+            <button id="confirmDeckBtnP2" type="button">Confirmar deck 2</button>
+          </div>
+          <div id="deckStatusP2" class="deck-status">Deck 2 não carregado.</div>
+        </section>
+      </div>
       <div class="modal-actions">
         <button id="cancelGameBtn" type="button">Cancelar</button>
         <button id="createGameBtn" type="button">Criar jogo</button>
