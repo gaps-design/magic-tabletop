@@ -94,18 +94,18 @@
     cleanup: "Cleanup"
   };
   const phaseMeta = {
-    untap: ["⟳", "Untap"],
-    upkeep: ["⏱", "Upkeep"],
-    draw: ["▣", "Draw"],
-    main1: ["M1", "Main 1"],
-    beginCombat: ["⚔", "Combat"],
-    attackers: ["➹", "Attack"],
-    blockers: ["⬟", "Block"],
-    damage: ["✹", "Damage"],
-    endCombat: ["⚑", "End C."],
-    main2: ["M2", "Main 2"],
-    end: ["☾", "End"],
-    cleanup: ["⌁", "Cleanup"]
+    untap: ["🔄", "Untap"],
+    upkeep: ["⏳", "Upkeep"],
+    draw: ["🃏", "Draw"],
+    main1: ["1️⃣", "Main 1"],
+    beginCombat: ["⚔️", "Combat"],
+    attackers: ["🗡️", "Attack"],
+    blockers: ["🛡️", "Block"],
+    damage: ["💥", "Damage"],
+    endCombat: ["🏁", "End C."],
+    main2: ["2️⃣", "Main 2"],
+    end: ["🌙", "End"],
+    cleanup: ["🧹", "Cleanup"]
   };
   const manaColors = [
     ["white", "⚪", "Branco"],
@@ -1311,7 +1311,7 @@
     const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height");
     if (savedHandHeight) document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(130, Math.min(340, Number(savedHandHeight) || 168))}px`);
     const savedStackWidth = localStorage.getItem("resenhaon-sim-stack-width");
-    if (savedStackWidth) document.documentElement.style.setProperty("--sim-stack-width", `${Math.max(88, Math.min(260, Number(savedStackWidth) || 104))}px`);
+    if (savedStackWidth) document.documentElement.style.setProperty("--sim-stack-width", `${Math.max(128, Math.min(260, Number(savedStackWidth) || 132))}px`);
     setHandExpanded(handExpanded);
     el("loadDeckBtn").addEventListener("click", () => el("deckFileInput").click());
     el("loadDeckBtnP1").addEventListener("click", () => el("deckFileInputP1").click());
@@ -1623,7 +1623,7 @@
         return;
       }
       if (stackResize) {
-        const nextWidth = Math.max(88, Math.min(260, stackResize.startWidth + (event.clientX - stackResize.startX)));
+        const nextWidth = Math.max(128, Math.min(260, stackResize.startWidth + (event.clientX - stackResize.startX)));
         document.documentElement.style.setProperty("--sim-stack-width", `${nextWidth}px`);
         return;
       }
@@ -1666,7 +1666,7 @@
       }
       if (stackResize) {
         const value = getComputedStyle(document.documentElement).getPropertyValue("--sim-stack-width").replace("px", "").trim();
-        localStorage.setItem("resenhaon-sim-stack-width", value || "104");
+        localStorage.setItem("resenhaon-sim-stack-width", value || "132");
         stackResize = null;
         return;
       }
