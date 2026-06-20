@@ -635,9 +635,10 @@
     const isSelected = selectedCardIds.has(card.id);
     const showCardOverlays = zone !== "hand";
     const land = zone === "battlefield" && isLandCard(card);
-    const defaultY = land ? 210 + (Math.floor(index / 9) * 112) : (Math.floor(index / 9) * 112);
+    const defaultX = land ? index * 104 : ((index % 9) * 104);
+    const defaultY = land ? 96 : (Math.floor(index / 9) * 138);
     const position = zone === "battlefield"
-      ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? ((index % 9) * 84))}px;top:${Number(card.position?.y ?? defaultY)}px"`
+      ? `style="${card.imageUrl ? `background-image:url('${escapeHtml(card.imageUrl)}');` : ""}left:${Number(card.position?.x ?? defaultX)}px;top:${Number(card.position?.y ?? defaultY)}px"`
       : image;
     return `
       <article class="sim-card ${card.imageUrl ? "" : "no-image"} ${land ? "land-card" : ""} ${card.missing ? "missing-card" : ""} ${isSelected ? "multi-selected" : ""} ${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""} ${card.blocking ? "blocking" : ""}"
