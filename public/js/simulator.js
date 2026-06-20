@@ -60,11 +60,14 @@
   let timerRemaining = Number(localStorage.getItem("resenhaon-sim-timer-remaining") || 3000);
   let timerInterval = null;
   let battlefieldDrag = null;
+  let selectionDrag = null;
   let previewDrag = null;
   let arrowDraft = null;
   let arrowCounter = 0;
   let handResize = null;
   let stackResize = null;
+  let privateModalState = null;
+  let lastRightClick = { cardId: "", time: 0 };
   let simulatorAudioStream = null;
   let simulatorAudioMuted = false;
   let simulatorAudioStarted = false;
@@ -643,6 +646,22 @@
     container.innerHTML = Array.from({ length: Math.min(12, count || 0) }, () => `<span class="hand-back"></span>`).join("");
   }
 
+  function boundedBattlefieldPosition(field, cardEl, clientX, clientY, offsetX = 0, offsetY = 0) {
+    const rect = field.getBoundingClientRect();
+    const cardWidth = cardEl?.offsetWidth || 70;
+    const cardHeight = cardEl?.offsetHeight || 98;
+    const maxX = Math.max(0, field.clientWidth - cardWidth);
+    const maxY = Math.max(0, field.clientHeight - cardHeight);
+    return {
+      x: Math.max(0, Math.min(maxX, clientX - rect.left + field.scrollLeft - offsetX)),
+      y: Math.max(0, Math.min(maxY, clientY - rect.top + field.scrollTop - offsetY))
+    };
+  }
+
+  function rectsIntersect(a, b) {
+    return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+  }
+
   function setCardSize(value) {
     const safeValue = Math.max(60, Math.min(160, Number(value) || 100));
     document.documentElement.style.setProperty("--sim-card-scale", String(safeValue / 100));
@@ -931,6 +950,7 @@
     renderPlayer(opponent, "opponent");
     renderArrows();
     renderLog();
+    refreshPrivateModal();
     el("goSideboardBtn").classList.toggle("hidden", !self?.canSideboard && !self?.sideboarding);
     if (self?.sideboarding) {
       if (el("sideboardModal").classList.contains("hidden")) openSideboardModal();
@@ -1107,12 +1127,40 @@
   }
 
   function openPrivateModal(title, cards, sourceZone = "library") {
+    privateModalState = { title, sourceZone };
     privateCards = cards || [];
     el("privateModalTitle").textContent = title;
     el("privateModalContent").innerHTML = privateCards.length
       ? privateCards.map(card => privateCardHtml(card, sourceZone)).join("")
       : `<div class="empty-zone">Nada para mostrar.</div>`;
     el("privateModal").classList.remove("hidden");
+  }
+
+  function cardsForPrivateSource(sourceZone) {
+    const self = selfPlayer();
+    const opponent = opponentPlayer();
+    const map = {
+      library: self?.library || [],
+      graveyard: self?.graveyard || [],
+      exile: self?.exile || [],
+      revealed: self?.revealed || [],
+      opponent: [],
+      "opponent-graveyard": opponent?.graveyard || [],
+      "opponent-exile": opponent?.exile || []
+    };
+    return map[sourceZone] || [];
+  }
+
+  function refreshPrivateModal() {
+    if (!privateModalState || el("privateModal").classList.contains("hidden")) return;
+    const content = el("privateModalContent");
+    const scrollTop = content.scrollTop;
+    const cards = cardsForPrivateSource(privateModalState.sourceZone);
+    privateCards = cards;
+    content.innerHTML = cards.length
+      ? cards.map(card => privateCardHtml(card, privateModalState.sourceZone)).join("")
+      : `<div class="empty-zone">Nada para mostrar.</div>`;
+    content.scrollTop = scrollTop;
   }
 
   function showHoverPreview(card, x, y) {
@@ -1344,18 +1392,15 @@
         const map = {
           graveyard: [self?.graveyard || [], "Cemiterio", "graveyard"],
           exile: [self?.exile || [], "Exilio", "exile"],
-          "opponent-graveyard": [opponent?.graveyard || [], "Cemiterio do oponente", "opponent"],
-          "opponent-exile": [opponent?.exile || [], "Exilio do oponente", "opponent"]
+          "opponent-graveyard": [opponent?.graveyard || [], "Cemiterio do oponente", "opponent-graveyard"],
+          "opponent-exile": [opponent?.exile || [], "Exilio do oponente", "opponent-exile"]
         };
         const [cards, title, sourceZone] = map[button.dataset.viewZone] || [[], "Zona", "library"];
         openPrivateModal(title, cards, sourceZone);
       });
     });
 
-    el("libraryButton").addEventListener("click", () => {
-      openPrivateModal("Seu grimorio", selfPlayer()?.library || [], "library");
-      sendAction({ type: "viewDeck" });
-    });
+    el("libraryButton").addEventListener("click", event => event.preventDefault());
     el("libraryButton").addEventListener("contextmenu", event => {
       event.preventDefault();
       openLibraryMenu(event.clientX, event.clientY);
@@ -1375,7 +1420,6 @@
           position: actionButton.dataset.privatePosition || "top"
         });
       }
-      el("privateModal").classList.add("hidden");
     });
 
     document.body.addEventListener("click", event => {
@@ -1389,17 +1433,35 @@
           render();
           return;
         }
+        selectedCardIds.clear();
         renderSelectedCard(activeCard);
-        openCardMenu(card, event.clientX, event.clientY);
         return;
       }
       if (!event.target.closest("#cardMenu")) closeCardMenu();
     });
     document.body.addEventListener("contextmenu", event => {
-      if (event.target.closest("#libraryButton")) return;
+      if (event.target.closest("#libraryButton")) {
+        event.preventDefault();
+        openLibraryMenu(event.clientX, event.clientY);
+        return;
+      }
       const card = event.target.closest(".sim-card,.mini-card");
       if (card) {
         event.preventDefault();
+        activeCard = getCardById(card.dataset.cardId);
+        if (!selectedCardIds.has(card.dataset.cardId)) {
+          selectedCardIds.clear();
+          selectedCardIds.add(card.dataset.cardId);
+        }
+        renderSelectedCard(activeCard);
+        const now = Date.now();
+        const isRightDouble = lastRightClick.cardId === card.dataset.cardId && now - lastRightClick.time < 420;
+        lastRightClick = { cardId: card.dataset.cardId, time: now };
+        if (isRightDouble && card.dataset.owner === "self" && card.dataset.zone === "battlefield") {
+          sendAction({ type: "toggleTap", cardId: card.dataset.cardId });
+          closeCardMenu();
+          return;
+        }
         openCardMenu(card, event.clientX, event.clientY);
       }
     });
@@ -1425,6 +1487,20 @@
         previewDrag = { x: event.clientX - preview.offsetLeft, y: event.clientY - preview.offsetTop };
         return;
       }
+      const selectionField = event.target.closest(".battlefield");
+      if (selectionField && event.button === 0 && !event.target.closest(".sim-card")) {
+        selectedCardIds.clear();
+        const box = document.createElement("div");
+        box.className = "selection-box";
+        document.querySelector(".virtual-table").appendChild(box);
+        selectionDrag = {
+          field: selectionField,
+          box,
+          startX: event.clientX,
+          startY: event.clientY
+        };
+        return;
+      }
       const stack = event.target.closest(".stack-zone");
       if (stack) {
         const stackRect = stack.getBoundingClientRect();
@@ -1446,7 +1522,9 @@
         field,
         offsetX: event.clientX - cardRect.left,
         offsetY: event.clientY - cardRect.top,
-        rect
+        rect,
+        cardWidth: cardRect.width,
+        cardHeight: cardRect.height
       };
       cardEl.setPointerCapture?.(event.pointerId);
     });
@@ -1470,10 +1548,22 @@
         el("hoverPreview").style.top = `${Math.max(8, Math.min(window.innerHeight - 120, event.clientY - previewDrag.y))}px`;
         return;
       }
+      if (selectionDrag) {
+        const left = Math.min(selectionDrag.startX, event.clientX);
+        const top = Math.min(selectionDrag.startY, event.clientY);
+        const width = Math.abs(event.clientX - selectionDrag.startX);
+        const height = Math.abs(event.clientY - selectionDrag.startY);
+        Object.assign(selectionDrag.box.style, {
+          left: `${left}px`,
+          top: `${top}px`,
+          width: `${width}px`,
+          height: `${height}px`
+        });
+        return;
+      }
       if (!battlefieldDrag) return;
-      const x = Math.max(0, event.clientX - battlefieldDrag.rect.left + battlefieldDrag.field.scrollLeft - battlefieldDrag.offsetX);
-      const y = Math.max(0, event.clientY - battlefieldDrag.rect.top + battlefieldDrag.field.scrollTop - battlefieldDrag.offsetY);
       const cardEl = document.querySelector(`.battlefield .sim-card[data-card-id="${CSS.escape(battlefieldDrag.cardId)}"]`);
+      const { x, y } = boundedBattlefieldPosition(battlefieldDrag.field, cardEl, event.clientX, event.clientY, battlefieldDrag.offsetX, battlefieldDrag.offsetY);
       if (cardEl) {
         cardEl.style.left = `${x}px`;
         cardEl.style.top = `${y}px`;
@@ -1500,9 +1590,21 @@
         previewDrag = null;
         return;
       }
+      if (selectionDrag) {
+        const selectionRect = selectionDrag.box.getBoundingClientRect();
+        selectionDrag.field.querySelectorAll(".sim-card[data-owner='self']").forEach(cardEl => {
+          if (rectsIntersect(selectionRect, cardEl.getBoundingClientRect())) {
+            selectedCardIds.add(cardEl.dataset.cardId);
+          }
+        });
+        selectionDrag.box.remove();
+        selectionDrag = null;
+        render();
+        return;
+      }
       if (!battlefieldDrag) return;
-      const x = Math.max(0, event.clientX - battlefieldDrag.rect.left + battlefieldDrag.field.scrollLeft - battlefieldDrag.offsetX);
-      const y = Math.max(0, event.clientY - battlefieldDrag.rect.top + battlefieldDrag.field.scrollTop - battlefieldDrag.offsetY);
+      const cardEl = document.querySelector(`.battlefield .sim-card[data-card-id="${CSS.escape(battlefieldDrag.cardId)}"]`);
+      const { x, y } = boundedBattlefieldPosition(battlefieldDrag.field, cardEl, event.clientX, event.clientY, battlefieldDrag.offsetX, battlefieldDrag.offsetY);
       sendAction({ type: "cardPosition", cardId: battlefieldDrag.cardId, x, y });
       battlefieldDrag = null;
     });
@@ -1519,11 +1621,6 @@
       if (cardEl.dataset.owner === "self" && cardEl.dataset.zone === "revealed") {
         sendAction({ type: "moveCard", cardId: cardEl.dataset.cardId, toZone: "stack" });
         closeCardMenu();
-      } else if (cardEl.dataset.owner === "self" && ["battlefield", "hand", "stack"].includes(cardEl.dataset.zone)) {
-        sendAction({ type: "toggleTap", cardId: cardEl.dataset.cardId });
-        closeCardMenu();
-      } else {
-        openZoom(getCardById(cardEl.dataset.cardId));
       }
     });
     document.body.addEventListener("touchstart", event => {
