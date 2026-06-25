@@ -28,6 +28,7 @@
         <button id="switchLocalPlayerBtn" type="button" class="hidden">Alternar visão jogador</button>
         <button id="newGameBtn" type="button">Nova partida</button>
         <button id="concedeBtn" type="button">Conceder</button>
+        <button id="fullscreenBtn" type="button">Tela cheia</button>
         <button id="toggleSidePanelBtn" type="button" title="Recolher painel lateral">&lt;</button>
         <label class="card-size-control">Cartas <input id="cardSizeSlider" type="range" min="60" max="160" value="100"></label>
         <select id="layoutSizeSelect" aria-label="Tamanho da mesa">
@@ -61,8 +62,9 @@
               <strong id="opponentName" class="zone-player-name">Aguardando oponente</strong>
               <div class="deck-wrap">
                 <span>Deck</span>
-                <button class="deck-pile card-back" data-zone-click="opponent-library"></button>
-                <strong id="opponentLibraryCount">0 cartas</strong>
+                <button class="deck-pile card-back" data-zone-click="opponent-library">
+                  <strong id="opponentLibraryCount">0</strong>
+                </button>
               </div>
               <div class="zone-life opponent-life"><span>Vida</span><strong id="opponentLife">20</strong></div>
               <div id="opponentManaPool" class="mana-pool"></div>
@@ -101,8 +103,9 @@
               <strong id="selfName" class="zone-player-name">Jogador</strong>
               <div class="deck-wrap">
                 <span>Deck</span>
-                <button id="libraryButton" class="deck-pile card-back" type="button"></button>
-                <strong id="libraryCount">0 cartas</strong>
+                <button id="libraryButton" class="deck-pile card-back" type="button">
+                  <strong id="libraryCount">0</strong>
+                </button>
               </div>
               <div class="zone-life self-life">
                 <span>Vida</span>

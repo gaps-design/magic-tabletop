@@ -74,6 +74,7 @@
   const simulatorAudioPeers = new Map();
   const selectedCardIds = new Set();
   const selectedSideboardIds = new Set();
+  const pendingManaCards = new Set();
 
   localStorage.setItem("resenhaon-simulator-player-id", playerId);
   localStorage.setItem("resenhaon-last-simulator-room", roomId);
@@ -711,10 +712,10 @@
     localStorage.setItem("resenhaon-sim-hand-expanded", expanded ? "true" : "false");
     el("expandHandBtn").textContent = expanded ? "Recolher Mao" : "Expandir Mao";
     if (expanded) {
-      document.documentElement.style.setProperty("--sim-hand-height", "380px");
+      document.documentElement.style.setProperty("--sim-hand-height", "320px");
     } else {
-      const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height") || "168";
-      document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(130, Math.min(340, Number(savedHandHeight) || 168))}px`);
+      const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height") || "150";
+      document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(126, Math.min(280, Number(savedHandHeight) || 150))}px`);
     }
   }
 
@@ -744,8 +745,7 @@
       el("selfLife").textContent = String(player.life ?? 20);
       renderManaPool(el("selfManaPool"), player.manaPool || {}, "self");
       const selfLibraryCount = player.libraryCount || 0;
-      el("libraryCount").textContent = `${selfLibraryCount} cartas`;
-      el("libraryCount").closest(".deck-wrap")?.querySelector("span")?.replaceChildren(`Deck (${selfLibraryCount})`);
+      el("libraryCount").textContent = String(selfLibraryCount);
       el("handCount").textContent = `${player.handCount || 0} cartas`;
       el("graveyardCount").textContent = String(player.graveyard?.length || 0);
       el("exileCount").textContent = String(player.exile?.length || 0);
@@ -760,8 +760,7 @@
       el("opponentLife").textContent = String(player.life ?? 20);
       renderManaPool(el("opponentManaPool"), player.manaPool || {}, "opponent");
       const opponentLibraryCount = player.libraryCount || 0;
-      el("opponentLibraryCount").textContent = `${opponentLibraryCount} cartas`;
-      el("opponentLibraryCount").closest(".deck-wrap")?.querySelector("span")?.replaceChildren(`Deck (${opponentLibraryCount})`);
+      el("opponentLibraryCount").textContent = String(opponentLibraryCount);
       el("opponentHandLabel").textContent = `${player.handCount || 0} cartas na mao`;
       el("opponentGraveyardCount").textContent = String(player.graveyard?.length || 0);
       el("opponentExileCount").textContent = String(player.exile?.length || 0);
@@ -881,23 +880,20 @@
   }
 
   function tablePoint(clientX, clientY) {
-    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    return { x: clientX, y: clientY };
   }
 
   function normalizeTablePoint(point) {
-    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
     return {
-      x: Math.max(0, Math.min(1, point.x / Math.max(1, rect.width))),
-      y: Math.max(0, Math.min(1, point.y / Math.max(1, rect.height)))
+      x: Math.max(0, Math.min(1, point.x / Math.max(1, window.innerWidth))),
+      y: Math.max(0, Math.min(1, point.y / Math.max(1, window.innerHeight)))
     };
   }
 
   function denormalizeTablePoint(point) {
-    const rect = document.querySelector(".virtual-table").getBoundingClientRect();
     return {
-      x: Number(point.x || 0) * rect.width,
-      y: Number(point.y || 0) * rect.height
+      x: Number(point.x || 0) * window.innerWidth,
+      y: Number(point.y || 0) * window.innerHeight
     };
   }
 
@@ -1085,10 +1081,19 @@
     ];
   }
 
-  function manaMenuItems(cardId, includeTap = false) {
+  function manaMenuItems(cardId) {
     return manaColors.map(([color, , label]) => ({
       label,
-      action: () => sendAction({ type: includeTap ? "tapForMana" : "addMana", cardId, color })
+      action: () => {
+        const card = getCardById(cardId);
+        if (card?.tapped || pendingManaCards.has(cardId)) {
+          alert("Este terreno ja esta virado. Desvire-o antes de adicionar outra mana.");
+          return;
+        }
+        pendingManaCards.add(cardId);
+        sendAction({ type: "tapForMana", cardId, color });
+        window.setTimeout(() => pendingManaCards.delete(cardId), 1500);
+      }
     }));
   }
 
@@ -1116,8 +1121,7 @@
     } else {
       items.push({ label: "Virar / Desvirar", action: actionForCards(cardIds, "toggleTap") });
       if (isLandCard(primaryCard)) {
-        items.push({ label: "Adicionar mana", children: manaMenuItems(cardId, false) });
-        items.push({ label: "Virar e adicionar mana", children: manaMenuItems(cardId, true) });
+        items.push({ label: "Adicionar mana", children: manaMenuItems(cardId) });
       }
       items.push({ label: "Enviar para", children: [{ label: "Pilha", action: () => cardIds.length > 1 ? sendAction({ type: "moveCards", cardIds, toZone: "stack" }) : sendAction({ type: "moveCard", cardId, toZone: "stack" }) }, ...moveTargetsForCards(cardIds, { includeOpponent: true })] });
       items.push({ label: "Marcadores", children: [
@@ -1268,6 +1272,21 @@
     el("zoomModal").classList.remove("hidden");
   }
 
+  async function toggleFullscreen() {
+    const app = document.querySelector(".sim-table-app");
+    try {
+      if (!document.fullscreenElement) await app.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch (error) {
+      alert("Nao foi possivel alterar o modo de tela cheia neste navegador.");
+    }
+  }
+
+  function syncFullscreenButton() {
+    el("fullscreenBtn").textContent = document.fullscreenElement ? "Sair da tela cheia" : "Tela cheia";
+    requestAnimationFrame(renderArrows);
+  }
+
   function bindEvents() {
     el("playerNameInput").value = savedName;
     el("playerOneNameInput").value = savedName || "Jogador 1";
@@ -1295,6 +1314,9 @@
     el("newGameBtn").addEventListener("click", () => {
       if (confirm("Iniciar nova partida e limpar zonas atuais?")) sendAction({ type: "newGame" });
     });
+    el("fullscreenBtn").addEventListener("click", toggleFullscreen);
+    document.addEventListener("fullscreenchange", syncFullscreenButton);
+    window.addEventListener("resize", () => requestAnimationFrame(renderArrows));
     el("layoutSizeSelect").addEventListener("change", event => {
       document.querySelector(".sim-table-app").classList.remove("layout-compact", "layout-medium", "layout-spacious");
       document.querySelector(".sim-table-app").classList.add(`layout-${event.target.value}`);
@@ -1313,7 +1335,7 @@
     el("toggleSidePanelBtn").textContent = sideCollapsed ? ">" : "<";
     const handExpanded = localStorage.getItem("resenhaon-sim-hand-expanded") === "true";
     const savedHandHeight = localStorage.getItem("resenhaon-sim-hand-height");
-    if (savedHandHeight) document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(130, Math.min(340, Number(savedHandHeight) || 168))}px`);
+    if (savedHandHeight) document.documentElement.style.setProperty("--sim-hand-height", `${Math.max(126, Math.min(280, Number(savedHandHeight) || 150))}px`);
     const savedStackWidth = localStorage.getItem("resenhaon-sim-stack-width");
     if (savedStackWidth) {
       const stackWidth = Number(savedStackWidth) || 110;
@@ -1626,7 +1648,7 @@
         return;
       }
       if (handResize) {
-        const nextHeight = Math.max(130, Math.min(340, handResize.startHeight - (event.clientY - handResize.startY)));
+        const nextHeight = Math.max(126, Math.min(280, handResize.startHeight - (event.clientY - handResize.startY)));
         document.documentElement.style.setProperty("--sim-hand-height", `${nextHeight}px`);
         return;
       }
@@ -1668,7 +1690,7 @@
       }
       if (handResize) {
         const value = getComputedStyle(document.documentElement).getPropertyValue("--sim-hand-height").replace("px", "").trim();
-        localStorage.setItem("resenhaon-sim-hand-height", value || "168");
+        localStorage.setItem("resenhaon-sim-hand-height", value || "150");
         handResize = null;
         return;
       }
@@ -1704,7 +1726,7 @@
       setHandExpanded(false);
       handResize = {
         startY: event.clientY,
-        startHeight: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sim-hand-height")) || 168
+        startHeight: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sim-hand-height")) || 150
       };
     });
     document.body.addEventListener("dblclick", event => {

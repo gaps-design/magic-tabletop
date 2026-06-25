@@ -2974,3 +2974,104 @@ body{
     grid-template-columns:1fr;
   }
 }
+
+/* Header enxuto e perfil fora da navegacao principal. */
+.topbar{
+  gap:clamp(8px,1.2vw,18px);
+}
+
+.topbar .brand{
+  min-width:0;
+}
+
+.topbar .logo{
+  width:clamp(138px,13vw,205px);
+}
+
+.topbar .top-links{
+  justify-content:flex-end;
+  gap:clamp(5px,.7vw,10px);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+
+.topbar .top-links::-webkit-scrollbar{
+  display:none;
+}
+
+.topbar .top-links a{
+  min-height:40px;
+  padding:8px clamp(9px,1vw,14px);
+  font-size:clamp(11px,.85vw,13px);
+}
+
+.floating-user-panel{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  z-index:950;
+  max-width:min(260px,calc(100vw - 32px));
+  filter:drop-shadow(0 16px 34px rgba(0,0,0,.42));
+}
+
+.floating-user-panel .google-login-btn{
+  width:auto;
+  min-width:172px;
+  max-width:260px;
+  min-height:48px;
+  margin:0;
+  padding:7px 12px;
+  border-radius:15px;
+  background:linear-gradient(135deg,rgba(5,18,34,.94),rgba(13,36,58,.9));
+  backdrop-filter:blur(16px);
+}
+
+.floating-user-panel .google-login-btn.connected{
+  grid-template-columns:34px minmax(0,1fr);
+}
+
+.floating-user-panel .google-user-photo{
+  width:34px;
+  height:34px;
+}
+
+@media(max-width:1180px){
+  .topbar .top-links{
+    justify-content:flex-start;
+  }
+}
+
+@media(max-width:760px){
+  .topbar .brand{
+    width:auto;
+    margin-right:auto;
+  }
+
+  .topbar .logo{
+    width:150px;
+  }
+
+  .floating-user-panel{
+    right:10px;
+    bottom:10px;
+  }
+
+  .floating-user-panel .google-login-btn{
+    min-width:0;
+    min-height:44px;
+  }
+
+  .floating-user-panel .google-login-btn.connected{
+    width:46px;
+    height:46px;
+    display:grid;
+    grid-template-columns:1fr;
+    place-items:center;
+    padding:5px;
+    border-radius:50%;
+  }
+
+  .floating-user-panel .google-login-btn.connected span{
+    display:none;
+  }
+}
